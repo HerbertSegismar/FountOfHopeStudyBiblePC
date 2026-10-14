@@ -1,0 +1,12 @@
+*.sqlite3
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.bak
+*.zip
+*.7z
+*.pdb
+*.dll
+*.exe

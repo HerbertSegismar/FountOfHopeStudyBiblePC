@@ -1,0 +1,15 @@
+<!-- Controls/HomeHeader.xaml -->
+<UserControl x:Class="FountOfHopeStudyBiblePC.Controls.HomeHeader"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Margin="16,8,16,8">
+        <TextBlock Text="Fount of Hope"
+                   FontSize="28"
+                   FontWeight="Bold"
+                   Foreground="{StaticResource OnSurface}"/>
+        <TextBlock Text="Study Bible"
+                   FontSize="15"
+                   Margin="0,2,0,0"
+                   Foreground="{StaticResource OnSurfaceVariant}"/>
+    </StackPanel>
+</UserControl>

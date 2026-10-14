@@ -1,0 +1,105 @@
+<!-- Controls/Footer.xaml -->
+<UserControl x:Class="FountOfHopeStudyBiblePC.Controls.Footer"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <UserControl.Resources>
+
+        <!-- Color palette (adjust to match your app's theme) -->
+        <SolidColorBrush x:Key="Primary" Color="#1976D2" />
+        <SolidColorBrush x:Key="OnSurfaceVariant" Color="#49454F" />
+        <SolidColorBrush x:Key="SurfaceVariant" Color="#E7E0EC" />
+        <SolidColorBrush x:Key="DividerBrush" Color="#E0E0E0" />
+
+        <!-- Base text style -->
+        <Style x:Key="FooterText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{StaticResource OnSurfaceVariant}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
+        <!-- Hyperlink style -->
+        <Style x:Key="FooterLink" TargetType="Hyperlink">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{StaticResource Primary}" />
+            <Setter Property="TextDecorations" Value="Underline" />
+        </Style>
+
+    </UserControl.Resources>
+
+    <!-- Outer padding: horizontal 16, top 16, bottom 80 -->
+    <StackPanel Margin="16,16,16,80">
+
+        <Separator Background="{StaticResource DividerBrush}" Height="1" />
+
+        <!-- "Made with ❤️ For All Believers Worldwide" -->
+        <TextBlock Style="{StaticResource FooterText}"
+                   Margin="0,16,0,0"
+                   Text="Made with ❤️ For All Believers Worldwide" />
+
+        <!-- "© Copyright {year}" -->
+        <TextBlock x:Name="CopyrightText"
+                   Style="{StaticResource FooterText}"
+                   Margin="0,4,0,0"
+                   Text="© Copyright" />
+
+        <!-- "App Created By: Herbert Segismar" -->
+        <TextBlock Style="{StaticResource FooterText}"
+                   Margin="0,4,0,0"
+                   Text="App Created By: Herbert Segismar" />
+
+        <!-- Contact row -->
+        <TextBlock Style="{StaticResource FooterText}" Margin="0,16,0,0">
+            <Run Text="Contact: " />
+            <Hyperlink Style="{StaticResource FooterLink}"
+                       NavigateUri="mailto:fountofhopedevotionals@gmail.com?subject=FoH%20Bible%20App%20Feedback"
+                       RequestNavigate="OnRequestNavigate">fountofhopedevotionals@gmail.com</Hyperlink>
+        </TextBlock>
+
+        <!-- Christ Is Risen image (replace with your actual asset path) -->
+        <Border Height="45"
+                Margin="0,16,0,0"
+                CornerRadius="8"
+                ClipToBounds="True">
+            <Image Source="/Assets/images/christisrisen.png"
+                   Stretch="Uniform"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center" />
+        </Border>
+
+        <!-- Card: MyBible special thanks -->
+        <Border CornerRadius="8" Margin="0,16,0,0">
+            <Grid>
+                <Rectangle Fill="{StaticResource SurfaceVariant}"
+                           Opacity="0.4"
+                           RadiusX="8"
+                           RadiusY="8" />
+
+                <StackPanel Margin="8">
+                    <TextBlock Style="{StaticResource FooterText}">
+                        <Run Text="Special thanks to the " />
+                        <Hyperlink Style="{StaticResource FooterLink}"
+                                   NavigateUri="https://mybible.zone/us/"
+                                   RequestNavigate="OnRequestNavigate">MyBible</Hyperlink>
+                        <Run Text=" team" />
+                    </TextBlock>
+
+                    <TextBlock Style="{StaticResource FooterText}"
+                               Margin="0,4,0,0"
+                               Text="for making their modules available." />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- "Visit our Daily Devotionals Website FountOfHope.Org" -->
+        <TextBlock Style="{StaticResource FooterText}" Margin="0,16,0,0">
+            <Run Text="Visit our Daily Devotionals Website " />
+            <Hyperlink Style="{StaticResource FooterLink}"
+                       NavigateUri="https://fountofhope.org/"
+                       RequestNavigate="OnRequestNavigate">FountOfHope.Org</Hyperlink>
+        </TextBlock>
+
+    </StackPanel>
+</UserControl>

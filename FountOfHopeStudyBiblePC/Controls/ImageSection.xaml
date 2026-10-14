@@ -1,0 +1,21 @@
+<!-- Controls/ImageSection.xaml -->
+<UserControl x:Class="FountOfHopeStudyBiblePC.Controls.ImageSection"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Margin="16,0" CornerRadius="18" ClipToBounds="True" Height="200"
+            Background="{StaticResource CardBackground}">
+        <Grid>
+            <Image x:Name="HeroImage" Stretch="UniformToFill" Opacity="0.75"/>
+            <Border Background="#55000000"/>
+            <Button x:Name="ContinueButton"
+                    Content="Continue Reading"
+                    Padding="18,9"
+                    Cursor="Hand"
+                    FontWeight="SemiBold"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,0,18"
+                    Click="ContinueButton_Click"/>
+        </Grid>
+    </Border>
+</UserControl>
