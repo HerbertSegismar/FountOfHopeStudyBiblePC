@@ -76,7 +76,6 @@ namespace FountOfHopeStudyBiblePC.Views
         }
 
         // ── Lifecycle ───────────────────────────────────────────────────────
-
         private async void OnLoaded(object sender, RoutedEventArgs e)
         {
             // LaunchedEffect(databaseHelper) { dailyVerses = loadRandomVerses(it) }
@@ -95,7 +94,6 @@ namespace FountOfHopeStudyBiblePC.Views
         }
 
         // ── Quick actions ───────────────────────────────────────────────────
-
         private void BuildQuickActions()
         {
             var totalImages = _viewModel.Textures;
@@ -151,7 +149,6 @@ namespace FountOfHopeStudyBiblePC.Views
         }
 
         // ── Daily verse ─────────────────────────────────────────────────────
-
         private async Task RefreshDailyVerseAsync()
         {
             if (_databaseHelper is null)
@@ -211,7 +208,6 @@ namespace FountOfHopeStudyBiblePC.Views
         }
 
         // ── Bookmark / share ────────────────────────────────────────────────
-
         private async Task UpdateBookmarkStateAsync()
         {
             if (_databaseHelper is null || _dailyVerses is null || _dailyVerses.Count == 0)
@@ -251,7 +247,6 @@ namespace FountOfHopeStudyBiblePC.Views
         }
 
         // ── Popular devotionals ─────────────────────────────────────────────
-
         private void LoadPopularDevotionals()
         {
             foreach (var devotional in GetRandomDevotionals())
@@ -337,7 +332,6 @@ namespace FountOfHopeStudyBiblePC.Views
         }
 
         // ── Useful Space grid handlers ──────────────────────────────────────
-
         private void TakeBibleQuiz_Click(object sender, RoutedEventArgs e) => _onTakeBibleQuizClick();
         private void LearnHebrew_Click(object sender, RoutedEventArgs e) => _onLearnHebrewClick();
         private void LearnGreek_Click(object sender, RoutedEventArgs e) => _onLearnGreekClick();

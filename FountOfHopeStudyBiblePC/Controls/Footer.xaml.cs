@@ -24,7 +24,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                     UseShellExecute = true
                 });
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Optionally log or show a message
                 // MessageBox.Show($"Unable to open link: {ex.Message}");

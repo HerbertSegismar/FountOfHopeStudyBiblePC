@@ -1,0 +1,4 @@
+# Large local database assets - do not commit
+FountOfHopeStudyBiblePC/Assets/commentaries/*.sqlite3
+FountOfHopeStudyBiblePC/Assets/databases/*.sqlite3
+FountOfHopeStudyBiblePC/Assets/dictionaries/*.sqlite3

@@ -16,7 +16,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
                 var cleaned = SimpleVerseProcessor.StripXmlTags(verse.Text);
                 sb.Append(verse.BookName ?? string.Empty)
                   .Append(' ')
-                  .Append(verse.Chapter ?? 0)
+                  .Append(verse.Chapter)
                   .Append(':')
                   .Append(verse.VerseNumber)
                   .Append(' ')

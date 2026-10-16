@@ -1,22 +1,28 @@
-﻿// Models/Verse.cs
-namespace FountOfHopeStudyBiblePC.Models
+﻿namespace FountOfHopeStudyBiblePC.Models
 {
-    public class Verse
+    public record Verse
     {
-        public string? BookName { get; set; }
-        public int? Chapter { get; set; }
-        public int VerseNumber { get; set; }
-        public string Text { get; set; } = string.Empty;
+        public int VerseNumber { get; init; }
+        public string Text { get; init; } = "";
+        public string? BookName { get; init; }
+        public int? Chapter { get; init; }
+        public int? BookNumber { get; init; }
 
-        /// <summary>Matched on book/chapter/verse, mirroring the Kotlin data class equality.</summary>
-        public override bool Equals(object? obj) =>
-            obj is Verse v &&
-            v.BookName == BookName &&
-            v.Chapter == Chapter &&
-            v.VerseNumber == VerseNumber &&
-            v.Text == Text;
+        public Verse() { }
 
-        public override int GetHashCode() =>
-            System.HashCode.Combine(BookName, Chapter, VerseNumber, Text);
+        public Verse(int verseNumber, string text)
+        {
+            VerseNumber = verseNumber;
+            Text = text;
+        }
+
+        public Verse(int verseNumber, string text, string? bookName, int? chapter, int? bookNumber = null)
+        {
+            VerseNumber = verseNumber;
+            Text = text;
+            BookName = bookName;
+            Chapter = chapter;
+            BookNumber = bookNumber;
+        }
     }
 }

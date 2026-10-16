@@ -1,0 +1,11 @@
+<!-- Controls/SingleVersionReader.xaml -->
+<UserControl x:Class="FountOfHopeStudyBiblePC.Controls.SingleVersionReader"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="ReaderRoot">
+    <Grid>
+        <ContentControl x:Name="ChapterHost"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"/>
+    </Grid>
+</UserControl>

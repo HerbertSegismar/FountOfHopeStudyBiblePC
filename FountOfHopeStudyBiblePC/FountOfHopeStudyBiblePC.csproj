@@ -90,6 +90,42 @@
     <None Remove="Assets\images\w7.jpg" />
   </ItemGroup>
 
+	<ItemGroup>
+		<!-- Textures: 1.jpg, 2.jpg, ... -->
+		<Content Include="Assets\textures\**\*.*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+
+		<!-- Small images: w1.jpg, n1.jpg, o1.jpg, ... -->
+		<Content Include="Assets\images\**\*.*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+
+		<!-- Medium images: nm1.jpg, wm1.jpg, om1.jpg, ... -->
+		<Content Include="Assets\images-md\**\*.*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+
+		<!-- Bible databases: kj2.sqlite3, kjv+.sqlite3, etc. -->
+		<Content Include="Assets\databases\**\*.sqlite3">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+
+		<!-- Subheadings, dictionaries, commentaries, cross-refs -->
+		<Content Include="Assets\subheadings\**\*.sqlite3">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+		<Content Include="Assets\dictionaries\**\*.sqlite3">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+		<Content Include="Assets\commentaries\**\*.sqlite3">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+		<Content Include="Assets\cross-references\**\*.sqlite3">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+
   <ItemGroup>
     <Content Include="Assets\images-md\nm1.jpg">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -328,6 +364,10 @@
     <Content Include="Assets\images\w7.jpg">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
   </ItemGroup>
 
 </Project>

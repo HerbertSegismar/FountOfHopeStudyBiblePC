@@ -1,0 +1,237 @@
+<!-- Views/NotesScreen.xaml -->
+<UserControl x:Class="FountOfHopeStudyBiblePC.Views.NotesScreen"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="NotesRoot"
+             Background="{StaticResource AppBackground}">
+
+	<Grid>
+		<Grid.RowDefinitions>
+			<RowDefinition Height="Auto"/>
+			<!-- top bar -->
+			<RowDefinition Height="Auto"/>
+			<!-- search bar (collapsible) -->
+			<RowDefinition Height="Auto"/>
+			<!-- version card -->
+			<RowDefinition Height="Auto"/>
+			<!-- action bar -->
+			<RowDefinition Height="*"/>
+			<!-- notes list -->
+			<RowDefinition Height="Auto"/>
+			<!-- undo bar -->
+		</Grid.RowDefinitions>
+
+		<!-- ══ Row 0: Top bar ═══════════════════════════════════════ -->
+		<Border Grid.Row="0"
+                Height="64"
+                Background="#FF1C2128">
+			<Grid Margin="16,0">
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="Auto"/>
+				</Grid.ColumnDefinitions>
+
+				<!-- Normal title + count -->
+				<TextBlock x:Name="TopBarTitle"
+                   Grid.Column="0"
+                   FontSize="16"
+                   FontWeight="SemiBold"
+                   Foreground="#FF7FB2FF"
+                   VerticalAlignment="Center"/>
+
+				<!-- Normal buttons -->
+				<StackPanel x:Name="NormalButtons"
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+					<Button x:Name="SearchToggleBtn" Width="36" Height="36"
+                            Background="Transparent" BorderThickness="0"
+                            Cursor="Hand" Click="SearchToggleBtn_Click">
+						<TextBlock Text="🔍" FontSize="18"/>
+					</Button>
+					<Button x:Name="SortBtn" Width="36" Height="36"
+                            Background="Transparent" BorderThickness="0"
+                            Cursor="Hand" Click="SortBtn_Click">
+						<TextBlock Text="↕" FontSize="18"/>
+					</Button>
+					<Button x:Name="MoreBtn" Width="36" Height="36"
+                            Background="Transparent" BorderThickness="0"
+                            Cursor="Hand" Click="MoreBtn_Click">
+						<TextBlock Text="⋮" FontSize="18"/>
+					</Button>
+				</StackPanel>
+
+				<!-- Multi-select buttons -->
+				<StackPanel x:Name="MultiSelectButtons"
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Visibility="Collapsed">
+					<Button x:Name="CancelMultiSelectBtn"
+                            Content="Cancel"
+                            Padding="10,6"
+                            Margin="0,0,6,0"
+                            Background="Transparent" BorderThickness="0"
+                            Foreground="#FFE6EAF0"
+                            Cursor="Hand"
+                            Click="CancelMultiSelectBtn_Click"/>
+					<TextBlock x:Name="SelectedCountText"
+                               VerticalAlignment="Center"
+                               Margin="8,0"
+                               FontWeight="SemiBold"
+                               Foreground="#FF7FB2FF"/>
+					<Button x:Name="ShareSelectedBtn"
+                            Width="36" Height="36"
+                            Background="Transparent" BorderThickness="0"
+                            Cursor="Hand" Click="ShareSelectedBtn_Click">
+						<TextBlock Text="↗" FontSize="16" Foreground="#FFE6EAF0"/>
+					</Button>
+					<Button x:Name="DeleteSelectedBtn"
+                            Width="36" Height="36"
+                            Background="Transparent" BorderThickness="0"
+                            Cursor="Hand" Click="DeleteSelectedBtn_Click">
+						<TextBlock Text="🗑" FontSize="16" Foreground="#FFEB4E4E"/>
+					</Button>
+				</StackPanel>
+			</Grid>
+		</Border>
+
+		<!-- ══ Row 1: Search bar ═══════════════════════════════════ -->
+		<Border x:Name="SearchBarPanel"
+                Grid.Row="1"
+                Background="#FF232A33"
+                Padding="16,8"
+                Visibility="Collapsed">
+			<Grid>
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="Auto"/>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="Auto"/>
+				</Grid.ColumnDefinitions>
+				<TextBlock Grid.Column="0" Text="🔍" FontSize="16"
+                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+				<TextBox x:Name="SearchBox"
+                         Grid.Column="1"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Foreground="#FFE6EAF0"
+                         CaretBrush="#FFE6EAF0"
+                         FontSize="14"
+                         Padding="4,6"
+                         TextChanged="SearchBox_TextChanged"/>
+				<Button x:Name="ClearSearchBtn"
+                        Grid.Column="2"
+                        Width="28" Height="28"
+                        Background="Transparent" BorderThickness="0"
+                        Cursor="Hand" Visibility="Collapsed"
+                        Click="ClearSearchBtn_Click">
+					<TextBlock Text="✕" FontSize="14" Foreground="#FFAAB4C0"/>
+				</Button>
+			</Grid>
+		</Border>
+
+		<!-- ══ Row 2: Version card ═════════════════════════════════ -->
+		<Border x:Name="VersionCard"
+                Grid.Row="2"
+                Margin="18,12,18,4"
+                CornerRadius="12"
+                Background="#332A3140"
+                Padding="16">
+			<Grid>
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="Auto"/>
+				</Grid.ColumnDefinitions>
+				<StackPanel Grid.Column="0">
+					<TextBlock Text="Bible Version"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="#FF7FB2FF"/>
+					<TextBlock x:Name="VersionDescriptionText"
+                               FontSize="12"
+                               Margin="0,2,0,0"
+                               Foreground="#FFAAB4C0"
+                               TextTrimming="CharacterEllipsis"/>
+				</StackPanel>
+				<Button x:Name="VersionInfoBtn"
+                        Grid.Column="1"
+                        Width="32" Height="32"
+                        Background="Transparent" BorderThickness="0"
+                        Cursor="Hand" Click="VersionInfoBtn_Click">
+					<TextBlock Text="ℹ" FontSize="18" Foreground="#FFAAB4C0"/>
+				</Button>
+			</Grid>
+		</Border>
+
+		<!-- ══ Row 3: Selection actions hint (hidden unless selected) -->
+		<TextBlock x:Name="SelectionHintText"
+                   Grid.Row="3"
+                   Margin="16,8,16,0"
+                   FontSize="12"
+                   Foreground="#FFAAB4C0"
+                   Visibility="Collapsed"/>
+
+		<!-- ══ Row 4: Notes list / empty state ═════════════════════ -->
+		<Grid Grid.Row="4" Margin="16,8,16,0">
+
+			<!-- Notes list -->
+			<ScrollViewer x:Name="NotesScrollViewer"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+				<StackPanel x:Name="NotesListPanel"/>
+			</ScrollViewer>
+
+			<!-- Empty state -->
+			<StackPanel x:Name="EmptyStatePanel"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Visibility="Collapsed">
+				<TextBlock Text="📝"
+                           FontSize="72"
+                           HorizontalAlignment="Center"
+                           Foreground="#557FB2FF"/>
+				<TextBlock x:Name="EmptyStateTitle"
+                           Margin="0,12,0,0"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           Foreground="#99E6EAF0"
+                           Text="No notes yet"/>
+				<TextBlock x:Name="EmptyStateSubtitle"
+                           Margin="0,8,0,0"
+                           FontSize="14"
+                           HorizontalAlignment="Center"
+                           Foreground="#66AAB4C0"
+                           Text="Add notes to verses to see them here"/>
+			</StackPanel>
+		</Grid>
+
+		<!-- ══ Row 5: Undo bar (appears after delete) ══════════════ -->
+		<Border x:Name="UndoBar"
+                Grid.Row="5"
+                Background="#FF2A3140"
+                Padding="16,10"
+                Visibility="Collapsed">
+			<Grid>
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="Auto"/>
+				</Grid.ColumnDefinitions>
+				<TextBlock x:Name="UndoText"
+                           Grid.Column="0"
+                           VerticalAlignment="Center"
+                           Foreground="#FFE6EAF0"/>
+				<Button x:Name="UndoButton"
+                        Grid.Column="1"
+                        Content="Undo"
+                        Padding="12,6"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Foreground="#FF7FB2FF"
+                        FontWeight="SemiBold"
+                        Cursor="Hand"
+                        Click="UndoButton_Click"/>
+			</Grid>
+		</Border>
+	</Grid>
+</UserControl>
