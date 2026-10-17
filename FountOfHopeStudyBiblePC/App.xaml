@@ -141,6 +141,8 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+            <Color x:Key="AppPrimaryColor">#FF7FB2FF</Color>
+            <SolidColorBrush x:Key="AppPrimaryBrush" Color="{DynamicResource AppPrimaryColor}"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

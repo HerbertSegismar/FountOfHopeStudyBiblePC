@@ -4,13 +4,13 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Name="AppBarRoot">
     <Grid Height="64">
-        <Grid.Background>
-            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                <GradientStop Color="#CC7FB2FF" Offset="0.6"/>
-                <GradientStop Color="#CC7FB2FF" Offset="0.85"/>
-                <GradientStop Color="Transparent" Offset="1.0"/>
-            </LinearGradientBrush>
-        </Grid.Background>
+		<Grid.Background>
+			<LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+				<GradientStop Color="{DynamicResource AppPrimaryColor}" Offset="0.6"/>
+				<GradientStop Color="{DynamicResource AppPrimaryColor}" Offset="0.85"/>
+				<GradientStop Color="Transparent" Offset="1.0"/>
+			</LinearGradientBrush>
+		</Grid.Background>
 
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>

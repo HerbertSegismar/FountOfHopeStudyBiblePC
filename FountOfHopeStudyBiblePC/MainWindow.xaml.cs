@@ -92,6 +92,134 @@ namespace FountOfHopeStudyBiblePC
                                 System.Windows.Threading.DispatcherPriority.Background);
                         }
                         break;
+
+                    // ═══════════════════════════════════════════════════════
+                    //  Color picker triggers
+                    // ═══════════════════════════════════════════════════════
+                    case nameof(AppViewModel.ShowColorThemeDialog):
+                        if (_viewModel.ShowColorThemeDialog)
+                        {
+                            _viewModel.ShowColorThemeDialog = false;
+                            Dispatcher.BeginInvoke(new Action(OpenColorThemeDialog),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        break;
+
+                    case nameof(AppViewModel.ShowColorWheelDialog):
+                        if (_viewModel.ShowColorWheelDialog)
+                        {
+                            _viewModel.ShowColorWheelDialog = false;
+                            var initial = _viewModel.SelectedColor ?? DefaultPrimaryColor;
+                            Dispatcher.BeginInvoke(new Action(() =>
+                                OpenColorWheel(initial, c =>
+                                {
+                                    _viewModel.SelectedColor = c;
+                                    _viewModel.IsCustomColor = true;
+                                    _viewModel.CustomColor = c;
+                                }, title: "Custom Theme Color")),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        break;
+
+                    case nameof(AppViewModel.ShowWordMarkerColorWheelDialog):
+                        if (_viewModel.ShowWordMarkerColorWheelDialog)
+                        {
+                            _viewModel.ShowWordMarkerColorWheelDialog = false;
+                            var initial = _viewModel.WordMarkerColor;
+                            Dispatcher.BeginInvoke(new Action(() =>
+                                OpenColorWheel(initial, c => _viewModel.WordMarkerColor = c,
+                                    title: "Word Marker Color")),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        break;
+
+                    case nameof(AppViewModel.ShowVerseMarkerColorWheelDialog):
+                        if (_viewModel.ShowVerseMarkerColorWheelDialog)
+                        {
+                            _viewModel.ShowVerseMarkerColorWheelDialog = false;
+                            var initial = _viewModel.VerseMarkerColor;
+                            Dispatcher.BeginInvoke(new Action(() =>
+                                OpenColorWheel(initial, c => _viewModel.VerseMarkerColor = c,
+                                    title: "Verse Marker Color")),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        break;
+
+                    case nameof(AppViewModel.ShowJesusWordsColorWheelDialog):
+                        if (_viewModel.ShowJesusWordsColorWheelDialog)
+                        {
+                            _viewModel.ShowJesusWordsColorWheelDialog = false;
+                            var initial = _viewModel.WordsOfJesus;
+                            Dispatcher.BeginInvoke(new Action(() =>
+                                OpenColorWheel(initial, c => _viewModel.WordsOfJesus = c,
+                                    title: "Jesus' Words Color")),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        break;
+
+                    case nameof(AppViewModel.ShowLightReaderFontColorWheelDialog):
+                        if (_viewModel.ShowLightReaderFontColorWheelDialog)
+                        {
+                            _viewModel.ShowLightReaderFontColorWheelDialog = false;
+                            var initial = _viewModel.LightThemeReaderFontColor;
+                            Dispatcher.BeginInvoke(new Action(() =>
+                                OpenColorWheel(initial, c => _viewModel.LightThemeReaderFontColor = c,
+                                    title: "Light Reader Font Color")),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        break;
+
+                    case nameof(AppViewModel.ShowDarkReaderFontColorWheelDialog):
+                        if (_viewModel.ShowDarkReaderFontColorWheelDialog)
+                        {
+                            _viewModel.ShowDarkReaderFontColorWheelDialog = false;
+                            var initial = _viewModel.DarkThemeReaderFontColor;
+                            Dispatcher.BeginInvoke(new Action(() =>
+                                OpenColorWheel(initial, c => _viewModel.DarkThemeReaderFontColor = c,
+                                    title: "Dark Reader Font Color")),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        break;
+
+                    case nameof(AppViewModel.ShowLightOverlayColorWheel):
+                        if (_viewModel.ShowLightOverlayColorWheel)
+                        {
+                            _viewModel.ShowLightOverlayColorWheel = false;
+                            var initial = _viewModel.LightOverlayColor;
+                            Dispatcher.BeginInvoke(new Action(() =>
+                                OpenColorWheel(initial, c => _viewModel.LightOverlayColor = c,
+                                    title: "Light Overlay Color")),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        break;
+
+                    case nameof(AppViewModel.ShowDarkOverlayColorWheel):
+                        if (_viewModel.ShowDarkOverlayColorWheel)
+                        {
+                            _viewModel.ShowDarkOverlayColorWheel = false;
+                            var initial = _viewModel.DarkOverlayColor;
+                            Dispatcher.BeginInvoke(new Action(() =>
+                                OpenColorWheel(initial, c => _viewModel.DarkOverlayColor = c,
+                                    title: "Dark Overlay Color")),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        break;
+
+                    case nameof(AppViewModel.ShowReaderOverlayColorWheel):
+                        if (_viewModel.ShowReaderOverlayColorWheel)
+                        {
+                            _viewModel.ShowReaderOverlayColorWheel = false;
+                            var isDark = _viewModel.DarkTheme;
+                            var initial = isDark ? _viewModel.DarkOverlayColor : _viewModel.LightOverlayColor;
+                            Dispatcher.BeginInvoke(new Action(() =>
+                                OpenColorWheel(initial, c =>
+                                {
+                                    if (_viewModel.DarkTheme) _viewModel.DarkOverlayColor = c;
+                                    else _viewModel.LightOverlayColor = c;
+                                }, title: "Reader Overlay Color")),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        break;
                 }
             };
             App.Log("MainWindow ctor - after PropertyChanged hookup");
@@ -256,7 +384,6 @@ namespace FountOfHopeStudyBiblePC
                         _viewModel.CurrentDbName = file;
                         _viewModel.CurrentVersionAbbr =
                             BibleVersionUtils.VersionMap.GetValueOrDefault(file, "Bible");
-                        // No explicit refresh — RefreshPrimaryDatabase() handles it
                     },
                     onDismiss: () => App.Log("MainWindow: VersionModal dismissed"))
                 {
@@ -287,7 +414,6 @@ namespace FountOfHopeStudyBiblePC
                         _viewModel.SecondaryDbName = file;
                         _viewModel.SecondaryVersionAbbr =
                             BibleVersionUtils.VersionMap.GetValueOrDefault(file, "Bible");
-                        // No explicit refresh — RefreshSecondaryDatabase() handles it
                     },
                     onDismiss: () => App.Log("MainWindow: SecondaryVersionModal dismissed"))
                 {
@@ -300,6 +426,75 @@ namespace FountOfHopeStudyBiblePC
             catch (Exception ex)
             {
                 App.Log("!!! OpenSecondaryVersionModal FAILED: " + ex);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        //  Color pickers
+        // ═══════════════════════════════════════════════════════════════
+        private void OpenColorWheel(Color initial, Action<Color> onSelected, string title = "Color Picker")
+        {
+            App.Log($"MainWindow: OpenColorWheel — '{title}', " +
+                    $"initial={ColorHelpers.ToHexString(initial)}");
+            try
+            {
+                var dialog = new Views.Modals.ColorWheelDialog(
+                    initialColor: initial,
+                    onColorSelected: c =>
+                    {
+                        App.Log($"MainWindow: color picked = {ColorHelpers.ToHexString(c)}");
+                        onSelected(c);
+                    },
+                    onDismiss: () => App.Log("MainWindow: ColorWheel dismissed"))
+                {
+                    Owner = this,
+                };
+                dialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                App.Log("!!! OpenColorWheel FAILED: " + ex);
+            }
+        }
+
+        private void OpenColorThemeDialog()
+        {
+            App.Log("MainWindow: OpenColorThemeDialog");
+            try
+            {
+                var dialog = new Views.Modals.ColorThemeDialog(
+                    currentColor: _viewModel.SelectedColor ?? DefaultPrimaryColor,
+                    onColorSelected: c =>
+                    {
+                        App.Log($"MainWindow: theme preset selected = {ColorHelpers.ToHexString(c)}");
+                        _viewModel.SelectedColor = c;
+                        _viewModel.IsCustomColor = false;
+                        _viewModel.CustomColor = null;
+                    },
+                    onCustomColorClick: () =>
+                    {
+                        Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            OpenColorWheel(
+                                _viewModel.SelectedColor ?? DefaultPrimaryColor,
+                                c =>
+                                {
+                                    _viewModel.SelectedColor = c;
+                                    _viewModel.IsCustomColor = true;
+                                    _viewModel.CustomColor = c;
+                                },
+                                title: "Custom Theme Color");
+                        }), System.Windows.Threading.DispatcherPriority.Background);
+                    },
+                    onDismiss: () => App.Log("MainWindow: ColorTheme dismissed"))
+                {
+                    Owner = this,
+                };
+                dialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                App.Log("!!! OpenColorThemeDialog FAILED: " + ex);
             }
         }
 
@@ -511,7 +706,6 @@ namespace FountOfHopeStudyBiblePC
                 }
             };
 
-            // Passage changes
             _viewModel.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(AppViewModel.PrimaryPassage) && _viewModel.PrimaryPassage is { } p)
@@ -548,9 +742,16 @@ namespace FountOfHopeStudyBiblePC
 
         private void ApplyTheme()
         {
-            ThemeManager.PrimaryColor = _viewModel.SelectedColor ?? DefaultPrimaryColor;
+            var primary = _viewModel.SelectedColor ?? DefaultPrimaryColor;
+            App.Log($"ApplyTheme: primary={primary}");
+
+            ThemeManager.PrimaryColor = primary;
             ThemeManager.DarkTheme = _viewModel.DarkTheme;
             ThemeManager.IsCustomColor = _viewModel.IsCustomColor;
+
+            // These two lines are what make DynamicResource work
+            Application.Current.Resources["AppPrimaryColor"] = primary;
+            Application.Current.Resources["AccentBrush"] = new SolidColorBrush(primary);
         }
 
         // ── Navigation ───────────────────────────────────────────────
