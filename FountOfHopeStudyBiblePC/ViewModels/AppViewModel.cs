@@ -17,6 +17,7 @@ namespace FountOfHopeStudyBiblePC.ViewModels
     public class AppViewModel : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler? PropertyChanged;
+
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
@@ -34,7 +35,7 @@ namespace FountOfHopeStudyBiblePC.ViewModels
             (byte)(argb & 0xFF));
 
         // ═══════════════════════════════════════════════════════════════
-        //  Asset lists (present in the previous stub)
+        //  Asset lists
         // ═══════════════════════════════════════════════════════════════
         public List<string> Textures { get; } = new();
         public List<string> ImageFilesSm { get; } = new();
@@ -459,9 +460,6 @@ namespace FountOfHopeStudyBiblePC.ViewModels
             Textures.AddRange(ScanFolder("Assets/textures"));
             ImageFilesSm.AddRange(ScanFolder("Assets/images"));
             ImageFilesMd.AddRange(ScanFolder("Assets/images-md"));
-
-            // No fake fallback — if a folder is empty, the lists stay empty.
-            // The UI should handle empty lists gracefully (see Fix 3).
         }
 
         private static IEnumerable<string> ScanFolder(string relativePath)

@@ -1,0 +1,5 @@
+Stop-Process -Name FountOfHopeStudyBiblePC -Force -ErrorAction SilentlyContinue
+cd C:\Users\herbe\source\repos\FountOfHopeStudyBiblePC\FountOfHopeStudyBiblePC
+dotnet build
+cd bin\Debug\net10.0-windows
+.\FountOfHopeStudyBiblePC.exe

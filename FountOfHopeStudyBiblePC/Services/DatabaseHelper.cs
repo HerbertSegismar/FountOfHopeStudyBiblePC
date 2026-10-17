@@ -39,6 +39,8 @@ namespace FountOfHopeStudyBiblePC.Services
         public const string ColumnStartPos = "start_pos";
         public const string ColumnEndPos = "end_pos";
 
+        public bool IsEmpty() => _connection == null;
+
         private readonly Random _random = new();
         private SqliteConnection? _connection;
 

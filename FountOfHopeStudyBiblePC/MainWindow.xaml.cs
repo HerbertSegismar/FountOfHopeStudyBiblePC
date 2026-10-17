@@ -1,9 +1,11 @@
 ﻿// MainWindow.xaml.cs
+using FountOfHopeStudyBiblePC.Controls;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
 using FountOfHopeStudyBiblePC.ViewModels;
 using FountOfHopeStudyBiblePC.Views;
+using FountOfHopeStudyBiblePC.Views.Modals;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -19,7 +21,6 @@ namespace FountOfHopeStudyBiblePC
         private DatabaseHelper _databaseHelper;
         private DatabaseHelper? _secondaryDbHelper;
 
-        // Animator template flow (equivalent of pendingTemplateUri / animatorTemplateUri)
         private Uri? _pendingTemplateUri;
         private Uri? _animatorTemplateUri;
 
@@ -29,7 +30,6 @@ namespace FountOfHopeStudyBiblePC
             InitializeComponent();
             App.Log("MainWindow ctor - after InitializeComponent");
 
-            // Loaded is a routed event, not an overridable method
             Loaded += (_, _) => App.Log("MainWindow.Loaded - event fired");
 
             _viewModel = new AppViewModel();
@@ -53,17 +53,44 @@ namespace FountOfHopeStudyBiblePC
                 switch (e.PropertyName)
                 {
                     case nameof(AppViewModel.CurrentDbName):
-                        _databaseHelper?.Dispose();
-                        _databaseHelper = new DatabaseHelper(_viewModel.CurrentDbName);
+                        RefreshPrimaryDatabase();
                         break;
+
                     case nameof(AppViewModel.SecondaryDbName):
-                        _secondaryDbHelper?.Dispose();
-                        _secondaryDbHelper = new DatabaseHelper(_viewModel.SecondaryDbName);
+                        RefreshSecondaryDatabase();
                         break;
+
                     case nameof(AppViewModel.DarkTheme):
                     case nameof(AppViewModel.SelectedColor):
                     case nameof(AppViewModel.IsCustomColor):
                         ApplyTheme();
+                        break;
+
+                    case nameof(AppViewModel.ShowNavigationModal):
+                        if (_viewModel.ShowNavigationModal)
+                        {
+                            _viewModel.ShowNavigationModal = false;
+                            Dispatcher.BeginInvoke(new Action(OpenNavigationModal),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        break;
+
+                    case nameof(AppViewModel.ShowPrimaryVersionDropdown):
+                        if (_viewModel.ShowPrimaryVersionDropdown)
+                        {
+                            _viewModel.ShowPrimaryVersionDropdown = false;
+                            Dispatcher.BeginInvoke(new Action(OpenPrimaryVersionModal),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        break;
+
+                    case nameof(AppViewModel.ShowSecondaryVersionDropdown):
+                        if (_viewModel.ShowSecondaryVersionDropdown)
+                        {
+                            _viewModel.ShowSecondaryVersionDropdown = false;
+                            Dispatcher.BeginInvoke(new Action(OpenSecondaryVersionModal),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
                         break;
                 }
             };
@@ -76,6 +103,209 @@ namespace FountOfHopeStudyBiblePC
             App.Log("MainWindow ctor - COMPLETE");
         }
 
+        // ═══════════════════════════════════════════════════════════════
+        //  Database swap — single source of truth
+        // ═══════════════════════════════════════════════════════════════
+        private void RefreshPrimaryDatabase()
+        {
+            var name = _viewModel.CurrentDbName;
+            App.Log($"MainWindow: RefreshPrimaryDatabase → {name}");
+
+            try
+            {
+                _databaseHelper?.Dispose();
+                _databaseHelper = new DatabaseHelper(name);
+
+                if (_databaseHelper.IsEmpty())
+                    App.Log($"!!! RefreshPrimaryDatabase: '{name}' failed to open " +
+                            $"(missing file? check Assets\\databases\\{name})");
+
+                var onReader = _viewModel.NavigationStack.Count > 0
+                               && _viewModel.NavigationStack[^1] is Screen.Reader;
+                if (onReader)
+                {
+                    Dispatcher.BeginInvoke(new Action(NavigateToCurrentScreen),
+                        System.Windows.Threading.DispatcherPriority.Background);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"!!! RefreshPrimaryDatabase FAILED: {ex}");
+            }
+        }
+
+        private void RefreshSecondaryDatabase()
+        {
+            var name = _viewModel.SecondaryDbName;
+            App.Log($"MainWindow: RefreshSecondaryDatabase → {name}");
+
+            try
+            {
+                _secondaryDbHelper?.Dispose();
+                _secondaryDbHelper = new DatabaseHelper(name);
+
+                if (_secondaryDbHelper.IsEmpty())
+                    App.Log($"!!! RefreshSecondaryDatabase: '{name}' failed to open");
+            }
+            catch (Exception ex)
+            {
+                App.Log($"!!! RefreshSecondaryDatabase FAILED: {ex}");
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        //  App bar
+        // ═══════════════════════════════════════════════════════════════
+        private void UpdateAppBar()
+        {
+            if (_viewModel.NavigationStack.Count == 0)
+            {
+                AppBarHost.Content = null;
+                return;
+            }
+
+            var current = _viewModel.NavigationStack[^1];
+            var hasBack = _viewModel.NavigationStack.Count > 1;
+
+            if (current is Screen.Reader r)
+            {
+                var appBar = new ReaderAppBar(_viewModel);
+                var passage = r.Passage ?? _viewModel.PrimaryPassage;
+                appBar.UpdatePassage(passage, _viewModel.CurrentVersionAbbr);
+                appBar.SetBackVisible(hasBack);
+
+                appBar.BibleIconClicked += () => _viewModel.ShowNavigationModal = true;
+                appBar.ThemeToggled += () => _viewModel.DarkTheme = !_viewModel.DarkTheme;
+                appBar.ColorLensClicked += () => _viewModel.ShowColorThemeDialog = true;
+                appBar.BackRequested += () => { _viewModel.GoBack(); NavigateToCurrentScreen(); };
+                appBar.ScreenRequested += screen => { _viewModel.NavigateTo(screen); NavigateToCurrentScreen(); };
+
+                AppBarHost.Content = appBar;
+            }
+            else
+            {
+                var appBar = new HomeAppBar(_viewModel, current);
+                appBar.SetBackVisible(hasBack);
+
+                appBar.BibleIconClicked += () => _viewModel.ShowNavigationModal = true;
+                appBar.ThemeToggled += () => _viewModel.DarkTheme = !_viewModel.DarkTheme;
+                appBar.ColorLensClicked += () => _viewModel.ShowColorThemeDialog = true;
+                appBar.BackRequested += () => { _viewModel.GoBack(); NavigateToCurrentScreen(); };
+                appBar.ScreenRequested += screen => { _viewModel.NavigateTo(screen); NavigateToCurrentScreen(); };
+
+                AppBarHost.Content = appBar;
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        //  Navigation modal
+        // ═══════════════════════════════════════════════════════════════
+        private void OpenNavigationModal()
+        {
+            App.Log("MainWindow: OpenNavigationModal — enter");
+            try
+            {
+                App.Log($"  PrimaryPassage = {_viewModel.PrimaryPassage.BookName} " +
+                        $"{_viewModel.PrimaryPassage.Chapter}:{_viewModel.PrimaryPassage.Verse}");
+
+                var modal = new NavigationModal(
+                    viewModel: _viewModel,
+                    databaseHelper: _databaseHelper,
+                    onPassageSelected: passage =>
+                    {
+                        App.Log($"MainWindow: NavigationModal picked " +
+                                $"{passage.BookName} {passage.Chapter}:{passage.Verse}");
+                        _viewModel.PrimaryPassage = passage;
+                        if (_viewModel.ScrollSync) _viewModel.SecondaryPassage = passage;
+                        _viewModel.NavigateTo(new Screen.Reader(passage));
+                        NavigateToCurrentScreen();
+                    },
+                    onDismiss: () => App.Log("MainWindow: NavigationModal dismissed"),
+                    initialBookNumber: _viewModel.PrimaryPassage.BookNumber,
+                    initialChapter: _viewModel.PrimaryPassage.Chapter,
+                    initialVerse: _viewModel.PrimaryPassage.Verse)
+                {
+                    Owner = this,
+                };
+
+                App.Log("MainWindow: NavigationModal created — calling ShowDialog");
+                modal.ShowDialog();
+                App.Log("MainWindow: NavigationModal closed cleanly");
+            }
+            catch (Exception ex)
+            {
+                App.Log("!!! OpenNavigationModal FAILED: " + ex);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        //  Version picker modals
+        // ═══════════════════════════════════════════════════════════════
+        private void OpenPrimaryVersionModal()
+        {
+            App.Log("MainWindow: OpenPrimaryVersionModal — enter");
+            try
+            {
+                var modal = new VersionSelectionModal(
+                    viewModel: _viewModel,
+                    currentVersionKey: _viewModel.CurrentDbName,
+                    isSecondary: false,
+                    onVersionSelected: file =>
+                    {
+                        App.Log($"MainWindow: primary version picked: {file}");
+                        _viewModel.CurrentDbName = file;
+                        _viewModel.CurrentVersionAbbr =
+                            BibleVersionUtils.VersionMap.GetValueOrDefault(file, "Bible");
+                        // No explicit refresh — RefreshPrimaryDatabase() handles it
+                    },
+                    onDismiss: () => App.Log("MainWindow: VersionModal dismissed"))
+                {
+                    Owner = this,
+                };
+
+                modal.ShowDialog();
+                App.Log("MainWindow: VersionModal closed");
+            }
+            catch (Exception ex)
+            {
+                App.Log("!!! OpenPrimaryVersionModal FAILED: " + ex);
+            }
+        }
+
+        private void OpenSecondaryVersionModal()
+        {
+            App.Log("MainWindow: OpenSecondaryVersionModal — enter");
+            try
+            {
+                var modal = new VersionSelectionModal(
+                    viewModel: _viewModel,
+                    currentVersionKey: _viewModel.SecondaryDbName,
+                    isSecondary: true,
+                    onVersionSelected: file =>
+                    {
+                        App.Log($"MainWindow: secondary version picked: {file}");
+                        _viewModel.SecondaryDbName = file;
+                        _viewModel.SecondaryVersionAbbr =
+                            BibleVersionUtils.VersionMap.GetValueOrDefault(file, "Bible");
+                        // No explicit refresh — RefreshSecondaryDatabase() handles it
+                    },
+                    onDismiss: () => App.Log("MainWindow: SecondaryVersionModal dismissed"))
+                {
+                    Owner = this,
+                };
+
+                modal.ShowDialog();
+                App.Log("MainWindow: SecondaryVersionModal closed");
+            }
+            catch (Exception ex)
+            {
+                App.Log("!!! OpenSecondaryVersionModal FAILED: " + ex);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        //  Window lifecycle overrides
+        // ═══════════════════════════════════════════════════════════════
         protected override void OnSourceInitialized(EventArgs e)
         {
             App.Log("MainWindow.OnSourceInitialized");
@@ -120,7 +350,7 @@ namespace FountOfHopeStudyBiblePC
             _secondaryDbHelper?.Dispose();
         }
 
-        // ── Intent / deep-link handling (equivalent of handleIntent) ────
+        // ── Intent / deep-link handling ──────────────────────────────
         public void HandleIncomingUri(Uri uri) => HandleIntent(uri);
 
         private void HandleIntent(Uri? uri)
@@ -134,13 +364,12 @@ namespace FountOfHopeStudyBiblePC
                 _viewModel.NavigateTo(new Screen.Animator());
             }
 
-            // Consume: mark as ready for the Animator screen
             _animatorTemplateUri = _pendingTemplateUri;
             _pendingTemplateUri = null;
             NavigateToCurrentScreen();
         }
 
-        // ── Preference loading (equivalent of LaunchedEffect(Unit) read) ─
+        // ── Preference loading ───────────────────────────────────────
         private void LoadPreferences()
         {
             _viewModel.CustomWidth = _prefs.GetInt(PrefKeys.CustomWidth, 1920);
@@ -196,7 +425,6 @@ namespace FountOfHopeStudyBiblePC
             _viewModel.RenderOrbs = _prefs.GetBool(PrefKeys.RenderOrbs, false);
             _viewModel.OrbsCount = _prefs.GetInt(PrefKeys.OrbsCount, 3);
 
-            // Passages
             _viewModel.PrimaryPassage = new PassageSelection(
                 _prefs.GetInt(PrefKeys.PrimaryBookNumber, 10),
                 _prefs.GetString(PrefKeys.PrimaryBookName, "Genesis"),
@@ -209,7 +437,6 @@ namespace FountOfHopeStudyBiblePC
                 _prefs.GetInt(PrefKeys.SecondaryChapter, 1),
                 _prefs.GetInt(PrefKeys.SecondaryVerse, 1));
 
-            // Predefined highlight colors
             _viewModel.PredefinedHighlightColors.Clear();
             var saved = _prefs.GetString(PrefKeys.PredefinedHighlightColors, "");
             if (!string.IsNullOrWhiteSpace(saved))
@@ -223,14 +450,13 @@ namespace FountOfHopeStudyBiblePC
             if (_viewModel.PredefinedHighlightColors.Count == 0)
                 _viewModel.ResetHighlightColorsToDefault();
 
-            // Disabled versions
             var disabled = _prefs.GetString(PrefKeys.DisabledVersions, "");
             _viewModel.DisabledVersions = string.IsNullOrWhiteSpace(disabled)
                 ? new HashSet<string>()
                 : new HashSet<string>(disabled.Split(',', StringSplitOptions.RemoveEmptyEntries));
         }
 
-        // ── Reactive preference saving (equivalent of SavePreference calls) ─
+        // ── Reactive preference saving ───────────────────────────────
         private void HookPreferenceSaving()
         {
             _viewModel.PropertyChanged += (_, e) =>
@@ -285,7 +511,7 @@ namespace FountOfHopeStudyBiblePC
                 }
             };
 
-            // Passage changes (equivalent of snapshotFlow collectLatest)
+            // Passage changes
             _viewModel.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(AppViewModel.PrimaryPassage) && _viewModel.PrimaryPassage is { } p)
@@ -312,8 +538,8 @@ namespace FountOfHopeStudyBiblePC
             };
         }
 
-        // ── Theme wiring (equivalent of ThemeManager updates) ───────────
-        private static readonly Color DefaultPrimaryColor = Color.FromRgb(0x67, 0x50, 0xA4); // placeholder
+        // ── Theme wiring ─────────────────────────────────────────────
+        private static readonly Color DefaultPrimaryColor = Color.FromRgb(0x67, 0x50, 0xA4);
 
         private void HookViewModelEvents()
         {
@@ -327,9 +553,11 @@ namespace FountOfHopeStudyBiblePC
             ThemeManager.IsCustomColor = _viewModel.IsCustomColor;
         }
 
-        // ── Navigation ─────────────────────────────────────────────────
+        // ── Navigation ───────────────────────────────────────────────
         private void NavigateToCurrentScreen()
         {
+            UpdateAppBar();
+
             if (_viewModel.NavigationStack.Count == 0)
             {
                 ShowHome();
@@ -451,7 +679,7 @@ namespace FountOfHopeStudyBiblePC
             RootContent.Content = home;
         }
 
-        // ── Navigation callbacks ───────────────────────────────────────
+        // ── Navigation callbacks ─────────────────────────────────────
         private void NavigateToReader(PassageSelection selection)
         {
             _viewModel.PrimaryPassage = selection;
@@ -470,7 +698,7 @@ namespace FountOfHopeStudyBiblePC
             NavigateToCurrentScreen();
         }
 
-        // ── Image picker (equivalent of imagePickerLauncher) ───────────
+        // ── Image picker ─────────────────────────────────────────────
         public void PickCustomBackground()
         {
             var dlg = new Microsoft.Win32.OpenFileDialog
@@ -480,7 +708,6 @@ namespace FountOfHopeStudyBiblePC
             };
             if (dlg.ShowDialog() != true) return;
 
-            // Delete previous custom texture
             if (!string.IsNullOrEmpty(_viewModel.CustomTextureUri))
             {
                 try { File.Delete(_viewModel.CustomTextureUri); } catch { }

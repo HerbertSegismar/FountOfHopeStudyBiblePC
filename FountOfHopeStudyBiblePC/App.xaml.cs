@@ -2,7 +2,7 @@
 using System;
 using System.IO;
 using System.Windows;
-using System.Windows.Markup;      // ← for XamlParseException
+using System.Windows.Markup;
 using System.Windows.Threading;
 
 namespace FountOfHopeStudyBiblePC
@@ -31,9 +31,15 @@ namespace FountOfHopeStudyBiblePC
             // Force app to stay alive even if no window is open.
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+            // ═══════════════════════════════════════════════════════════
+            //  Dispatcher exceptions — log AND swallow so the app
+            //  doesn't crash on non-fatal UI exceptions.
+            // ═══════════════════════════════════════════════════════════
             DispatcherUnhandledException += (_, args) =>
             {
                 Log("!!! DispatcherUnhandledException: " + args.Exception);
+                // Critical: without this, WPF terminates the app.
+                args.Handled = true;
             };
 
             AppDomain.CurrentDomain.UnhandledException += (_, args) =>
@@ -41,6 +47,10 @@ namespace FountOfHopeStudyBiblePC
                 Log("!!! AppDomain.UnhandledException: " + args.ExceptionObject);
             };
 
+            // ═══════════════════════════════════════════════════════════
+            //  First-chance logging — captures even caught exceptions
+            //  to help diagnose silent failures.
+            // ═══════════════════════════════════════════════════════════
             AppDomain.CurrentDomain.FirstChanceException += (_, args) =>
             {
                 var ex = args.Exception;
@@ -49,7 +59,12 @@ namespace FountOfHopeStudyBiblePC
                     ex is TypeInitializationException ||
                     ex is XamlParseException ||
                     ex is FileNotFoundException ||
-                    ex is DllNotFoundException)
+                    ex is DllNotFoundException ||
+                    ex is ArgumentException ||
+                    ex is ArgumentNullException ||
+                    ex is NotSupportedException ||
+                    ex is System.Data.Common.DbException ||
+                    ex is Microsoft.Data.Sqlite.SqliteException)
                 {
                     Log("FirstChanceException: " + ex.GetType().Name + " — " + ex.Message);
                 }

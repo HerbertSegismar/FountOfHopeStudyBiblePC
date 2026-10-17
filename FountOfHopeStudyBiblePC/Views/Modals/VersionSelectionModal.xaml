@@ -1,0 +1,211 @@
+<!-- Views/Modals/VersionSelectionModal.xaml -->
+<Window x:Class="FountOfHopeStudyBiblePC.Views.Modals.VersionSelectionModal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Select Bible Version"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="True"
+        ShowActivated="True"
+        Width="500" Height="700"
+        MinWidth="380" MinHeight="440"
+        Background="#FF1C2128"
+        WindowStyle="None"
+        ResizeMode="CanResizeWithGrip">
+
+    <Border CornerRadius="10" Background="#FF1C2128"
+            BorderBrush="#22FFFFFF" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="0" Opacity="0.6"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- ══ Header ══════════════════════════════════════════════ -->
+            <Border Grid.Row="0"
+                    Background="#FF7FB2FF"
+                    CornerRadius="10,10,0,0">
+                <Grid Margin="20,10,12,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="Select Bible Version"
+                               FontSize="17"
+                               FontWeight="Bold"
+                               Foreground="White"
+                               VerticalAlignment="Center"/>
+                    <Button x:Name="CloseButton"
+                            Grid.Column="1"
+                            Width="36" Height="36"
+                            Content="✕"
+                            FontSize="16"
+                            Foreground="White"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            Click="CloseButton_Click"/>
+                </Grid>
+            </Border>
+
+            <!-- ══ Search ══════════════════════════════════════════════ -->
+            <Border Grid.Row="1" Margin="16,12,16,8"
+                    Background="#FF232A33"
+                    CornerRadius="8"
+                    BorderBrush="#33FFFFFF"
+                    BorderThickness="1">
+                <Grid Margin="10,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="🔍"
+                               FontSize="14"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+
+                    <TextBox x:Name="SearchBox"
+                             Grid.Column="1"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Foreground="#FFE6EAF0"
+                             CaretBrush="#FFE6EAF0"
+                             FontSize="14"
+                             Padding="4,10"
+                             VerticalAlignment="Center"
+                             TextChanged="SearchBox_TextChanged"/>
+
+                    <Button x:Name="ClearSearchBtn"
+                            Grid.Column="2"
+                            Content="✕"
+                            FontSize="12"
+                            Foreground="#FFAAB4C0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            Width="28" Height="28"
+                            Visibility="Collapsed"
+                            Click="ClearSearchBtn_Click"/>
+                </Grid>
+            </Border>
+
+            <!-- ══ List ════════════════════════════════════════════════ -->
+            <ScrollViewer Grid.Row="2"
+                          x:Name="VersionScroller"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Margin="0,0,0,8">
+                <ItemsControl x:Name="VersionList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <!-- Language header -->
+                                <Border Background="#FF1C2128"
+                                        Padding="20,10,20,6">
+                                    <TextBlock Text="{Binding Language}"
+                                               FontSize="13"
+                                               FontWeight="Bold"
+                                               Foreground="#FF7FB2FF"/>
+                                </Border>
+
+                                <!-- Versions in this language -->
+                                <ItemsControl ItemsSource="{Binding Versions}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border x:Name="RowBorder"
+                                                    Background="Transparent"
+                                                    Cursor="Hand"
+                                                    MouseLeftButtonUp="VersionRow_Click"
+                                                    Tag="{Binding}">
+                                                <Grid Margin="20,12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0"
+                                                                VerticalAlignment="Center">
+                                                        <TextBlock x:Name="ShortNameText"
+                                                                   Text="{Binding ShortName}"
+                                                                   FontSize="15"
+                                                                   FontWeight="Medium"
+                                                                   Foreground="#FFE6EAF0"/>
+                                                        <TextBlock Text="{Binding Description}"
+                                                                   FontSize="12"
+                                                                   Foreground="#FFAAB4C0"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   MaxWidth="380"
+                                                                   Margin="0,2,0,0"/>
+                                                    </StackPanel>
+
+                                                    <TextBlock x:Name="Checkmark"
+                                                               Grid.Column="1"
+                                                               Text="✓"
+                                                               FontSize="18"
+                                                               FontWeight="Bold"
+                                                               Foreground="#FF7FB2FF"
+                                                               VerticalAlignment="Center"
+                                                               Margin="8,0,0,0"
+                                                               Visibility="Collapsed"/>
+                                                </Grid>
+                                            </Border>
+                                            <!-- DataTrigger replaces the missing BoolToVisibility converter -->
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                    <Setter TargetName="RowBorder" Property="Background"
+                                                            Value="#1A7FB2FF"/>
+                                                    <Setter TargetName="ShortNameText" Property="Foreground"
+                                                            Value="#FF7FB2FF"/>
+                                                    <Setter TargetName="ShortNameText" Property="FontWeight"
+                                                            Value="SemiBold"/>
+                                                    <Setter TargetName="Checkmark" Property="Visibility"
+                                                            Value="Visible"/>
+                                                </DataTrigger>
+                                                <Trigger SourceName="RowBorder" Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="RowBorder" Property="Background"
+                                                            Value="#0DFFFFFF"/>
+                                                </Trigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Empty state overlay -->
+            <Grid x:Name="EmptyState"
+                  Grid.Row="2"
+                  Visibility="Collapsed"
+                  Background="#FF1C2128">
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="✨"
+                               FontSize="48"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="No matching versions found"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               Foreground="#FFAAB4C0"
+                               Margin="0,12,0,0"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="Try a different search term"
+                               FontSize="13"
+                               Foreground="#88AAB4C0"
+                               Margin="0,6,0,0"
+                               HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

@@ -755,7 +755,6 @@ namespace FountOfHopeStudyBiblePC.Views
 
             App.Log($"Reader: OpenNotesModal with {verses.Count} verse(s)");
 
-            // Let the calling mouse event fully unwind before opening the modal
             await System.Threading.Tasks.Task.Delay(120);
 
             var modal = new Views.Modals.NotesModal(
@@ -769,7 +768,10 @@ namespace FountOfHopeStudyBiblePC.Views
             if (owner != null) modal.Owner = owner;
 
             modal.ShowDialog();
-            App.Log("Reader: NotesModal closed");
+            App.Log("Reader: NotesModal closed — refreshing chapter");
+
+            // ── NEW: re-render now that the note is actually saved ──
+            RenderCurrentMode();
         }
 
         private void ShowNotesModal()

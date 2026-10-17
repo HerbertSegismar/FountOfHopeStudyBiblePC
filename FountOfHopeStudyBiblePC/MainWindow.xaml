@@ -8,7 +8,12 @@
         Background="{StaticResource AppBackground}"
         WindowStartupLocation="CenterScreen">
     <Grid>
-        <!-- Host for the current Screen (HomeScreen by default) -->
-        <ContentControl x:Name="RootContent"/>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <ContentControl x:Name="AppBarHost" Grid.Row="0"/>
+        <ContentControl x:Name="RootContent" Grid.Row="1"/>
     </Grid>
 </Window>
