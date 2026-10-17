@@ -7,7 +7,7 @@
         ShowInTaskbar="False"
         Width="520" Height="820"
         MinWidth="380" MinHeight="520"
-        Background="#FF1C2128"
+        Background="{DynamicResource CardBackground}"
         WindowStyle="None"
         ResizeMode="CanResize">
 
@@ -100,9 +100,9 @@
 
         <!-- Input panel -->
         <Border Grid.Row="2"
-                Background="#FF101418"
+                Background="{DynamicResource AppBackground}"
                 Padding="12,10"
-                BorderBrush="#22FFFFFF"
+                BorderBrush="{DynamicResource DividerBrush}"
                 BorderThickness="0,1,0,0">
             <StackPanel>
 
@@ -125,7 +125,7 @@
                                        Foreground="White"/>
                             <TextBlock x:Name="BookHeaderSubtitle"
                                        FontSize="11"
-                                       Foreground="#FFE6EAF0"/>
+                                       Foreground="{DynamicResource OnSurface}"/>
                         </StackPanel>
                         <Border Grid.Column="1"
                                 Width="40" Height="40"
@@ -154,7 +154,7 @@
                         <TextBlock Text="Chapter"
                                    FontSize="11"
                                    FontWeight="Medium"
-                                   Foreground="#FFAAB4C0"
+                                   Foreground="{DynamicResource OnSurfaceVariant}"
                                    Margin="0,0,0,4"/>
                         <Border x:Name="ChapterInputBorder"
                                 Height="52"
@@ -184,7 +184,7 @@
                         <TextBlock Text="Verse"
                                    FontSize="11"
                                    FontWeight="Medium"
-                                   Foreground="#FFAAB4C0"
+                                   Foreground="{DynamicResource OnSurfaceVariant}"
                                    Margin="0,0,0,4"/>
                         <Border x:Name="VerseInputBorder"
                                 Height="52"

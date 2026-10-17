@@ -7,12 +7,12 @@
         ShowInTaskbar="True"
         Width="440" Height="640"
         MinWidth="340" MinHeight="400"
-        Background="#FF1C2128"
+        Background="{DynamicResource CardBackground}"
         WindowStyle="None"
         ResizeMode="CanResize">
 
-    <Border CornerRadius="14" Background="#FF1C2128"
-            BorderBrush="#22FFFFFF" BorderThickness="1">
+    <Border CornerRadius="14" Background="{DynamicResource CardBackground}"
+            BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1">
         <Border.Effect>
             <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="0" Opacity="0.6"/>
         </Border.Effect>

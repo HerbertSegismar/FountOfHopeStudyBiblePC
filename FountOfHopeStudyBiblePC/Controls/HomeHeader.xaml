@@ -6,10 +6,10 @@
         <TextBlock Text="Fount of Hope"
                    FontSize="28"
                    FontWeight="Bold"
-                   Foreground="{StaticResource OnSurface}"/>
+                   Foreground="{DynamicResource OnSurface}"/>
         <TextBlock Text="Study Bible"
                    FontSize="15"
                    Margin="0,2,0,0"
-                   Foreground="{StaticResource OnSurfaceVariant}"/>
+                   Foreground="{DynamicResource OnSurfaceVariant}"/>
     </StackPanel>
 </UserControl>

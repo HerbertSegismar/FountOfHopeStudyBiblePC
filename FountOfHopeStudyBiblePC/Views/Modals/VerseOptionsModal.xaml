@@ -16,8 +16,8 @@
 
     <Border x:Name="RootBorder"
             CornerRadius="14"
-            Background="#FF1C2128"
-            BorderBrush="#33FFFFFF"
+            Background="{DynamicResource CardBackground}"
+            BorderBrush="{DynamicResource DividerBrush}"
             BorderThickness="1">
         <Border.Effect>
             <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="0" Opacity="0.7"/>
@@ -65,7 +65,7 @@
                         BorderThickness="0"
                         Cursor="Hand"
                         Click="CloseButton_Click">
-                    <TextBlock Text="✕" FontSize="16" Foreground="#FFE6EAF0"/>
+                    <TextBlock Text="✕" FontSize="16" Foreground="{DynamicResource OnSurface}"/>
                 </Button>
             </Grid>
 
@@ -81,7 +81,7 @@
                         <TextBlock Text="Edit Range"
                                    FontSize="14"
                                    FontWeight="SemiBold"
-                                   Foreground="#FFE6EAF0"
+                                   Foreground="{DynamicResource OnSurface}"
                                    Margin="0,8,0,8"/>
 
                         <!-- Start slider row -->
@@ -94,7 +94,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0"
                                        Text="From"
-                                       Foreground="#FFAAB4C0"
+                                       Foreground="{DynamicResource OnSurfaceVariant}"
                                        VerticalAlignment="Center"
                                        Width="42"/>
                             <Slider x:Name="StartSlider"
@@ -109,9 +109,9 @@
                                     Width="26" Height="26"
                                     Margin="6,0,0,0"
                                     Background="Transparent"
-                                    BorderBrush="#33FFFFFF"
+                                    BorderBrush="{DynamicResource DividerBrush}"
                                     BorderThickness="1"
-                                    Foreground="#FFE6EAF0"
+                                    Foreground="{DynamicResource OnSurface}"
                                     Cursor="Hand"
                                     Click="StartDecButton_Click"/>
                             <Button Grid.Column="3"
@@ -120,9 +120,9 @@
                                     Width="26" Height="26"
                                     Margin="4,0,0,0"
                                     Background="Transparent"
-                                    BorderBrush="#33FFFFFF"
+                                    BorderBrush="{DynamicResource DividerBrush}"
                                     BorderThickness="1"
-                                    Foreground="#FFE6EAF0"
+                                    Foreground="{DynamicResource OnSurface}"
                                     Cursor="Hand"
                                     Click="StartIncButton_Click"/>
                         </Grid>
@@ -137,7 +137,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0"
                                        Text="To"
-                                       Foreground="#FFAAB4C0"
+                                       Foreground="{DynamicResource OnSurfaceVariant}"
                                        VerticalAlignment="Center"
                                        Width="42"/>
                             <Slider x:Name="EndSlider"
@@ -152,9 +152,9 @@
                                     Width="26" Height="26"
                                     Margin="6,0,0,0"
                                     Background="Transparent"
-                                    BorderBrush="#33FFFFFF"
+                                    BorderBrush="{DynamicResource DividerBrush}"
                                     BorderThickness="1"
-                                    Foreground="#FFE6EAF0"
+                                    Foreground="{DynamicResource OnSurface}"
                                     Cursor="Hand"
                                     Click="EndDecButton_Click"/>
                             <Button Grid.Column="3"
@@ -163,23 +163,23 @@
                                     Width="26" Height="26"
                                     Margin="4,0,0,0"
                                     Background="Transparent"
-                                    BorderBrush="#33FFFFFF"
+                                    BorderBrush="{DynamicResource DividerBrush}"
                                     BorderThickness="1"
-                                    Foreground="#FFE6EAF0"
+                                    Foreground="{DynamicResource OnSurface}"
                                     Cursor="Hand"
                                     Click="EndIncButton_Click"/>
                         </Grid>
 
                         <TextBlock x:Name="SelectedCountText"
                                    FontSize="12"
-                                   Foreground="#FFAAB4C0"
+                                   Foreground="{DynamicResource OnSurfaceVariant}"
                                    Margin="0,8,0,0"/>
                     </StackPanel>
 
                     <!-- Verse text preview -->
                     <Border Margin="0,16,0,0"
                             CornerRadius="10"
-                            BorderBrush="#33FFFFFF"
+                            BorderBrush="{DynamicResource DividerBrush}"
                             BorderThickness="1"
                             Background="#22FFFFFF"
                             Padding="16">
@@ -188,7 +188,7 @@
                                    LineHeight="20"
                                    TextWrapping="Wrap"
                                    TextAlignment="Center"
-                                   Foreground="#FFE6EAF0"/>
+                                   Foreground="{DynamicResource OnSurface}"/>
                     </Border>
 
                     <!-- Action buttons -->
@@ -198,7 +198,7 @@
                                 CornerRadius="14"
                                 Height="64"
                                 Margin="0,0,0,10"
-                                Background="#FF232A33"
+                                Background="{DynamicResource CardBackgroundAlt}"
                                 Cursor="Hand"
                                 MouseLeftButtonUp="BookmarkButton_Click">
                             <Grid Margin="16,0">
@@ -217,7 +217,7 @@
                                     <TextBlock x:Name="BookmarkTitle"
                                                FontSize="15"
                                                FontWeight="Medium"
-                                               Foreground="#FFE6EAF0"/>
+                                               Foreground="{DynamicResource OnSurface}"/>
                                     <TextBlock x:Name="BookmarkSubtitle"
                                                FontSize="12"
                                                Foreground="#88AAB4C0"/>
@@ -234,7 +234,7 @@
                                 CornerRadius="14"
                                 Height="64"
                                 Margin="0,0,0,10"
-                                Background="#FF232A33"
+                                Background="{DynamicResource CardBackgroundAlt}"
                                 Cursor="Hand"
                                 MouseLeftButtonUp="HighlightButton_Click">
                             <Grid Margin="16,0">
@@ -253,7 +253,7 @@
                                     <TextBlock x:Name="HighlightTitle"
                                                FontSize="15"
                                                FontWeight="Medium"
-                                               Foreground="#FFE6EAF0"/>
+                                               Foreground="{DynamicResource OnSurface}"/>
                                     <TextBlock x:Name="HighlightSubtitle"
                                                FontSize="12"
                                                Foreground="#88AAB4C0"/>
@@ -270,7 +270,7 @@
                                 CornerRadius="14"
                                 Height="64"
                                 Margin="0,0,0,10"
-                                Background="#FF232A33"
+                                Background="{DynamicResource CardBackgroundAlt}"
                                 Cursor="Hand"
                                 MouseLeftButtonUp="ShareButton_Click">
                             <Grid Margin="16,0">
@@ -282,14 +282,14 @@
                                 <TextBlock Grid.Column="0"
                                            Text="↗"
                                            FontSize="20"
-                                           Foreground="#FFE6EAF0"
+                                           Foreground="{DynamicResource OnSurface}"
                                            VerticalAlignment="Center"/>
                                 <StackPanel Grid.Column="1" Margin="14,0,0,0"
                                             VerticalAlignment="Center">
                                     <TextBlock x:Name="ShareTitle"
                                                FontSize="15"
                                                FontWeight="Medium"
-                                               Foreground="#FFE6EAF0"/>
+                                               Foreground="{DynamicResource OnSurface}"/>
                                     <TextBlock Text="Share with friends or social media"
                                                FontSize="12"
                                                Foreground="#88AAB4C0"/>
@@ -305,7 +305,7 @@
                         <Border x:Name="NoteButton"
                                 CornerRadius="14"
                                 Height="64"
-                                Background="#FF232A33"
+                                Background="{DynamicResource CardBackgroundAlt}"
                                 Cursor="Hand"
                                 MouseLeftButtonUp="NoteButton_Click">
                             <Grid Margin="16,0">
@@ -323,7 +323,7 @@
                                     <TextBlock x:Name="NoteTitle"
                                                FontSize="15"
                                                FontWeight="Medium"
-                                               Foreground="#FFE6EAF0"/>
+                                               Foreground="{DynamicResource OnSurface}"/>
                                     <TextBlock Text="Add personal notes"
                                                FontSize="12"
                                                Foreground="#88AAB4C0"/>
@@ -342,9 +342,9 @@
                             Content="Cancel"
                             Height="46"
                             Margin="0,16,0,0"
-                            Background="#FF2A3140"
+                            Background="{DynamicResource CardBackgroundAlt}"
                             BorderThickness="0"
-                            Foreground="#FFE6EAF0"
+                            Foreground="{DynamicResource OnSurface}"
                             FontSize="15"
                             Cursor="Hand"
                             Click="CloseButton_Click">

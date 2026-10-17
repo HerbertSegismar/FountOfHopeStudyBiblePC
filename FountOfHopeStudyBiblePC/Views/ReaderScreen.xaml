@@ -5,7 +5,7 @@
              xmlns:controls="clr-namespace:FountOfHopeStudyBiblePC.Controls"
              x:Name="ReaderRoot">
 
-	<Grid Background="{StaticResource AppBackground}">
+	<Grid Background="{DynamicResource AppBackground}">
 
 		<!-- ── Mode host: Single / Synced / Independent ────────────────── -->
 		<ContentControl x:Name="ReaderHost"
@@ -57,7 +57,7 @@
 			<Border x:Name="OptionsMenuBorder"
                     CornerRadius="12"
                     Padding="4"
-                    Background="#FF1C2128"
+                    Background="{DynamicResource CardBackground}"
                     MinWidth="200">
 				<StackPanel>
 					<Button Content="Background Texture"
@@ -66,10 +66,10 @@
                             Click="BackgroundTextureMenu_Click"
                             Background="Transparent"
                             BorderThickness="0"
-                            Foreground="{StaticResource OnSurface}"/>
+                            Foreground="{DynamicResource OnSurface}"/>
 					<TextBlock Text="Overlay Opacity"
                                Margin="12,12,12,4"
-                               Foreground="{StaticResource OnSurfaceVariant}"/>
+                               Foreground="{DynamicResource OnSurfaceVariant}"/>
 					<Slider x:Name="OverlayOpacitySlider"
                             Margin="12,0,12,12"
                             Minimum="0" Maximum="1"

@@ -8,7 +8,7 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled"
-                  Background="{StaticResource AppBackground}">
+                  Background="{DynamicResource AppBackground}">
         <StackPanel>
 
             <!-- ── Spacer(8.dp) ──────────────────────────────────────────── -->
@@ -26,7 +26,7 @@
                     Padding="16"
                     CornerRadius="18"
                     Cursor="Hand"
-                    Background="{StaticResource CardBackground}"
+                    Background="{DynamicResource CardBackground}"
                     MouseLeftButtonUp="DailyVerseCard_MouseLeftButtonUp">
                 <StackPanel>
                     <DockPanel LastChildFill="False">
@@ -34,7 +34,7 @@
                                    DockPanel.Dock="Left"
                                    FontSize="16"
                                    FontWeight="Bold"
-                                   Foreground="{StaticResource OnSurface}"/>
+                                   Foreground="{DynamicResource OnSurface}"/>
                         <Button x:Name="RefreshVerseButton"
                                 DockPanel.Dock="Right"
                                 Content="⟳"
@@ -48,14 +48,14 @@
                                FontSize="15"
                                LineHeight="22"
                                TextWrapping="Wrap"
-                               Foreground="{StaticResource OnSurface}"
+                               Foreground="{DynamicResource OnSurface}"
                                Text="Loading…"/>
 
                     <TextBlock x:Name="DailyVerseReference"
                                Margin="0,8,0,0"
                                FontSize="13"
                                FontStyle="Italic"
-                               Foreground="{StaticResource OnSurfaceVariant}"/>
+                               Foreground="{DynamicResource OnSurfaceVariant}"/>
 
                     <StackPanel Orientation="Horizontal"
                                 HorizontalAlignment="Right"
@@ -79,7 +79,7 @@
                        Margin="16,20,16,8"
                        FontSize="16"
                        FontWeight="Bold"
-                       Foreground="{StaticResource OnSurface}"/>
+                       Foreground="{DynamicResource OnSurface}"/>
 
             <ScrollViewer HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Disabled"
@@ -106,7 +106,7 @@
                        Margin="16,22,16,8"
                        FontSize="16"
                        FontWeight="Bold"
-                       Foreground="{StaticResource OnSurface}"/>
+                       Foreground="{DynamicResource OnSurface}"/>
 
             <ItemsControl x:Name="DevotionalItems"
                           ItemsSource="{Binding PopularDevotionals, ElementName=HomeRoot}">
@@ -119,15 +119,15 @@
                                 <TextBlock Text="{Binding Title}"
                                            FontSize="14"
                                            FontWeight="SemiBold"
-                                           Foreground="{StaticResource OnSurface}"/>
+                                           Foreground="{DynamicResource OnSurface}"/>
                                 <TextBlock Text="{Binding Snippet}"
                                            Margin="0,4,0,0"
                                            FontSize="12"
                                            TextTrimming="CharacterEllipsis"
-                                           Foreground="{StaticResource OnSurfaceVariant}"/>
+                                           Foreground="{DynamicResource OnSurfaceVariant}"/>
                                 <TextBlock Margin="0,6,0,0"
                                            FontSize="11"
-                                           Foreground="{StaticResource AccentBrush}">
+                                           Foreground="{DynamicResource AccentBrush}">
                                     <Run Text="{Binding BookName, Mode=OneWay}"/>
                                     <Run Text=" "/>
                                     <Run Text="{Binding Chapter, Mode=OneWay}"/>
@@ -151,7 +151,7 @@
                     <StackPanel>
                         <TextBlock Text="🎯" FontSize="26" HorizontalAlignment="Center"/>
                         <TextBlock Text="Bible Quiz" Margin="0,6,0,0"
-                                   Foreground="{StaticResource OnSurface}"/>
+                                   Foreground="{DynamicResource OnSurface}"/>
                     </StackPanel>
                 </Button>
 
@@ -159,9 +159,9 @@
                         Click="LearnHebrew_Click">
                     <StackPanel>
                         <TextBlock Text="א" FontSize="26" HorizontalAlignment="Center"
-                                   Foreground="{StaticResource OnSurface}"/>
+                                   Foreground="{DynamicResource OnSurface}"/>
                         <TextBlock Text="Learn Hebrew" Margin="0,6,0,0"
-                                   Foreground="{StaticResource OnSurface}"/>
+                                   Foreground="{DynamicResource OnSurface}"/>
                     </StackPanel>
                 </Button>
 
@@ -169,9 +169,9 @@
                         Click="LearnGreek_Click">
                     <StackPanel>
                         <TextBlock Text="Ω" FontSize="26" HorizontalAlignment="Center"
-                                   Foreground="{StaticResource OnSurface}"/>
+                                   Foreground="{DynamicResource OnSurface}"/>
                         <TextBlock Text="Learn Greek" Margin="0,6,0,0"
-                                   Foreground="{StaticResource OnSurface}"/>
+                                   Foreground="{DynamicResource OnSurface}"/>
                     </StackPanel>
                 </Button>
 
@@ -180,7 +180,7 @@
                     <StackPanel>
                         <TextBlock Text="📚" FontSize="26" HorizontalAlignment="Center"/>
                         <TextBlock Text="Dictionary" Margin="0,6,0,0"
-                                   Foreground="{StaticResource OnSurface}"/>
+                                   Foreground="{DynamicResource OnSurface}"/>
                     </StackPanel>
                 </Button>
 
@@ -189,7 +189,7 @@
                     <StackPanel>
                         <TextBlock Text="🎬" FontSize="26" HorizontalAlignment="Center"/>
                         <TextBlock Text="Animator" Margin="0,6,0,0"
-                                   Foreground="{StaticResource OnSurface}"/>
+                                   Foreground="{DynamicResource OnSurface}"/>
                     </StackPanel>
                 </Button>
 
@@ -198,7 +198,7 @@
                     <StackPanel>
                         <TextBlock Text="🌳" FontSize="26" HorizontalAlignment="Center"/>
                         <TextBlock Text="Generations" Margin="0,6,0,0"
-                                   Foreground="{StaticResource OnSurface}"/>
+                                   Foreground="{DynamicResource OnSurface}"/>
                     </StackPanel>
                 </Button>
             </UniformGrid>

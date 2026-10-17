@@ -16,8 +16,8 @@
     <Border x:Name="RootBorder"
             CornerRadius="16"
             Padding="20"
-            Background="#FF1C2128"
-            BorderBrush="#33FFFFFF"
+            Background="{DynamicResource CardBackground}"
+            BorderBrush="{DynamicResource DividerBrush}"
             BorderThickness="1">
         <Border.Effect>
             <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
@@ -79,12 +79,12 @@
                         Padding="4,2"
                         Background="Transparent"
                         BorderThickness="0"
-                        Foreground="#FFAAB4C0"
+                        Foreground="{DynamicResource OnSurfaceVariant}"
                         Cursor="Hand"
                         Click="DescriptionButton_Click">
                     <TextBlock x:Name="DescriptionText"
                                FontSize="12"
-                               Foreground="#FFAAB4C0"/>
+                               Foreground="{DynamicResource OnSurfaceVariant}"/>
                 </Button>
                 <Button x:Name="NextDbButton"
                         Width="24" Height="24"
@@ -94,7 +94,7 @@
                         Cursor="Hand"
                         ToolTip="Next source"
                         Click="NextDbButton_Click">
-                    <TextBlock Text="⏭" FontSize="14" Foreground="#FFAAB4C0"/>
+                    <TextBlock Text="⏭" FontSize="14" Foreground="{DynamicResource OnSurfaceVariant}"/>
                 </Button>
             </StackPanel>
 
@@ -108,7 +108,7 @@
                            FontSize="14"
                            LineHeight="20"
                            TextWrapping="Wrap"
-                           Foreground="#FFE6EAF0"/>
+                           Foreground="{DynamicResource OnSurface}"/>
             </ScrollViewer>
 
             <!-- ── Row 3: Buttons ───────────────────────────────────── -->
@@ -121,9 +121,9 @@
                         Padding="14,6"
                         Margin="0,0,8,0"
                         Background="Transparent"
-                        BorderBrush="#33FFFFFF"
+                        BorderBrush="{DynamicResource DividerBrush}"
                         BorderThickness="1"
-                        Foreground="#FFE6EAF0"
+                        Foreground="{DynamicResource OnSurface}"
                         Cursor="Hand"
                         Visibility="Collapsed"
                         Click="BackButton_Click"/>

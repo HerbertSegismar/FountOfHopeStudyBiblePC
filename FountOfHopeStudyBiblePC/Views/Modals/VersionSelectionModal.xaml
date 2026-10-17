@@ -8,12 +8,12 @@
         ShowActivated="True"
         Width="500" Height="700"
         MinWidth="380" MinHeight="440"
-        Background="#FF1C2128"
+        Background="{DynamicResource CardBackground}"
         WindowStyle="None"
         ResizeMode="CanResizeWithGrip">
 
-    <Border CornerRadius="10" Background="#FF1C2128"
-            BorderBrush="#22FFFFFF" BorderThickness="1">
+    <Border CornerRadius="10" Background="{DynamicResource CardBackground}"
+            BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1">
         <Border.Effect>
             <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="0" Opacity="0.6"/>
         </Border.Effect>
@@ -55,9 +55,9 @@
 
             <!-- ══ Search ══════════════════════════════════════════════ -->
             <Border Grid.Row="1" Margin="16,12,16,8"
-                    Background="#FF232A33"
+                    Background="{DynamicResource CardBackgroundAlt}"
                     CornerRadius="8"
-                    BorderBrush="#33FFFFFF"
+                    BorderBrush="{DynamicResource DividerBrush}"
                     BorderThickness="1">
                 <Grid Margin="10,0">
                     <Grid.ColumnDefinitions>
@@ -76,7 +76,7 @@
                              Grid.Column="1"
                              Background="Transparent"
                              BorderThickness="0"
-                             Foreground="#FFE6EAF0"
+                             Foreground="{DynamicResource OnSurface}"
                              CaretBrush="#FFE6EAF0"
                              FontSize="14"
                              Padding="4,10"
@@ -87,7 +87,7 @@
                             Grid.Column="2"
                             Content="✕"
                             FontSize="12"
-                            Foreground="#FFAAB4C0"
+                            Foreground="{DynamicResource OnSurfaceVariant}"
                             Background="Transparent"
                             BorderThickness="0"
                             Cursor="Hand"
@@ -108,7 +108,7 @@
                         <DataTemplate>
                             <StackPanel>
                                 <!-- Language header -->
-                                <Border Background="#FF1C2128"
+                                <Border Background="{DynamicResource CardBackground}"
                                         Padding="20,10,20,6">
                                     <TextBlock Text="{Binding Language}"
                                                FontSize="13"
@@ -137,10 +137,10 @@
                                                                    Text="{Binding ShortName}"
                                                                    FontSize="15"
                                                                    FontWeight="Medium"
-                                                                   Foreground="#FFE6EAF0"/>
+                                                                   Foreground="{DynamicResource OnSurface}"/>
                                                         <TextBlock Text="{Binding Description}"
                                                                    FontSize="12"
-                                                                   Foreground="#FFAAB4C0"
+                                                                   Foreground="{DynamicResource OnSurfaceVariant}"
                                                                    TextTrimming="CharacterEllipsis"
                                                                    MaxWidth="380"
                                                                    Margin="0,2,0,0"/>
@@ -187,7 +187,7 @@
             <Grid x:Name="EmptyState"
                   Grid.Row="2"
                   Visibility="Collapsed"
-                  Background="#FF1C2128">
+                  Background="{DynamicResource CardBackground}">
                 <StackPanel HorizontalAlignment="Center"
                             VerticalAlignment="Center">
                     <TextBlock Text="✨"
@@ -196,7 +196,7 @@
                     <TextBlock Text="No matching versions found"
                                FontSize="15"
                                FontWeight="SemiBold"
-                               Foreground="#FFAAB4C0"
+                               Foreground="{DynamicResource OnSurfaceVariant}"
                                Margin="0,12,0,0"
                                HorizontalAlignment="Center"/>
                     <TextBlock Text="Try a different search term"

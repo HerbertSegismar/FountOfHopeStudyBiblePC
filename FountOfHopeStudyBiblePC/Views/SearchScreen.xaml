@@ -3,7 +3,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Name="SearchRoot"
-             Background="{StaticResource AppBackground}">
+             Background="{DynamicResource AppBackground}">
 
 	<Grid>
 		<Grid.RowDefinitions>
@@ -55,8 +55,8 @@
 		<Border Grid.Row="1"
                 Margin="16,4,16,4"
                 CornerRadius="8"
-                Background="#FF232A33"
-                BorderBrush="#33FFFFFF"
+                Background="{DynamicResource CardBackgroundAlt}"
+                BorderBrush="{DynamicResource DividerBrush}"
                 BorderThickness="1"
                 Padding="2">
 			<Grid>
@@ -86,7 +86,7 @@
                             Background="Transparent"
                             BorderThickness="0"
                             FontSize="14"
-                            Foreground="#FFAAB4C0"
+                            Foreground="{DynamicResource OnSurfaceVariant}"
                             Cursor="Hand"
                             ToolTip="Version info"
                             Content="ℹ"
@@ -97,7 +97,7 @@
                          Grid.Column="1"
                          Background="Transparent"
                          BorderThickness="0"
-                         Foreground="#FFE6EAF0"
+                         Foreground="{DynamicResource OnSurface}"
                          CaretBrush="#FFE6EAF0"
                          FontSize="14"
                          Padding="4,10"
@@ -111,7 +111,7 @@
                         Width="28" Height="28"
                         Margin="2,0,4,0"
                         FontSize="12"
-                        Foreground="#FFAAB4C0"
+                        Foreground="{DynamicResource OnSurfaceVariant}"
                         Background="Transparent"
                         BorderThickness="0"
                         Cursor="Hand"
@@ -132,7 +132,7 @@
                         VerticalAlignment="Center">
 				<TextBlock Text="Inverse search"
                            FontSize="13"
-                           Foreground="#FFAAB4C0"
+                           Foreground="{DynamicResource OnSurfaceVariant}"
                            VerticalAlignment="Center"
                            Margin="0,0,8,0"/>
 				<CheckBox x:Name="InverseCheck"
@@ -147,7 +147,7 @@
                         VerticalAlignment="Center">
 				<TextBlock Text="Exact match"
                            FontSize="13"
-                           Foreground="#FFAAB4C0"
+                           Foreground="{DynamicResource OnSurfaceVariant}"
                            VerticalAlignment="Center"
                            Margin="0,0,8,0"/>
 				<CheckBox x:Name="ExactCheck"
@@ -219,7 +219,7 @@
 				<TextBlock Text="⏳" FontSize="48" HorizontalAlignment="Center"/>
 				<TextBlock x:Name="LoadingLabel"
                            FontSize="16"
-                           Foreground="#FFAAB4C0"
+                           Foreground="{DynamicResource OnSurfaceVariant}"
                            Margin="0,12,0,0"
                            HorizontalAlignment="Center"/>
 			</StackPanel>

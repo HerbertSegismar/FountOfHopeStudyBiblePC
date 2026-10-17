@@ -8,12 +8,12 @@
         ShowInTaskbar="True"
         Width="640" Height="820"
         MinWidth="420" MinHeight="560"
-        Background="#FF1C2128"
+        Background="{DynamicResource CardBackground}"
         WindowStyle="None"
         ResizeMode="CanResize">
 
-    <Border x:Name="RootBorder" CornerRadius="16" Background="#FF1C2128"
-            BorderBrush="#33FFFFFF" BorderThickness="1">
+    <Border x:Name="RootBorder" CornerRadius="16" Background="{DynamicResource CardBackground}"
+            BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1">
         <Border.Effect>
             <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="0" Opacity="0.6"/>
         </Border.Effect>
@@ -65,7 +65,7 @@
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                             <TextBlock Text="🎨" FontSize="16" VerticalAlignment="Center"/>
                             <TextBlock Text="Color Wheel" FontSize="14"
-                                       FontWeight="SemiBold" Foreground="#FFE6EAF0"
+                                       FontWeight="SemiBold" Foreground="{DynamicResource OnSurface}"
                                        Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
 
@@ -78,7 +78,7 @@
                     <!-- ── Selected Color Preview + Hex ─────────── -->
                     <StackPanel Margin="0,24,0,0">
                         <TextBlock Text="Selected Color" FontSize="14"
-                                   FontWeight="SemiBold" Foreground="#FFE6EAF0"
+                                   FontWeight="SemiBold" Foreground="{DynamicResource OnSurface}"
                                    Margin="0,0,0,8"/>
 
                         <Grid>
@@ -98,10 +98,10 @@
                             <TextBox x:Name="HexBox" Grid.Column="1"
                                      Margin="12,0,12,0"
                                      Padding="10,8"
-                                     Background="#FF232A33"
-                                     BorderBrush="#33FFFFFF"
+                                     Background="{DynamicResource CardBackgroundAlt}"
+                                     BorderBrush="{DynamicResource DividerBrush}"
                                      BorderThickness="1"
-                                     Foreground="#FFE6EAF0"
+                                     Foreground="{DynamicResource OnSurface}"
                                      CaretBrush="#FFE6EAF0"
                                      FontSize="14"
                                      FontFamily="Consolas"
@@ -123,7 +123,7 @@
                                             VerticalAlignment="Center"/>
                                 </Border>
                                 <TextBlock Text="Light" FontSize="10"
-                                           Foreground="#FFAAB4C0"
+                                           Foreground="{DynamicResource OnSurfaceVariant}"
                                            HorizontalAlignment="Center"
                                            Margin="0,2,0,0"/>
                             </StackPanel>
@@ -143,7 +143,7 @@
                                             VerticalAlignment="Center"/>
                                 </Border>
                                 <TextBlock Text="Dark" FontSize="10"
-                                           Foreground="#FFAAB4C0"
+                                           Foreground="{DynamicResource OnSurfaceVariant}"
                                            HorizontalAlignment="Center"
                                            Margin="0,2,0,0"/>
                             </StackPanel>
@@ -161,7 +161,7 @@
                     <StackPanel Margin="0,20,0,0">
                         <Grid>
                             <TextBlock Text="Brightness" FontSize="13"
-                                       Foreground="#FFAAB4C0"/>
+                                       Foreground="{DynamicResource OnSurfaceVariant}"/>
                             <TextBlock x:Name="BrightnessLabel" FontSize="13"
                                        FontWeight="SemiBold" Foreground="#FF7FB2FF"
                                        HorizontalAlignment="Right"/>
@@ -176,7 +176,7 @@
                     <StackPanel Margin="0,12,0,0">
                         <Grid>
                             <TextBlock Text="Saturation" FontSize="13"
-                                       Foreground="#FFAAB4C0"/>
+                                       Foreground="{DynamicResource OnSurfaceVariant}"/>
                             <TextBlock x:Name="SaturationLabel" FontSize="13"
                                        FontWeight="SemiBold" Foreground="#FF7FB2FF"
                                        HorizontalAlignment="Right"/>
@@ -191,7 +191,7 @@
                     <StackPanel Margin="0,12,0,0">
                         <Grid>
                             <TextBlock Text="Opacity" FontSize="13"
-                                       Foreground="#FFAAB4C0"/>
+                                       Foreground="{DynamicResource OnSurfaceVariant}"/>
                             <TextBlock x:Name="OpacityLabel" FontSize="13"
                                        FontWeight="SemiBold" Foreground="#FF7FB2FF"
                                        HorizontalAlignment="Right"/>
@@ -204,7 +204,7 @@
 
                     <!-- ── Color Palette ─────────────────────────── -->
                     <TextBlock Text="Quick Palette" FontSize="14"
-                               FontWeight="SemiBold" Foreground="#FFE6EAF0"
+                               FontWeight="SemiBold" Foreground="{DynamicResource OnSurface}"
                                Margin="0,20,0,8"/>
                     <WrapPanel x:Name="PalettePanel"/>
 
@@ -222,7 +222,7 @@
                                 Background="Transparent"
                                 BorderBrush="#66FFFFFF"
                                 BorderThickness="1"
-                                Foreground="#FFE6EAF0"
+                                Foreground="{DynamicResource OnSurface}"
                                 FontSize="14"
                                 Cursor="Hand"
                                 Click="Cancel_Click">

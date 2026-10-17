@@ -3,7 +3,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Name="NotesRoot"
-             Background="{StaticResource AppBackground}">
+             Background="{DynamicResource AppBackground}">
 
 	<Grid>
 		<Grid.RowDefinitions>
@@ -24,7 +24,7 @@
 		<!-- ══ Row 0: Top bar ═══════════════════════════════════════ -->
 		<Border Grid.Row="0"
                 Height="64"
-                Background="#FF1C2128">
+                Background="{DynamicResource CardBackground}">
 			<Grid Margin="16,0">
 				<Grid.ColumnDefinitions>
 					<ColumnDefinition Width="*"/>
@@ -72,7 +72,7 @@
                             Padding="10,6"
                             Margin="0,0,6,0"
                             Background="Transparent" BorderThickness="0"
-                            Foreground="#FFE6EAF0"
+                            Foreground="{DynamicResource OnSurface}"
                             Cursor="Hand"
                             Click="CancelMultiSelectBtn_Click"/>
 					<TextBlock x:Name="SelectedCountText"
@@ -84,7 +84,7 @@
                             Width="36" Height="36"
                             Background="Transparent" BorderThickness="0"
                             Cursor="Hand" Click="ShareSelectedBtn_Click">
-						<TextBlock Text="↗" FontSize="16" Foreground="#FFE6EAF0"/>
+						<TextBlock Text="↗" FontSize="16" Foreground="{DynamicResource OnSurface}"/>
 					</Button>
 					<Button x:Name="DeleteSelectedBtn"
                             Width="36" Height="36"
@@ -99,7 +99,7 @@
 		<!-- ══ Row 1: Search bar ═══════════════════════════════════ -->
 		<Border x:Name="SearchBarPanel"
                 Grid.Row="1"
-                Background="#FF232A33"
+                Background="{DynamicResource CardBackgroundAlt}"
                 Padding="16,8"
                 Visibility="Collapsed">
 			<Grid>
@@ -114,7 +114,7 @@
                          Grid.Column="1"
                          Background="Transparent"
                          BorderThickness="0"
-                         Foreground="#FFE6EAF0"
+                         Foreground="{DynamicResource OnSurface}"
                          CaretBrush="#FFE6EAF0"
                          FontSize="14"
                          Padding="4,6"
@@ -125,7 +125,7 @@
                         Background="Transparent" BorderThickness="0"
                         Cursor="Hand" Visibility="Collapsed"
                         Click="ClearSearchBtn_Click">
-					<TextBlock Text="✕" FontSize="14" Foreground="#FFAAB4C0"/>
+					<TextBlock Text="✕" FontSize="14" Foreground="{DynamicResource OnSurfaceVariant}"/>
 				</Button>
 			</Grid>
 		</Border>
@@ -150,7 +150,7 @@
 					<TextBlock x:Name="VersionDescriptionText"
                                FontSize="12"
                                Margin="0,2,0,0"
-                               Foreground="#FFAAB4C0"
+                               Foreground="{DynamicResource OnSurfaceVariant}"
                                TextTrimming="CharacterEllipsis"/>
 				</StackPanel>
 				<Button x:Name="VersionInfoBtn"
@@ -158,7 +158,7 @@
                         Width="32" Height="32"
                         Background="Transparent" BorderThickness="0"
                         Cursor="Hand" Click="VersionInfoBtn_Click">
-					<TextBlock Text="ℹ" FontSize="18" Foreground="#FFAAB4C0"/>
+					<TextBlock Text="ℹ" FontSize="18" Foreground="{DynamicResource OnSurfaceVariant}"/>
 				</Button>
 			</Grid>
 		</Border>
@@ -168,7 +168,7 @@
                    Grid.Row="3"
                    Margin="16,8,16,0"
                    FontSize="12"
-                   Foreground="#FFAAB4C0"
+                   Foreground="{DynamicResource OnSurfaceVariant}"
                    Visibility="Collapsed"/>
 
 		<!-- ══ Row 4: Notes list / empty state ═════════════════════ -->
@@ -209,7 +209,7 @@
 		<!-- ══ Row 5: Undo bar (appears after delete) ══════════════ -->
 		<Border x:Name="UndoBar"
                 Grid.Row="5"
-                Background="#FF2A3140"
+                Background="{DynamicResource CardBackgroundAlt}"
                 Padding="16,10"
                 Visibility="Collapsed">
 			<Grid>
@@ -220,7 +220,7 @@
 				<TextBlock x:Name="UndoText"
                            Grid.Column="0"
                            VerticalAlignment="Center"
-                           Foreground="#FFE6EAF0"/>
+                           Foreground="{DynamicResource OnSurface}"/>
 				<Button x:Name="UndoButton"
                         Grid.Column="1"
                         Content="Undo"

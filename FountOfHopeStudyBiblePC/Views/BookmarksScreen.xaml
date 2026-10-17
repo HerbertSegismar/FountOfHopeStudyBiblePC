@@ -1,6 +1,263 @@
+<!-- Views/BookmarksScreen.xaml -->
 <UserControl x:Class="FountOfHopeStudyBiblePC.Views.BookmarksScreen"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <TextBlock Text="Bookmarks" FontSize="32"
-               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="BookmarksRoot"
+             Background="{DynamicResource AppBackground}">
+
+	<Grid>
+		<Grid.RowDefinitions>
+			<RowDefinition Height="Auto"/>
+			<!-- top bar -->
+			<RowDefinition Height="Auto"/>
+			<!-- search bar -->
+			<RowDefinition Height="Auto"/>
+			<!-- version card -->
+			<RowDefinition Height="*"/>
+			<!-- list / empty -->
+			<RowDefinition Height="Auto"/>
+			<!-- undo bar -->
+		</Grid.RowDefinitions>
+
+		<!-- ══ Row 0: Top bar ═════════════════════════════════════════ -->
+		<Border Grid.Row="0"
+                Height="64"
+                Background="{DynamicResource CardBackground}">
+			<Grid Margin="16,0">
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="Auto"/>
+				</Grid.ColumnDefinitions>
+
+				<!-- Normal-mode title -->
+				<TextBlock x:Name="NormalTitleText"
+                           Grid.Column="0"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="#FF7FB2FF"
+                           VerticalAlignment="Center"/>
+
+				<!-- Normal-mode buttons -->
+				<StackPanel x:Name="NormalButtons"
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+					<Button Width="36" Height="36"
+                            Background="Transparent" BorderThickness="0"
+                            Cursor="Hand" ToolTip="Search"
+                            Click="SearchToggleBtn_Click">
+						<TextBlock Text="🔍" FontSize="16" Foreground="{DynamicResource OnSurface}"/>
+					</Button>
+					<Button x:Name="SortBtn" Width="36" Height="36"
+                            Background="Transparent" BorderThickness="0"
+                            Cursor="Hand" ToolTip="Sort"
+                            Click="SortBtn_Click">
+						<TextBlock Text="⇅" FontSize="18" Foreground="{DynamicResource OnSurface}"/>
+					</Button>
+					<Button Width="36" Height="36"
+                            Background="Transparent" BorderThickness="0"
+                            Cursor="Hand" ToolTip="Select multiple"
+                            Click="MoreBtn_Click">
+						<TextBlock Text="☰" FontSize="18" Foreground="{DynamicResource OnSurface}"/>
+					</Button>
+				</StackPanel>
+
+				<!-- Multi-select-mode title + buttons -->
+				<StackPanel x:Name="MultiSelectButtons"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="2"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Visibility="Collapsed">
+					<Button Content="Cancel"
+                            Padding="10,6"
+                            Margin="0,0,8,0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="{DynamicResource OnSurface}"
+                            Cursor="Hand"
+                            Click="CancelMultiSelectBtn_Click"/>
+					<TextBlock x:Name="SelectedCountText"
+                               VerticalAlignment="Center"
+                               Margin="8,0"
+                               FontWeight="SemiBold"
+                               Foreground="#FF7FB2FF"/>
+					<Button Width="36" Height="36"
+                            Background="Transparent" BorderThickness="0"
+                            Cursor="Hand" ToolTip="Share"
+                            Click="ShareSelectedBtn_Click">
+						<TextBlock Text="↗" FontSize="16" Foreground="{DynamicResource OnSurface}"/>
+					</Button>
+					<Button Width="36" Height="36"
+                            Background="Transparent" BorderThickness="0"
+                            Cursor="Hand" ToolTip="Delete"
+                            Click="DeleteSelectedBtn_Click">
+						<TextBlock Text="🗑" FontSize="16" Foreground="#FFEB4E4E"/>
+					</Button>
+				</StackPanel>
+			</Grid>
+		</Border>
+
+		<!-- ══ Row 1: Search bar ══════════════════════════════════════ -->
+		<Border x:Name="SearchBarPanel"
+                Grid.Row="1"
+                Background="{DynamicResource CardBackgroundAlt}"
+                Padding="16,8"
+                Visibility="Collapsed">
+			<Grid>
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="Auto"/>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="Auto"/>
+				</Grid.ColumnDefinitions>
+				<TextBlock Grid.Column="0" Text="🔍" FontSize="16"
+                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+				<TextBox x:Name="SearchBox"
+                         Grid.Column="1"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Foreground="{DynamicResource OnSurface}"
+                         CaretBrush="#FFE6EAF0"
+                         FontSize="14"
+                         Padding="4,6"
+                         TextChanged="SearchBox_TextChanged"
+                         KeyDown="SearchBox_KeyDown"/>
+				<Button x:Name="ClearSearchBtn"
+                        Grid.Column="2"
+                        Width="28" Height="28"
+                        Background="Transparent" BorderThickness="0"
+                        Cursor="Hand" Visibility="Collapsed"
+                        Click="ClearSearchBtn_Click">
+					<TextBlock Text="✕" FontSize="14" Foreground="{DynamicResource OnSurfaceVariant}"/>
+				</Button>
+			</Grid>
+		</Border>
+
+		<!-- ══ Row 2: Version card ════════════════════════════════════ -->
+		<Border x:Name="VersionCard"
+                Grid.Row="2"
+                Margin="18,12,18,4"
+                CornerRadius="12"
+                Background="#332A3140"
+                Padding="16"
+                Cursor="Hand"
+                MouseLeftButtonUp="VersionCard_Click">
+			<Grid>
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="Auto"/>
+				</Grid.ColumnDefinitions>
+				<StackPanel Grid.Column="0">
+					<TextBlock Text="Bible Version"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="#FF7FB2FF"/>
+					<TextBlock x:Name="VersionDescriptionText"
+                               FontSize="12"
+                               Margin="0,2,0,0"
+                               Foreground="{DynamicResource OnSurfaceVariant}"
+                               TextTrimming="CharacterEllipsis"/>
+				</StackPanel>
+				<Button x:Name="VersionInfoBtn"
+                        Grid.Column="1"
+                        Width="32" Height="32"
+                        Background="Transparent" BorderThickness="0"
+                        Cursor="Hand"
+                        Click="VersionInfoBtn_Click">
+					<TextBlock Text="ℹ" FontSize="18" Foreground="{DynamicResource OnSurfaceVariant}"/>
+				</Button>
+			</Grid>
+		</Border>
+
+		<!-- ══ Row 3: List / Empty ════════════════════════════════════ -->
+		<Grid Grid.Row="3" Margin="16,8,16,0">
+
+			<!-- Bookmarks list -->
+			<ScrollViewer x:Name="BookmarksScroller"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          ScrollChanged="BookmarksScroller_ScrollChanged">
+				<StackPanel x:Name="BookmarksPanel" Margin="0,0,0,16"/>
+			</ScrollViewer>
+
+			<!-- Empty state -->
+			<StackPanel x:Name="EmptyState"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Visibility="Collapsed">
+				<TextBlock Text="🔖"
+                           FontSize="64"
+                           HorizontalAlignment="Center"
+                           Foreground="#557FB2FF"/>
+				<TextBlock x:Name="EmptyStateTitle"
+                           Margin="0,12,0,0"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           Foreground="#99E6EAF0"
+                           Text="No bookmarks yet"/>
+				<TextBlock x:Name="EmptyStateSubtitle"
+                           Margin="0,8,0,0"
+                           FontSize="14"
+                           HorizontalAlignment="Center"
+                           Foreground="#66AAB4C0"
+                           Text="Bookmark verses to see them here"/>
+			</StackPanel>
+
+			<!-- Back to top -->
+			<Button x:Name="BackToTopBtn"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Width="44" Height="44"
+                    Margin="0,0,0,16"
+                    Background="#FF7FB2FF"
+                    BorderThickness="0"
+                    Foreground="White"
+                    FontSize="18"
+                    Cursor="Hand"
+                    Visibility="Collapsed"
+                    ToolTip="Back to top"
+                    Click="BackToTopBtn_Click">
+				<Button.Template>
+					<ControlTemplate TargetType="Button">
+						<Border CornerRadius="22"
+                                Background="{TemplateBinding Background}">
+							<ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+						</Border>
+					</ControlTemplate>
+				</Button.Template>
+				<TextBlock Text="↑" FontSize="20" Foreground="White"/>
+			</Button>
+		</Grid>
+
+		<!-- ══ Row 4: Undo bar ═══════════════════════════════════════ -->
+		<Border x:Name="UndoBar"
+                Grid.Row="4"
+                Background="{DynamicResource CardBackgroundAlt}"
+                Padding="16,10"
+                Visibility="Collapsed">
+			<Grid>
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="Auto"/>
+				</Grid.ColumnDefinitions>
+				<TextBlock x:Name="UndoText"
+                           Grid.Column="0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource OnSurface}"/>
+				<Button x:Name="UndoButton"
+                        Grid.Column="1"
+                        Content="Undo"
+                        Padding="12,6"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Foreground="#FF7FB2FF"
+                        FontWeight="SemiBold"
+                        Cursor="Hand"
+                        Click="UndoButton_Click"/>
+			</Grid>
+		</Border>
+	</Grid>
 </UserControl>

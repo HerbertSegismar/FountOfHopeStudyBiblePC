@@ -7,12 +7,12 @@
         ShowInTaskbar="True"
         Width="440" Height="640"
         MinWidth="360" MinHeight="480"
-        Background="#FF1C2128"
+        Background="{DynamicResource CardBackground}"
         WindowStyle="None"
         ResizeMode="CanResize">
 
-    <Border CornerRadius="16" Background="#FF1C2128"
-            BorderBrush="#33FFFFFF" BorderThickness="1">
+    <Border CornerRadius="16" Background="{DynamicResource CardBackground}"
+            BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1">
         <Border.Effect>
             <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="0" Opacity="0.6"/>
         </Border.Effect>
@@ -46,16 +46,16 @@
                 <StackPanel Margin="20,16,20,16">
 
                     <TextBlock Text="Presets" FontSize="14"
-                               FontWeight="SemiBold" Foreground="#FFE6EAF0"
+                               FontWeight="SemiBold" Foreground="{DynamicResource OnSurface}"
                                Margin="0,0,0,12"/>
                     <UniformGrid x:Name="PresetGrid" Columns="3"/>
 
                     <TextBlock Text="Custom" FontSize="14"
-                               FontWeight="SemiBold" Foreground="#FFE6EAF0"
+                               FontWeight="SemiBold" Foreground="{DynamicResource OnSurface}"
                                Margin="0,24,0,12"/>
 
                     <Border x:Name="CustomCard"
-                            Background="#FF232A33"
+                            Background="{DynamicResource CardBackgroundAlt}"
                             CornerRadius="12"
                             Padding="16"
                             Cursor="Hand"
@@ -85,14 +85,14 @@
                                         VerticalAlignment="Center">
                                 <TextBlock Text="Custom Color Picker"
                                            FontSize="14" FontWeight="Medium"
-                                           Foreground="#FFE6EAF0"/>
+                                           Foreground="{DynamicResource OnSurface}"/>
                                 <TextBlock Text="Choose any color with the color wheel"
-                                           FontSize="11" Foreground="#FFAAB4C0"
+                                           FontSize="11" Foreground="{DynamicResource OnSurfaceVariant}"
                                            Margin="0,2,0,0"/>
                             </StackPanel>
 
                             <TextBlock Grid.Column="2" Text="→"
-                                       FontSize="18" Foreground="#FFAAB4C0"
+                                       FontSize="18" Foreground="{DynamicResource OnSurfaceVariant}"
                                        VerticalAlignment="Center"/>
                         </Grid>
                     </Border>
@@ -108,7 +108,7 @@
                         Background="Transparent"
                         BorderBrush="#66FFFFFF"
                         BorderThickness="1"
-                        Foreground="#FFE6EAF0"
+                        Foreground="{DynamicResource OnSurface}"
                         FontSize="14"
                         Cursor="Hand"
                         Click="Cancel_Click">

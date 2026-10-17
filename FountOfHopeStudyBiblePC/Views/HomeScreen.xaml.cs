@@ -2,11 +2,15 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using FountOfHopeStudyBiblePC.Controls;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
@@ -54,7 +58,11 @@ namespace FountOfHopeStudyBiblePC.Views
             Action? onOpenAnimatorClick = null,
             Action? onOpenGenerationsClick = null)
         {
+            var sw = Stopwatch.StartNew();
+
+            App.Log("HomeScreen ctor - enter");
             InitializeComponent();
+            App.Log($"HomeScreen ctor - InitializeComponent took {sw.ElapsedMilliseconds}ms");
 
             _viewModel = viewModel;
             _onNavigateToReader = onNavigateToReader;
@@ -69,17 +77,28 @@ namespace FountOfHopeStudyBiblePC.Views
             _onOpenGenerationsClick = onOpenGenerationsClick ?? (() => { });
 
             BuildQuickActions();
+            App.Log($"HomeScreen ctor - BuildQuickActions took {sw.ElapsedMilliseconds}ms");
+
             LoadPopularDevotionals();
             HookImageSection();
 
             Loaded += OnLoaded;
+
+            sw.Stop();
+            App.Log($"HomeScreen ctor - COMPLETE, total {sw.ElapsedMilliseconds}ms");
         }
 
         // ── Lifecycle ───────────────────────────────────────────────────────
-        private async void OnLoaded(object sender, RoutedEventArgs e)
+        private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            // LaunchedEffect(databaseHelper) { dailyVerses = loadRandomVerses(it) }
-            await RefreshDailyVerseAsync();
+            // Defer the DB query so the initial frame paints immediately
+            Dispatcher.BeginInvoke(new Action(async () =>
+            {
+                var sw = Stopwatch.StartNew();
+                App.Log("HomeScreen refresh - start");
+                await RefreshDailyVerseAsync();
+                App.Log($"HomeScreen refresh - took {sw.ElapsedMilliseconds}ms");
+            }), System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private void HookImageSection()
@@ -87,15 +106,15 @@ namespace FountOfHopeStudyBiblePC.Views
             ImageSectionControl.DatabaseHelper = _databaseHelper;
             ImageSectionControl.ContinueReadingRequested += () =>
             {
-                // Continue Reading → first daily verse, else Genesis 1
                 var verse = _dailyVerses?.FirstOrDefault();
                 _onNavigateToReader(BuildSelection(verse));
             };
         }
 
-        // ── Quick actions ───────────────────────────────────────────────────
         private void BuildQuickActions()
         {
+            App.Log($"BuildQuickActions: Textures.Count={_viewModel.Textures.Count}");
+
             var totalImages = _viewModel.Textures;
             var uniqueQuickActionImages = totalImages
                 .OrderBy(_ => _rng.Next())
@@ -105,41 +124,104 @@ namespace FountOfHopeStudyBiblePC.Views
             while (uniqueQuickActionImages.Count < 5)
                 uniqueQuickActionImages.Add(string.Empty);
 
-            QuickActions.Add(new QuickAction
+            // ── Create the tiles immediately (no image yet) ─────────────
+            var tiles = new[]
             {
-                Title = "Reader",
-                Icon = "📖",
-                BackgroundImage = ImageAssets.GetAssetImagePath(uniqueQuickActionImages[0]),
-                OnClick = () => _onNavigateToScreen(new Screen.Reader())
-            });
-            QuickActions.Add(new QuickAction
+        new QuickAction { Title = "Reader",    Icon = "📖", OnClick = () => _onNavigateToScreen(new Screen.Reader())    },
+        new QuickAction { Title = "Bookmarks", Icon = "🔖", OnClick = () => _onNavigateToScreen(new Screen.Bookmarks()) },
+        new QuickAction { Title = "Notes",     Icon = "📝", OnClick = () => _onNavigateToScreen(new Screen.Notes())     },
+        new QuickAction { Title = "Search",    Icon = "🔍", OnClick = () => _onNavigateToScreen(new Screen.Search())    },
+        new QuickAction { Title = "Settings",  Icon = "⚙",  OnClick = () => _onNavigateToScreen(new Screen.Settings())  },
+    };
+
+            for (int i = 0; i < 5; i++)
             {
-                Title = "Bookmarks",
-                Icon = "🔖",
-                BackgroundImage = ImageAssets.GetAssetImagePath(uniqueQuickActionImages[1]),
-                OnClick = () => _onNavigateToScreen(new Screen.Bookmarks())
-            });
-            QuickActions.Add(new QuickAction
+                tiles[i].BackgroundImage = ImageAssets.GetAssetImagePath(uniqueQuickActionImages[i]);
+                QuickActions.Add(tiles[i]);
+            }
+
+            // ── Load each image on the background thread; property update triggers rebind ──
+            foreach (var tile in tiles)
             {
-                Title = "Notes",
-                Icon = "📝",
-                BackgroundImage = ImageAssets.GetAssetImagePath(uniqueQuickActionImages[2]),
-                OnClick = () => _onNavigateToScreen(new Screen.Notes())
-            });
-            QuickActions.Add(new QuickAction
+                var path = tile.BackgroundImage;
+                var action = tile;
+
+                Task.Run(() =>
+                {
+                    var thumb = LoadThumbnail(path);
+                    if (thumb == null) return;
+
+                    // BitmapImage is Frozen() inside LoadThumbnail → safe to hand to UI thread.
+                    // Set the property on the UI thread so INotifyPropertyChanged fires there.
+                    Dispatcher.Invoke(() => action.BackgroundImageSource = thumb);
+                });
+            }
+        }
+
+        private static ImageSource? LoadThumbnail(string? pathOrUri, int decodeWidth = 240)
+        {
+            if (string.IsNullOrEmpty(pathOrUri))
             {
-                Title = "Search",
-                Icon = "🔍",
-                BackgroundImage = ImageAssets.GetAssetImagePath(uniqueQuickActionImages[3]),
-                OnClick = () => _onNavigateToScreen(new Screen.Search())
-            });
-            QuickActions.Add(new QuickAction
+                App.Log("LoadThumbnail: → null (empty input)");
+                return null;
+            }
+
+            try
             {
-                Title = "Settings",
-                Icon = "⚙",
-                BackgroundImage = ImageAssets.GetAssetImagePath(uniqueQuickActionImages[4]),
-                OnClick = () => _onNavigateToScreen(new Screen.Settings())
-            });
+                Uri? uri = null;
+
+                // ── 1. WPF pack URI ──
+                if (pathOrUri.StartsWith("pack://", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (Uri.TryCreate(pathOrUri, UriKind.Absolute, out uri))
+                    {
+                        App.Log($"LoadThumbnail: pack URI '{uri}'");
+                    }
+                    else
+                    {
+                        App.Log($"LoadThumbnail: → null (invalid pack URI '{pathOrUri}')");
+                        return null;
+                    }
+                }
+                // ── 2. Absolute filesystem path ──
+                else if (File.Exists(pathOrUri))
+                {
+                    uri = new Uri(pathOrUri, UriKind.Absolute);
+                    App.Log($"LoadThumbnail: file path '{uri}'");
+                }
+                // ── 3. Relative path ──
+                else
+                {
+                    var candidate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, pathOrUri);
+                    if (File.Exists(candidate))
+                    {
+                        uri = new Uri(candidate, UriKind.Absolute);
+                        App.Log($"LoadThumbnail: resolved relative '{uri}'");
+                    }
+                }
+
+                if (uri == null)
+                {
+                    App.Log($"LoadThumbnail: → null (could not resolve '{pathOrUri}')");
+                    return null;
+                }
+
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.UriSource = uri;
+                bmp.DecodePixelWidth = decodeWidth;
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+                bmp.EndInit();                // ← Line 1
+                bmp.Freeze();                 // ← Line 2 (REQUIRED for cross-thread handoff)
+                App.Log($"LoadThumbnail: → loaded {bmp.PixelWidth}x{bmp.PixelHeight}");
+                return bmp;                   // ← Line 3
+            }
+            catch (Exception ex)
+            {
+                App.Log($"LoadThumbnail: → EXCEPTION {ex.Message}");
+                return null;
+            }
         }
 
         private void QuickAction_Click(object sender, RoutedEventArgs e)
@@ -181,7 +263,7 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private async void RefreshVerseButton_Click(object sender, RoutedEventArgs e)
         {
-            e.Handled = true;   // don't bubble to the card click
+            e.Handled = true;
             await RefreshDailyVerseAsync();
         }
 

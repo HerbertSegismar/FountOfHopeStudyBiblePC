@@ -11,8 +11,8 @@
         WindowStyle="None"
         ResizeMode="NoResize">
     <Border CornerRadius="14"
-            Background="#FF1C2128"
-            BorderBrush="#33FFFFFF"
+            Background="{DynamicResource CardBackground}"
+            BorderBrush="{DynamicResource DividerBrush}"
             BorderThickness="1"
             Padding="20">
         <StackPanel>

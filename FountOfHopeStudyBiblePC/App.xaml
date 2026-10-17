@@ -5,16 +5,22 @@
              StartupUri="MainWindow.xaml">
     <Application.Resources>
         <ResourceDictionary>
-            <!-- Theme brushes -->
+
+            <!-- ══ DYNAMIC THEME BRUSHES (updated by MainWindow.ApplyTheme) ══ -->
             <SolidColorBrush x:Key="AppBackground"     Color="#FF101418"/>
             <SolidColorBrush x:Key="CardBackground"    Color="#FF1C2128"/>
             <SolidColorBrush x:Key="CardBackgroundAlt" Color="#FF232A33"/>
-            <SolidColorBrush x:Key="AccentBrush"       Color="#FF7FB2FF"/>
             <SolidColorBrush x:Key="OnSurface"         Color="#FFE6EAF0"/>
             <SolidColorBrush x:Key="OnSurfaceVariant"  Color="#FFAAB4C0"/>
             <SolidColorBrush x:Key="DividerBrush"      Color="#22FFFFFF"/>
+            <SolidColorBrush x:Key="HoverOverlayBrush" Color="#33FFFFFF"/>
 
-            <!-- Quick-action tile style -->
+            <!-- ══ DYNAMIC PRIMARY (updated by MainWindow.ApplyTheme) ══ -->
+            <Color x:Key="AppPrimaryColor">#FF7FB2FF</Color>
+            <SolidColorBrush x:Key="AppPrimaryBrush" Color="{DynamicResource AppPrimaryColor}"/>
+            <SolidColorBrush x:Key="AccentBrush"     Color="{DynamicResource AppPrimaryColor}"/>
+
+            <!-- ══ Quick-action tile style ══ -->
             <Style x:Key="QuickActionButtonStyle" TargetType="Button">
                 <Setter Property="Width" Value="112"/>
                 <Setter Property="Height" Value="132"/>
@@ -29,25 +35,27 @@
                             <Border x:Name="Root"
                                     CornerRadius="18"
                                     ClipToBounds="True"
-                                    Background="{StaticResource CardBackgroundAlt}">
+                                    Background="{DynamicResource CardBackgroundAlt}">
                                 <Grid>
+                                    <!-- ══ CHANGED: bind to the pre-loaded ImageSource, not the string path ══ -->
                                     <Image x:Name="Bg"
-                                           Source="{Binding BackgroundImage}"
+                                           Source="{Binding BackgroundImageSource}"
                                            Stretch="UniformToFill"
-                                           Opacity="0.45"/>
+                                           Opacity="0.45"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
                                     <Border Background="#66000000"/>
                                     <StackPanel VerticalAlignment="Center"
                                                 HorizontalAlignment="Center">
                                         <TextBlock Text="{Binding Icon}"
                                                    FontSize="30"
                                                    HorizontalAlignment="Center"
-                                                   Foreground="{StaticResource OnSurface}"/>
+                                                   Foreground="{DynamicResource OnSurface}"/>
                                         <TextBlock Text="{Binding Title}"
                                                    Margin="0,10,0,0"
                                                    FontSize="13"
                                                    FontWeight="SemiBold"
                                                    HorizontalAlignment="Center"
-                                                   Foreground="{StaticResource OnSurface}"/>
+                                                   Foreground="{DynamicResource OnSurface}"/>
                                     </StackPanel>
                                 </Grid>
                             </Border>
@@ -69,25 +77,26 @@
                 </Setter>
             </Style>
 
-            <!-- Flat icon button style -->
+            <!-- ══ Icon button ══ -->
             <Style x:Key="IconButtonStyle" TargetType="Button">
                 <Setter Property="Width" Value="38"/>
                 <Setter Property="Height" Value="38"/>
                 <Setter Property="Margin" Value="6,0,0,0"/>
                 <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="FontSize" Value="17"/>
-                <Setter Property="Foreground" Value="{StaticResource OnSurface}"/>
+                <Setter Property="Foreground" Value="{DynamicResource OnSurface}"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
                             <Border x:Name="B" CornerRadius="19"
-                                    Background="{StaticResource CardBackgroundAlt}">
+                                    Background="{DynamicResource CardBackgroundAlt}">
                                 <ContentPresenter HorizontalAlignment="Center"
                                                   VerticalAlignment="Center"/>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="B" Property="Background" Value="#33FFFFFF"/>
+                                    <Setter TargetName="B" Property="Background"
+                                            Value="{DynamicResource HoverOverlayBrush}"/>
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -95,7 +104,7 @@
                 </Setter>
             </Style>
 
-            <!-- Devotional list item -->
+            <!-- ══ Devotional list item ══ -->
             <Style x:Key="DevotionalButtonStyle" TargetType="Button">
                 <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                 <Setter Property="Cursor" Value="Hand"/>
@@ -104,13 +113,13 @@
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
                             <Border x:Name="B" CornerRadius="14" Padding="14"
-                                    Background="{StaticResource CardBackground}">
+                                    Background="{DynamicResource CardBackground}">
                                 <ContentPresenter/>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="B" Property="Background"
-                                            Value="{StaticResource CardBackgroundAlt}"/>
+                                            Value="{DynamicResource CardBackgroundAlt}"/>
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -118,7 +127,7 @@
                 </Setter>
             </Style>
 
-            <!-- Useful-space tile -->
+            <!-- ══ Useful-space tile ══ -->
             <Style x:Key="UsefulTileStyle" TargetType="Button">
                 <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="Margin" Value="6"/>
@@ -127,22 +136,20 @@
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
                             <Border x:Name="B" CornerRadius="16"
-                                    Background="{StaticResource CardBackground}">
+                                    Background="{DynamicResource CardBackground}">
                                 <ContentPresenter HorizontalAlignment="Center"
                                                   VerticalAlignment="Center"/>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="B" Property="Background"
-                                            Value="{StaticResource CardBackgroundAlt}"/>
+                                            Value="{DynamicResource CardBackgroundAlt}"/>
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
             </Style>
-            <Color x:Key="AppPrimaryColor">#FF7FB2FF</Color>
-            <SolidColorBrush x:Key="AppPrimaryBrush" Color="{DynamicResource AppPrimaryColor}"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

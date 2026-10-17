@@ -16,8 +16,8 @@
 
     <Border x:Name="RootBorder"
             CornerRadius="14"
-            Background="#FF1C2128"
-            BorderBrush="#33FFFFFF"
+            Background="{DynamicResource CardBackground}"
+            BorderBrush="{DynamicResource DividerBrush}"
             BorderThickness="1">
         <Border.Effect>
             <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="0" Opacity="0.7"/>
@@ -65,7 +65,7 @@
                         BorderThickness="0"
                         Cursor="Hand"
                         Click="CancelButton_Click">
-                    <TextBlock Text="✕" FontSize="16" Foreground="#FFE6EAF0"/>
+                    <TextBlock Text="✕" FontSize="16" Foreground="{DynamicResource OnSurface}"/>
                 </Button>
             </Grid>
 
@@ -83,19 +83,19 @@
                                    FontSize="14"
                                    LineHeight="20"
                                    TextWrapping="Wrap"
-                                   Foreground="#FFE6EAF0"/>
+                                   Foreground="{DynamicResource OnSurface}"/>
                     </Border>
 
                     <!-- Note editor -->
                     <TextBlock Text="Write your note..."
                                FontSize="13"
                                Margin="0,16,0,6"
-                               Foreground="#FFAAB4C0"/>
+                               Foreground="{DynamicResource OnSurfaceVariant}"/>
 
                     <Border CornerRadius="8"
-                            BorderBrush="#33FFFFFF"
+                            BorderBrush="{DynamicResource DividerBrush}"
                             BorderThickness="1"
-                            Background="#FF101418">
+                            Background="{DynamicResource AppBackground}">
                         <TextBox x:Name="NoteTextBox"
                                  AcceptsReturn="True"
                                  TextWrapping="Wrap"
@@ -105,7 +105,7 @@
                                  Padding="12"
                                  Background="Transparent"
                                  BorderThickness="0"
-                                 Foreground="#FFE6EAF0"
+                                 Foreground="{DynamicResource OnSurface}"
                                  CaretBrush="#FFE6EAF0"
                                  FontSize="14"
                                  SelectionBrush="#557FB2FF"/>
@@ -170,9 +170,9 @@
                             Content="Cancel"
                             Height="46"
                             Margin="0,10,0,0"
-                            Background="#FF2A3140"
+                            Background="{DynamicResource CardBackgroundAlt}"
                             BorderThickness="0"
-                            Foreground="#FFE6EAF0"
+                            Foreground="{DynamicResource OnSurface}"
                             FontSize="15"
                             Cursor="Hand"
                             Click="CancelButton_Click">
