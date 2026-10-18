@@ -17,6 +17,7 @@ namespace FountOfHopeStudyBiblePC.Controls
 {
     public partial class ChapterView : UserControl
     {
+        public ScrollViewer Scroller => VerseScroller;
         private readonly VerseTextProcessor _processor = new();
 
         private readonly PassageSelection _passage;
@@ -637,6 +638,46 @@ namespace FountOfHopeStudyBiblePC.Controls
                     && v.Verse.VerseNumber == verseNumber)
                     return i;
             return -1;
+        }
+
+        public (int verseIndex, double offsetFromTop)? GetTopVerseInfo()
+        {
+            var sv = VerseScroller;
+            if (sv == null) return null;
+
+            double offset = sv.VerticalOffset;
+            double accumulated = 0;
+
+            for (int i = 0; i < VerseItems.Items.Count; i++)
+            {
+                var container = VerseItems.ItemContainerGenerator
+                    .ContainerFromIndex(i) as FrameworkElement;
+                if (container == null) return null;
+                double h = container.ActualHeight;
+                if (h <= 0) return null;
+
+                if (accumulated + h > offset)
+                    return (i, offset - accumulated);
+
+                accumulated += h;
+            }
+            return null;
+        }
+
+        public void ScrollToVerseOffset(int verseIndex, double offsetFromTop)
+        {
+            var sv = VerseScroller;
+            if (sv == null) return;
+
+            double accumulated = 0;
+            for (int i = 0; i < verseIndex && i < VerseItems.Items.Count; i++)
+            {
+                var container = VerseItems.ItemContainerGenerator
+                    .ContainerFromIndex(i) as FrameworkElement;
+                if (container != null) accumulated += container.ActualHeight;
+            }
+
+            sv.ScrollToVerticalOffset(accumulated + offsetFromTop);
         }
 
         private void HighlightTargetVerse()

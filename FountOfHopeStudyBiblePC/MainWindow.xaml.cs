@@ -10,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 
 namespace FountOfHopeStudyBiblePC
@@ -19,7 +20,6 @@ namespace FountOfHopeStudyBiblePC
         private readonly AppViewModel _viewModel;
         private readonly PreferencesService _prefs = new();
         private DatabaseHelper _databaseHelper;
-        private DatabaseHelper? _secondaryDbHelper;
 
         private Uri? _pendingTemplateUri;
         private Uri? _animatorTemplateUri;
@@ -57,16 +57,21 @@ namespace FountOfHopeStudyBiblePC
                         break;
 
                     case nameof(AppViewModel.SecondaryDbName):
-                        RefreshSecondaryDatabase();
+                        // ReaderScreen manages its own _secondaryDatabaseHelper.
+                        App.Log($"MainWindow: SecondaryDbName changed → " +
+                                $"{_viewModel.SecondaryDbName} (delegated to ReaderScreen)");
+                        break;
+
+                    // ═══ NEW: keep the app bar version label in sync ═══
+                    case nameof(AppViewModel.CurrentVersionAbbr):
+                    case nameof(AppViewModel.SecondaryVersionAbbr):
+                        UpdateAppBar();
                         break;
 
                     case nameof(AppViewModel.DarkTheme):
                     case nameof(AppViewModel.SelectedColor):
                     case nameof(AppViewModel.IsCustomColor):
                         ApplyTheme();
-                        // Re-render the current screen so code-built elements pick up new colors
-                        Dispatcher.BeginInvoke(new Action(NavigateToCurrentScreen),
-                            System.Windows.Threading.DispatcherPriority.Background);
                         break;
 
                     case nameof(AppViewModel.ShowNavigationModal):
@@ -285,32 +290,13 @@ namespace FountOfHopeStudyBiblePC
                                && _viewModel.NavigationStack[^1] is Screen.Reader;
                 if (onReader)
                 {
-                    Dispatcher.BeginInvoke(new Action(NavigateToCurrentScreen),
-                        System.Windows.Threading.DispatcherPriority.Background);
+                    App.Log("MainWindow: RefreshPrimaryDatabase — recreating ReaderScreen");
+                    NavigateToCurrentScreen();
                 }
             }
             catch (Exception ex)
             {
                 App.Log($"!!! RefreshPrimaryDatabase FAILED: {ex}");
-            }
-        }
-
-        private void RefreshSecondaryDatabase()
-        {
-            var name = _viewModel.SecondaryDbName;
-            App.Log($"MainWindow: RefreshSecondaryDatabase → {name}");
-
-            try
-            {
-                _secondaryDbHelper?.Dispose();
-                _secondaryDbHelper = new DatabaseHelper(name);
-
-                if (_secondaryDbHelper.IsEmpty())
-                    App.Log($"!!! RefreshSecondaryDatabase: '{name}' failed to open");
-            }
-            catch (Exception ex)
-            {
-                App.Log($"!!! RefreshSecondaryDatabase FAILED: {ex}");
             }
         }
 
@@ -400,7 +386,7 @@ namespace FountOfHopeStudyBiblePC
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  Version picker modals
+        //  Version picker modals — ABBR SET FIRST, THEN DB NAME
         // ═══════════════════════════════════════════════════════════════
         private void OpenPrimaryVersionModal()
         {
@@ -414,9 +400,13 @@ namespace FountOfHopeStudyBiblePC
                     onVersionSelected: file =>
                     {
                         App.Log($"MainWindow: primary version picked: {file}");
-                        _viewModel.CurrentDbName = file;
+
+                        // ═══ FIX: set abbreviation FIRST, then DB name ═══
+                        // Order matters: DB name change triggers ReaderScreen
+                        // rebuild, which reads the abbreviation at that moment.
                         _viewModel.CurrentVersionAbbr =
                             BibleVersionUtils.VersionMap.GetValueOrDefault(file, "Bible");
+                        _viewModel.CurrentDbName = file;
                     },
                     onDismiss: () => App.Log("MainWindow: VersionModal dismissed"))
                 {
@@ -444,9 +434,11 @@ namespace FountOfHopeStudyBiblePC
                     onVersionSelected: file =>
                     {
                         App.Log($"MainWindow: secondary version picked: {file}");
-                        _viewModel.SecondaryDbName = file;
+
+                        // ═══ FIX: set abbreviation FIRST, then DB name ═══
                         _viewModel.SecondaryVersionAbbr =
                             BibleVersionUtils.VersionMap.GetValueOrDefault(file, "Bible");
+                        _viewModel.SecondaryDbName = file;
                     },
                     onDismiss: () => App.Log("MainWindow: SecondaryVersionModal dismissed"))
                 {
@@ -575,7 +567,6 @@ namespace FountOfHopeStudyBiblePC
             App.Log("MainWindow.OnClosed");
             base.OnClosed(e);
             _databaseHelper?.Dispose();
-            _secondaryDbHelper?.Dispose();
         }
 
         // ── Intent / deep-link handling ──────────────────────────────
@@ -784,10 +775,8 @@ namespace FountOfHopeStudyBiblePC
 
             var res = Application.Current.Resources;
 
-            // ── Primary color (dynamic, follows user pick) ───────────────
             res["AppPrimaryColor"] = primary;
 
-            // ── Theme-aware surface colors ───────────────────────────────
             if (_viewModel.DarkTheme)
             {
                 res["AppBackground"] = new SolidColorBrush(Color.FromRgb(0x10, 0x14, 0x18));
@@ -813,109 +802,129 @@ namespace FountOfHopeStudyBiblePC
         // ── Navigation ───────────────────────────────────────────────
         private void NavigateToCurrentScreen()
         {
-            UpdateAppBar();
-
-            if (_viewModel.NavigationStack.Count == 0)
+            try
             {
-                ShowHome();
-                return;
-            }
+                UpdateAppBar();
 
-            var current = _viewModel.NavigationStack[^1];
-            switch (current)
-            {
-                case Screen.Home:
+                if (_viewModel.NavigationStack.Count == 0)
+                {
                     ShowHome();
-                    break;
+                    return;
+                }
 
-                case Screen.Reader r:
-                    var passage = r.Passage ?? _viewModel.PrimaryPassage;
-                    RootContent.Content = new ReaderScreen(
-                        passage: passage,
-                        databaseHelper: _databaseHelper,
-                        onPassageChange: newPassage =>
-                        {
-                            _viewModel.NavigationStack[^1] = new Screen.Reader(newPassage);
-                            _viewModel.PrimaryPassage = newPassage;
-                            if (_viewModel.ScrollSync) _viewModel.SecondaryPassage = newPassage;
-                            NavigateToCurrentScreen();
-                        });
-                    break;
+                var current = _viewModel.NavigationStack[^1];
+                switch (current)
+                {
+                    case Screen.Home:
+                        ShowHome();
+                        break;
 
-                case Screen.Bookmarks:
-                    RootContent.Content = new BookmarksScreen(onNavigateToReader: NavigateToReader);
-                    break;
-
-                case Screen.Notes:
-                    RootContent.Content = new NotesScreen(
-                        onNavigateToReader: NavigateToReader,
-                        viewModel: _viewModel,
-                        initialDbName: _viewModel.CurrentDbName);
-                    break;
-
-                case Screen.Settings:
-                    RootContent.Content = new SettingsScreen();
-                    break;
-
-                case Screen.Search:
-                    RootContent.Content = new SearchScreen(
-                        databaseHelper: _databaseHelper,
-                        onPassageSelected: passage =>
-                        {
-                            _viewModel.PrimaryPassage = passage;
-                            if (_viewModel.ScrollSync) _viewModel.SecondaryPassage = passage;
-
-                            var stack = _viewModel.NavigationStack;
-                            if (stack.Count > 1 && stack[^2] is Screen.Reader)
+                    case Screen.Reader r:
+                        var passage = r.Passage ?? _viewModel.PrimaryPassage;
+                        RootContent.Content = new ReaderScreen(
+                            passage: passage,
+                            databaseHelper: _databaseHelper,
+                            onPassageChange: newPassage =>
                             {
-                                stack[^2] = new Screen.Reader(passage);
-                                _viewModel.GoBack();
-                            }
-                            else
+                                _viewModel.NavigationStack[^1] = new Screen.Reader(newPassage);
+                                _viewModel.PrimaryPassage = newPassage;
+                                if (_viewModel.ScrollSync) _viewModel.SecondaryPassage = newPassage;
+                                NavigateToCurrentScreen();
+                            });
+                        break;
+
+                    case Screen.Bookmarks:
+                        RootContent.Content = new BookmarksScreen(onNavigateToReader: NavigateToReader);
+                        break;
+
+                    case Screen.Notes:
+                        RootContent.Content = new NotesScreen(
+                            onNavigateToReader: NavigateToReader,
+                            viewModel: _viewModel,
+                            initialDbName: _viewModel.CurrentDbName);
+                        break;
+
+                    case Screen.Settings:
+                        RootContent.Content = new SettingsScreen();
+                        break;
+
+                    case Screen.Search:
+                        RootContent.Content = new SearchScreen(
+                            databaseHelper: _databaseHelper,
+                            onPassageSelected: passage =>
                             {
-                                _viewModel.GoBack();
-                                _viewModel.NavigateTo(new Screen.Reader(passage));
-                            }
-                            NavigateToCurrentScreen();
-                        },
-                        currentVersionKey: _viewModel.CurrentDbName,
-                        onVersionChange: newKey =>
-                        {
-                            _viewModel.CurrentDbName = newKey;
-                            _viewModel.CurrentVersionAbbr =
-                                BibleVersionUtils.VersionMap.GetValueOrDefault(newKey, "Bible");
-                        });
-                    break;
+                                _viewModel.PrimaryPassage = passage;
+                                if (_viewModel.ScrollSync) _viewModel.SecondaryPassage = passage;
 
-                case Screen.Quiz:
-                    RootContent.Content = new BibleQuizScreen();
-                    break;
+                                var stack = _viewModel.NavigationStack;
+                                if (stack.Count > 1 && stack[^2] is Screen.Reader)
+                                {
+                                    stack[^2] = new Screen.Reader(passage);
+                                    _viewModel.GoBack();
+                                }
+                                else
+                                {
+                                    _viewModel.GoBack();
+                                    _viewModel.NavigateTo(new Screen.Reader(passage));
+                                }
+                                NavigateToCurrentScreen();
+                            },
+                            currentVersionKey: _viewModel.CurrentDbName,
+                            onVersionChange: newKey =>
+                            {
+                                _viewModel.CurrentVersionAbbr =
+                                    BibleVersionUtils.VersionMap.GetValueOrDefault(newKey, "Bible");
+                                _viewModel.CurrentDbName = newKey;
+                            });
+                        break;
 
-                case Screen.LearnHebrew:
-                    RootContent.Content = new LearnHebrewScreen();
-                    break;
+                    case Screen.Quiz:
+                        RootContent.Content = new BibleQuizScreen();
+                        break;
 
-                case Screen.LearnGreek:
-                    RootContent.Content = new LearnGreekScreen();
-                    break;
+                    case Screen.LearnHebrew:
+                        RootContent.Content = new LearnHebrewScreen();
+                        break;
 
-                case Screen.Dictionary:
-                    RootContent.Content = new DictionaryScreen(onNavigateToReader: NavigateToReader);
-                    break;
+                    case Screen.LearnGreek:
+                        RootContent.Content = new LearnGreekScreen();
+                        break;
 
-                case Screen.Animator:
-                    RootContent.Content = new AnimatorScreen(
-                        templateUriToLoad: _animatorTemplateUri,
-                        onTemplateConsumed: () =>
-                        {
-                            _animatorTemplateUri = null;
-                            _pendingTemplateUri = null;
-                        });
-                    break;
+                    case Screen.Dictionary:
+                        RootContent.Content = new DictionaryScreen(onNavigateToReader: NavigateToReader);
+                        break;
 
-                case Screen.Generations:
-                    RootContent.Content = new GenerationsScreen();
-                    break;
+                    case Screen.Animator:
+                        RootContent.Content = new AnimatorScreen(
+                            templateUriToLoad: _animatorTemplateUri,
+                            onTemplateConsumed: () =>
+                            {
+                                _animatorTemplateUri = null;
+                                _pendingTemplateUri = null;
+                            });
+                        break;
+
+                    case Screen.Generations:
+                        RootContent.Content = new GenerationsScreen();
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"!!! NavigateToCurrentScreen FAILED: {ex}");
+
+                RootContent.Content = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromRgb(0x10, 0x14, 0x18)),
+                    Padding = new Thickness(24),
+                    Child = new TextBlock
+                    {
+                        Text = $"Screen failed to load:\n\n{ex.GetType().Name}\n\n{ex.Message}",
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x7F, 0x7F)),
+                        TextWrapping = TextWrapping.Wrap,
+                        FontSize = 14,
+                    },
+                };
             }
         }
 

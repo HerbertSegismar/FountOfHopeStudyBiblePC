@@ -102,6 +102,7 @@ namespace FountOfHopeStudyBiblePC.Views
 
             // Dictionary / commentary helpers
             ReloadDictionaryHelpers();
+            ReloadSecondaryDatabase();
 
             // FAB fade timer
             _fadeTimer = new System.Windows.Threading.DispatcherTimer
@@ -187,22 +188,42 @@ namespace FountOfHopeStudyBiblePC.Views
                 case nameof(AppViewModel.SelectedCrossReferenceDatabase):
                     ReloadCrossRefHelper();
                     break;
+
                 case nameof(AppViewModel.SelectedPrimaryDictionary):
                 case nameof(AppViewModel.SelectedSecondaryDictionary):
                     ReloadDictionaryHelpers();
                     break;
+
                 case nameof(AppViewModel.MultiVersion):
-                case nameof(AppViewModel.SecondaryDbName):
+                    // Turning multi-version on/off: clear secondary cache so if the
+                    // secondary DB was changed while multi was off, we don't show
+                    // stale content from the previous DB.
+                    _secondaryLoadedVerses.Clear();
                     ReloadSecondaryDatabase();
                     RenderCurrentMode();
                     break;
+
+                case nameof(AppViewModel.SecondaryDbName):
+                    // Secondary version changed → cached verses belong to the old DB.
+                    // Clear before re-rendering or PreloadChapter will short-circuit.
+                    _secondaryLoadedVerses.Clear();
+                    ReloadSecondaryDatabase();
+                    RenderCurrentMode();
+                    break;
+
+                case nameof(AppViewModel.CurrentDbName):
+                    // Primary version change comes through MainWindow which rebuilds
+                    // ReaderScreen, so this shouldn't normally fire. Defensive clear
+                    // in case MainWindow's behaviour changes.
+                    _primaryLoadedVerses.Clear();
+                    RenderCurrentMode();
+                    break;
+
                 case nameof(AppViewModel.DarkTheme):
                 case nameof(AppViewModel.WordsOfJesus):
                     RenderCurrentMode();
                     break;
-                // WordMarkerColor intentionally NOT in this list — it only affects
-                // the color of future word taps, not the current render. Handled
-                // inside ChapterView.OnViewModelPropertyChanged without re-rendering.
+
                 case nameof(AppViewModel.ScrollSync):
                     if (_viewModel.MultiVersion && _viewModel.ScrollSync)
                     {
@@ -214,9 +235,6 @@ namespace FountOfHopeStudyBiblePC.Views
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  DB helpers
-        // ═══════════════════════════════════════════════════════════════
         private void ReloadCrossRefHelper()
         {
             _crossRefHelper?.Dispose();

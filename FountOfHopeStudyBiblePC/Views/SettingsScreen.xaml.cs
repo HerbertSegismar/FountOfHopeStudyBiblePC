@@ -38,15 +38,22 @@ namespace FountOfHopeStudyBiblePC.Views
                 case nameof(AppViewModel.SelectedFontFamily):
                 case nameof(AppViewModel.IsDictionaryMode):
                 case nameof(AppViewModel.BgImageIndex):
+                // ?? Version changes — rebuild so the version cards refresh ??
+                case nameof(AppViewModel.CurrentDbName):
+                case nameof(AppViewModel.CurrentVersionAbbr):
+                case nameof(AppViewModel.SecondaryDbName):
+                case nameof(AppViewModel.SecondaryVersionAbbr):
+                // ?? Mode flips that affect which controls are visible ??
+                case nameof(AppViewModel.IsStudyMode):
+                case nameof(AppViewModel.ShowStrongs):
+                case nameof(AppViewModel.ScrollSync):
+                case nameof(AppViewModel.SquareAspectViews):
                     Dispatcher.BeginInvoke(new Action(RebuildAll),
                         System.Windows.Threading.DispatcherPriority.Background);
                     break;
             }
         }
 
-        // -----------------------------------------------------------
-        //  Rebuild everything (simple + correct; runs fast)
-        // -----------------------------------------------------------
         private void RebuildAll()
         {
             SettingsRootPanel.Children.Clear();
