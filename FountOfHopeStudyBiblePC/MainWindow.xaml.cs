@@ -223,6 +223,36 @@ namespace FountOfHopeStudyBiblePC
                                 System.Windows.Threading.DispatcherPriority.Background);
                         }
                         break;
+
+                    case nameof(AppViewModel.ShowHeaderButtonsColorWheel):
+                        if (_viewModel.ShowHeaderButtonsColorWheel)
+                        {
+                            _viewModel.ShowHeaderButtonsColorWheel = false;
+                            var initial = _viewModel.HeaderButtonsColor;
+                            Dispatcher.BeginInvoke(new Action(() =>
+                                OpenColorWheel(initial, c => _viewModel.HeaderButtonsColor = c,
+                                    title: "Header Buttons Color")),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        break;
+
+                    case nameof(AppViewModel.ShowHighlightColorEditor):
+                        if (_viewModel.ShowHighlightColorEditor)
+                        {
+                            _viewModel.ShowHighlightColorEditor = false;
+                            var idx = _viewModel.EditingHighlightColorIndex;
+                            var initial = (idx >= 0 && idx < _viewModel.PredefinedHighlightColors.Count)
+                                          ? _viewModel.PredefinedHighlightColors[idx]
+                                          : Colors.White;
+                            Dispatcher.BeginInvoke(new Action(() =>
+                                OpenColorWheel(initial, c =>
+                                {
+                                    _viewModel.UpdateHighlightColor(idx, c);
+                                    _viewModel.EditingHighlightColorIndex = -1;
+                                }, title: "Highlight Color")),
+                                System.Windows.Threading.DispatcherPriority.Background);
+                        }
+                        break;
                 }
             };
             App.Log("MainWindow ctor - after PropertyChanged hookup");

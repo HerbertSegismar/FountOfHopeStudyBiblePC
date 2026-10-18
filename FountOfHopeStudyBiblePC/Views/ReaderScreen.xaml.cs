@@ -23,6 +23,7 @@ namespace FountOfHopeStudyBiblePC.Views
         private readonly DatabaseHelper? _databaseHelper;
         private readonly Action<PassageSelection> _onPassageChange;
         private readonly AppViewModel _viewModel;
+        private bool _hasAppliedInitialScroll;
 
         // ── Passage state ───────────────────────────────────────────────
         private PassageSelection _primaryCurrent;
@@ -131,6 +132,7 @@ namespace FountOfHopeStudyBiblePC.Views
 
             BuildHighlightColorBar();
             RenderCurrentMode();
+            _hasAppliedInitialScroll = true;
         }
 
         /// <summary>
@@ -178,7 +180,7 @@ namespace FountOfHopeStudyBiblePC.Views
         }
 
         private void OnViewModelPropertyChanged(object? sender,
-            System.ComponentModel.PropertyChangedEventArgs e)
+    System.ComponentModel.PropertyChangedEventArgs e)
         {
             switch (e.PropertyName)
             {
@@ -196,9 +198,11 @@ namespace FountOfHopeStudyBiblePC.Views
                     break;
                 case nameof(AppViewModel.DarkTheme):
                 case nameof(AppViewModel.WordsOfJesus):
-                case nameof(AppViewModel.WordMarkerColor):
                     RenderCurrentMode();
                     break;
+                // WordMarkerColor intentionally NOT in this list — it only affects
+                // the color of future word taps, not the current render. Handled
+                // inside ChapterView.OnViewModelPropertyChanged without re-rendering.
                 case nameof(AppViewModel.ScrollSync):
                     if (_viewModel.MultiVersion && _viewModel.ScrollSync)
                     {
@@ -363,19 +367,22 @@ namespace FountOfHopeStudyBiblePC.Views
             _viewModel.OverlayOpacity = (float)e.NewValue;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Mode dispatch — the three readers
-        // ═══════════════════════════════════════════════════════════════
         private void RenderCurrentMode()
         {
             var multi = _viewModel.MultiVersion;
             var synced = _viewModel.ScrollSync && multi && _secondaryDatabaseHelper != null;
 
+            // Only pass the target verse on the FIRST render. Subsequent
+            // re-renders (color/font/theme changes) pass null so the "just
+            // navigated here" flash doesn't re-fire.
+            int? primaryTarget = _hasAppliedInitialScroll ? (int?)null : _targetVerse;
+            int? secondaryTarget = _hasAppliedInitialScroll ? (int?)null : _secondaryTargetVerse;
+
             if (!multi)
             {
                 ReaderHost.Content = new SingleVersionReader(
                     primaryCurrent: _primaryCurrent,
-                    targetVerse: _targetVerse,
+                    targetVerse: primaryTarget,
                     databaseHelper: _databaseHelper,
                     subheadingsDbHelper: _subheadingsDbHelper,
                     primaryLoadedVerses: _primaryLoadedVerses,
@@ -396,7 +403,7 @@ namespace FountOfHopeStudyBiblePC.Views
             {
                 ReaderHost.Content = new SyncedMultiVersionReader(
                     primaryCurrent: _primaryCurrent,
-                    targetVerse: _targetVerse,
+                    targetVerse: primaryTarget,
                     databaseHelper: _databaseHelper,
                     secondaryDatabaseHelper: _secondaryDatabaseHelper,
                     subheadingsDbHelper: _subheadingsDbHelper,
@@ -421,8 +428,8 @@ namespace FountOfHopeStudyBiblePC.Views
                 ReaderHost.Content = new IndependentMultiVersionReader(
                     primaryCurrent: _primaryCurrent,
                     secondaryCurrent: _secondaryCurrent,
-                    targetVerse: _targetVerse,
-                    secondaryTargetVerse: _secondaryTargetVerse,
+                    targetVerse: primaryTarget,
+                    secondaryTargetVerse: secondaryTarget,
                     databaseHelper: _databaseHelper,
                     secondaryDatabaseHelper: _secondaryDatabaseHelper,
                     subheadingsDbHelper: _subheadingsDbHelper,

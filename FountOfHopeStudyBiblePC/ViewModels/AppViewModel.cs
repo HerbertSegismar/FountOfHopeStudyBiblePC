@@ -60,6 +60,10 @@ namespace FountOfHopeStudyBiblePC.ViewModels
         public string? AnimatorKeyframeTargetElementId { get => _animatorKeyframeTargetElementId; set => Set(ref _animatorKeyframeTargetElementId, value); }
 
         private bool _animatorShowKeyframeDialog;
+
+        private bool _showHeaderButtonsColorWheel;
+        public bool ShowHeaderButtonsColorWheel { get => _showHeaderButtonsColorWheel; set => Set(ref _showHeaderButtonsColorWheel, value); }
+
         public bool AnimatorShowKeyframeDialog { get => _animatorShowKeyframeDialog; set => Set(ref _animatorShowKeyframeDialog, value); }
 
         private bool _animatorColorWheel;
