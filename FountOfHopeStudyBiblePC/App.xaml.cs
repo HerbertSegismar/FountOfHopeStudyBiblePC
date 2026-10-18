@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Markup;
 using System.Windows.Threading;
+using FountOfHopeStudyBiblePC.Helpers;   // ← add
 
 namespace FountOfHopeStudyBiblePC
 {
@@ -38,7 +39,6 @@ namespace FountOfHopeStudyBiblePC
             DispatcherUnhandledException += (_, args) =>
             {
                 Log("!!! DispatcherUnhandledException: " + args.Exception);
-                // Critical: without this, WPF terminates the app.
                 args.Handled = true;
             };
 
@@ -48,8 +48,7 @@ namespace FountOfHopeStudyBiblePC
             };
 
             // ═══════════════════════════════════════════════════════════
-            //  First-chance logging — captures even caught exceptions
-            //  to help diagnose silent failures.
+            //  First-chance logging — captures even caught exceptions.
             // ═══════════════════════════════════════════════════════════
             AppDomain.CurrentDomain.FirstChanceException += (_, args) =>
             {
@@ -69,6 +68,19 @@ namespace FountOfHopeStudyBiblePC
                     Log("FirstChanceException: " + ex.GetType().Name + " — " + ex.Message);
                 }
             };
+
+            // ═══════════════════════════════════════════════════════════
+            //  Theme infrastructure — MUST run before base.OnStartup(e)
+            //  because StartupUri (App.xaml) constructs MainWindow inside
+            //  base.OnStartup, and MainWindow's ctor builds views that
+            //  read {DynamicResource …} brushes.
+            //
+            //  The subscription is for the app's lifetime; App owns it,
+            //  so it never needs to be unsubscribed.
+            // ═══════════════════════════════════════════════════════════
+            ThemeResources.Install();
+            ThemeManager.Changed += ThemeResources.Refresh;
+            Log("=== theme infrastructure installed ===");
 
             Log("=== calling base.OnStartup ===");
             base.OnStartup(e);

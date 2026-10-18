@@ -93,18 +93,14 @@ namespace FountOfHopeStudyBiblePC.Views
             _targetVerse = passage.Verse;
             _secondaryTargetVerse = _viewModel.SecondaryPassage.Verse;
 
-            // Subheadings helper — persistent for the life of this screen
             _subheadingsDbHelper = new DatabaseHelper("kjvsubheadings.sqlite3");
 
-            // Cross-references helper — reload when setting changes
             ReloadCrossRefHelper();
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
 
-            // Dictionary / commentary helpers
             ReloadDictionaryHelpers();
             ReloadSecondaryDatabase();
 
-            // FAB fade timer
             _fadeTimer = new System.Windows.Threading.DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(5)
@@ -116,7 +112,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 _fadeTimer!.Stop();
             };
 
-            // Highlight mode timer
             _highlightTimer = new System.Windows.Threading.DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(5)
@@ -136,11 +131,6 @@ namespace FountOfHopeStudyBiblePC.Views
             _hasAppliedInitialScroll = true;
         }
 
-        /// <summary>
-        /// Overload for callers (e.g. MainWindow) that don't have a direct
-        /// AppViewModel reference. Resolves the running instance from the
-        /// static accessor set at startup.
-        /// </summary>
         public ReaderScreen(
             PassageSelection passage,
             DatabaseHelper? databaseHelper,
@@ -180,8 +170,12 @@ namespace FountOfHopeStudyBiblePC.Views
             _secondaryDatabaseHelper?.Dispose();
         }
 
+        // ═══════════════════════════════════════════════════════════════
+        //  ViewModel subscription — every property that affects the
+        //  rendered verse text triggers a re-render.
+        // ═══════════════════════════════════════════════════════════════
         private void OnViewModelPropertyChanged(object? sender,
-    System.ComponentModel.PropertyChangedEventArgs e)
+            System.ComponentModel.PropertyChangedEventArgs e)
         {
             switch (e.PropertyName)
             {
@@ -195,32 +189,38 @@ namespace FountOfHopeStudyBiblePC.Views
                     break;
 
                 case nameof(AppViewModel.MultiVersion):
-                    // Turning multi-version on/off: clear secondary cache so if the
-                    // secondary DB was changed while multi was off, we don't show
-                    // stale content from the previous DB.
                     _secondaryLoadedVerses.Clear();
                     ReloadSecondaryDatabase();
                     RenderCurrentMode();
                     break;
 
                 case nameof(AppViewModel.SecondaryDbName):
-                    // Secondary version changed → cached verses belong to the old DB.
-                    // Clear before re-rendering or PreloadChapter will short-circuit.
                     _secondaryLoadedVerses.Clear();
                     ReloadSecondaryDatabase();
                     RenderCurrentMode();
                     break;
 
                 case nameof(AppViewModel.CurrentDbName):
-                    // Primary version change comes through MainWindow which rebuilds
-                    // ReaderScreen, so this shouldn't normally fire. Defensive clear
-                    // in case MainWindow's behaviour changes.
                     _primaryLoadedVerses.Clear();
                     RenderCurrentMode();
                     break;
 
+                // ── Properties that affect rendered verse content ──
                 case nameof(AppViewModel.DarkTheme):
                 case nameof(AppViewModel.WordsOfJesus):
+                case nameof(AppViewModel.FontSize):
+                case nameof(AppViewModel.LightThemeReaderFontColor):
+                case nameof(AppViewModel.DarkThemeReaderFontColor):
+                case nameof(AppViewModel.WordMarkerColor):
+                case nameof(AppViewModel.VerseMarkerColor):
+                case nameof(AppViewModel.IsDictionaryMode):
+                case nameof(AppViewModel.BgImageIndex):
+                case nameof(AppViewModel.OverlayOpacity):
+                case nameof(AppViewModel.LightOverlayColor):
+                case nameof(AppViewModel.DarkOverlayColor):
+                case nameof(AppViewModel.ShowStrongs):
+                case nameof(AppViewModel.IsStudyMode):
+                case nameof(AppViewModel.PredefinedHighlightColors):
                     RenderCurrentMode();
                     break;
 
@@ -390,9 +390,6 @@ namespace FountOfHopeStudyBiblePC.Views
             var multi = _viewModel.MultiVersion;
             var synced = _viewModel.ScrollSync && multi && _secondaryDatabaseHelper != null;
 
-            // Only pass the target verse on the FIRST render. Subsequent
-            // re-renders (color/font/theme changes) pass null so the "just
-            // navigated here" flash doesn't re-fire.
             int? primaryTarget = _hasAppliedInitialScroll ? (int?)null : _targetVerse;
             int? secondaryTarget = _hasAppliedInitialScroll ? (int?)null : _secondaryTargetVerse;
 
@@ -632,7 +629,6 @@ namespace FountOfHopeStudyBiblePC.Views
             _modalState = new ReaderModalState.None();
         }
 
-        // Small helpers to unpack the modal state
         private static string GetModalType(ReaderModalState s) => s switch
         {
             ReaderModalState.Word => "definition",
@@ -731,7 +727,6 @@ namespace FountOfHopeStudyBiblePC.Views
             modal.ShowDialog();
             App.Log("ShowVerseOptionsModal: ShowDialog returned — refreshing chapter");
 
-            // ── NEW: re-render so badges (bookmark, note, highlight) appear ──
             RenderCurrentMode();
         }
 
@@ -795,13 +790,11 @@ namespace FountOfHopeStudyBiblePC.Views
             modal.ShowDialog();
             App.Log("Reader: NotesModal closed — refreshing chapter");
 
-            // ── NEW: re-render now that the note is actually saved ──
             RenderCurrentMode();
         }
 
         private void ShowNotesModal()
         {
-            // TODO: replace with real NotesModal when it's converted.
             App.Log($"Reader: Notes modal with {_selectedVersesForNote.Count} verses");
         }
     }

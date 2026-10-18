@@ -7,12 +7,15 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using FountOfHopeStudyBiblePC.Helpers; // ThemeManager
 
 namespace FountOfHopeStudyBiblePC.Controls
 {
     /// <summary>
     /// Matrix-style "digital rain" of characters with randomly fading
     /// Jesus-attribute overlays, shown inside a rounded Card.
+    /// Colors come from <see cref="ThemeManager"/> so the rain matches the
+    /// rest of the app.
     /// </summary>
     public class FountRain : UserControl
     {
@@ -87,10 +90,10 @@ namespace FountOfHopeStudyBiblePC.Controls
             public string[] Trail = Array.Empty<string>();
             public double X;
             public double HeadY;
-            public double ElapsedMs;       // time spent in current fall
-            public double FallDurationMs;  // 2000..5000
+            public double ElapsedMs;
+            public double FallDurationMs;
             public bool Waiting;
-            public double GapRemainingMs;  // pause before next fall
+            public double GapRemainingMs;
         }
 
         private sealed class AttributeOverlay
@@ -110,7 +113,7 @@ namespace FountOfHopeStudyBiblePC.Controls
         public static readonly DependencyProperty MatrixColorProperty =
             DependencyProperty.Register(nameof(MatrixColor), typeof(Color),
                 typeof(FountRain),
-                new PropertyMetadata(Color.FromRgb(0x7F, 0xB2, 0xFF),
+                new PropertyMetadata(ThemeManager.PrimaryColor,
                     (d, _) => ((FountRain)d).RefreshTitleAndRain()));
 
         public Color MatrixColor
@@ -122,7 +125,7 @@ namespace FountOfHopeStudyBiblePC.Controls
         public static readonly DependencyProperty OverlayColorProperty =
             DependencyProperty.Register(nameof(OverlayColor), typeof(Color),
                 typeof(FountRain),
-                new PropertyMetadata(Color.FromRgb(0x7F, 0xB2, 0xFF),
+                new PropertyMetadata(ThemeManager.PrimaryColor,
                     (d, _) => ((FountRain)d)._rain.InvalidateVisual()));
 
         public Color OverlayColor
@@ -153,7 +156,8 @@ namespace FountOfHopeStudyBiblePC.Controls
 
         public static readonly DependencyProperty IsDarkThemeProperty =
             DependencyProperty.Register(nameof(IsDarkTheme), typeof(bool),
-                typeof(FountRain), new PropertyMetadata(true,
+                typeof(FountRain),
+                new PropertyMetadata(ThemeManager.DarkTheme,
                     (d, _) => ((FountRain)d).UpdateCardBackground()));
 
         public bool IsDarkTheme
@@ -176,13 +180,11 @@ namespace FountOfHopeStudyBiblePC.Controls
         private readonly TextBlock _title;
         private readonly RainElement _rain;
 
-        // Cache of FormattedText per character so we don't rebuild them every frame.
         private readonly Dictionary<(char c, double size, FontFamily fam), FormattedText> _glyphCache
             = new();
 
         public FountRain()
         {
-            // ----- Card container -----
             _cardBorder = new Border
             {
                 CornerRadius = new CornerRadius(16),
@@ -219,7 +221,6 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             UpdateCardBackground();
 
-            // 60 fps tick
             _timer = new DispatcherTimer(DispatcherPriority.Render)
             {
                 Interval = TimeSpan.FromMilliseconds(16)
@@ -230,6 +231,22 @@ namespace FountOfHopeStudyBiblePC.Controls
             Unloaded += (_, __) => _timer.Stop();
         }
 
+        /// <summary>
+        /// Call this from the host whenever <see cref="ThemeManager"/> changes
+        /// (PrimaryColor, DarkTheme, IsCustomColor) so the rain and card scrim
+        /// pick up the new palette without a full rebuild.
+        /// </summary>
+        public void RefreshFromTheme()
+        {
+            MatrixColor = ThemeManager.PrimaryColor;
+            OverlayColor = ThemeManager.PrimaryColor;
+            IsDarkTheme = ThemeManager.DarkTheme;
+
+            RefreshTitleAndRain();
+            UpdateCardBackground();
+            _rain.InvalidateVisual();
+        }
+
         private void RefreshTitleAndRain()
         {
             _title.Foreground = new SolidColorBrush(MatrixColor);
@@ -238,15 +255,16 @@ namespace FountOfHopeStudyBiblePC.Controls
 
         private void UpdateCardBackground()
         {
-            // Mirrors:  if (darkTheme) Color.Black.copy(0.5f)
-            //           else            colorScheme.primary.copy(0.1f)
-            _cardBorder.Background = IsDarkTheme
-                ? new SolidColorBrush(Color.FromArgb(128, 0, 0, 0))
-                : new SolidColorBrush(Color.FromArgb(26, 0x7F, 0xB2, 0xFF));
+            // ── Solid black on dark theme — maximum contrast for the
+            //    primary-colored rain. Light theme keeps the original
+            //    10%-primary scrim from the Kotlin port.
+            var primary = ThemeManager.PrimaryColor;
+            _cardBorder.Background = new SolidColorBrush(IsDarkTheme
+                ? Colors.Black
+                : Color.FromArgb(0x1A, primary.R, primary.G, primary.B));
         }
 
         // ---------- RainDrop build / update ----------
-
         private void RebuildDrops()
         {
             _drops.Clear();
@@ -257,7 +275,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             if (numColumns <= 0) return;
             var numDrops = (int)Math.Round(numColumns * 0.7);
 
-            // Fisher–Yates shuffle of columns, take first numDrops.
             var cols = new int[numColumns];
             for (int i = 0; i < numColumns; i++) cols[i] = i;
             for (int i = numColumns - 1; i > 0; i--)
@@ -273,7 +290,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                 for (int t = 0; t < TRAIL_LENGTH; t++)
                     trail[t] = MatrixChars[_rng.Next(MatrixChars.Length)].ToString();
 
-                // Stagger so drops don't all start at the top at once.
                 var initialHeadY = _rng.NextDouble() * totalHeight;
 
                 _drops.Add(new RainDrop
@@ -294,7 +310,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             var dtMs = (now - _lastTickUtc).TotalMilliseconds;
             _lastTickUtc = now;
             if (dtMs <= 0) return;
-            if (dtMs > 100) dtMs = 100; // clamp after a stall
+            if (dtMs > 100) dtMs = 100;
 
             var totalHeight = MATRIX_HEIGHT + TRAIL_LENGTH * _fontSizeDip;
 
@@ -332,7 +348,6 @@ namespace FountOfHopeStudyBiblePC.Controls
         }
 
         // ---------- Overlay (Jesus attributes) ----------
-
         private void UpdateOverlay(double dtMs)
         {
             if (_overlay == null)
@@ -346,7 +361,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             if (_overlay.ElapsedMs >= _overlay.TotalMs)
             {
                 _overlay = null;
-                _overlayWaitMs = 0; // pick a new one immediately (matches Kotlin)
+                _overlayWaitMs = 0;
             }
         }
 
@@ -357,7 +372,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             if (w <= 0 || h <= 0) { _overlayWaitMs = 200; return; }
 
             var text = JesusAttributes[_rng.Next(JesusAttributes.Length)];
-            var fs = _rng.NextDouble() * 12 + 10; // 10..22
+            var fs = _rng.NextDouble() * 12 + 10;
             var estW = text.Length * (fs / 2.5);
             var left = _rng.NextDouble() * 0.8 * w;
             left = Math.Min(left, Math.Max(0, w - estW));
@@ -374,7 +389,6 @@ namespace FountOfHopeStudyBiblePC.Controls
         }
 
         // ---------- Rendering ----------
-
         private sealed class RainElement : FrameworkElement
         {
             private readonly FountRain _owner;
@@ -396,7 +410,6 @@ namespace FountOfHopeStudyBiblePC.Controls
 
         private void RenderRain(DrawingContext dc, double width, double height)
         {
-            // --- Matrix drops ---
             foreach (var drop in _drops)
             {
                 for (int j = 0; j < TRAIL_LENGTH; j++)
@@ -418,7 +431,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                 }
             }
 
-            // --- Jesus attribute overlay ---
             if (_overlay != null)
             {
                 var e = _overlay.ElapsedMs;
@@ -462,8 +474,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                     brush,
                     VisualTreeHelper.GetDpi(this).PixelsPerDip);
 
-                dc.DrawText(ft,
-                    new Point(_overlay.Left, _overlay.BaseTop + yOffset));
+                dc.DrawText(ft, new Point(_overlay.Left, _overlay.BaseTop + yOffset));
             }
         }
 
@@ -482,7 +493,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                 FlowDirection.LeftToRight,
                 typeface,
                 size,
-                Brushes.White, // placeholder, replaced per draw
+                Brushes.White, // placeholder — replaced per draw via SetForegroundBrush
                 VisualTreeHelper.GetDpi(this).PixelsPerDip);
 
             _glyphCache[key] = ft;

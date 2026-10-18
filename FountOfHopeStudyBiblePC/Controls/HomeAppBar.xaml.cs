@@ -1,12 +1,14 @@
 ﻿// Controls/HomeAppBar.xaml.cs
+using FountOfHopeStudyBiblePC.Helpers;
+using FountOfHopeStudyBiblePC.Models;
+using FountOfHopeStudyBiblePC.ViewModels;
+using MahApps.Metro.IconPacks;
 using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
-using FountOfHopeStudyBiblePC.Models;
-using FountOfHopeStudyBiblePC.ViewModels;
 
 namespace FountOfHopeStudyBiblePC.Controls
 {
@@ -64,34 +66,39 @@ namespace FountOfHopeStudyBiblePC.Controls
             // Landscape: full icon row
             if (isLandscape)
             {
-                ActionsPanel.Children.Add(BuildIconButton("🏠", "Home",
+                ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.Home, "Home",
                     () => ScreenRequested?.Invoke(new Screen.Home())));
 
-                ActionsPanel.Children.Add(BuildAnimatedIconButton("📖", "Bible Navigation",
+                ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.BookOpenPageVariant, "Bible Navigation",
                     () => BibleIconClicked?.Invoke()));
 
-                ActionsPanel.Children.Add(BuildIconButton("🔖", "Bookmarks",
+                ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.Bookmark, "Bookmarks",
                     () => ScreenRequested?.Invoke(new Screen.Bookmarks())));
-                ActionsPanel.Children.Add(BuildIconButton("📝", "Notes",
+
+                ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.NoteText, "Notes",
                     () => ScreenRequested?.Invoke(new Screen.Notes())));
-                ActionsPanel.Children.Add(BuildIconButton("🔍", "Search",
+
+                ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.Magnify, "Search",
                     () => ScreenRequested?.Invoke(new Screen.Search())));
-                ActionsPanel.Children.Add(BuildIconButton("⚙", "Settings",
+
+                ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.Cog, "Settings",
                     () => ScreenRequested?.Invoke(new Screen.Settings())));
             }
             else
             {
                 // Portrait: only the Bible icon
-                ActionsPanel.Children.Add(BuildAnimatedIconButton("📖", "Bible Navigation",
+                ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.BookOpenPageVariant, "Bible Navigation",
                     () => BibleIconClicked?.Invoke()));
             }
 
             // Always: theme, color lens, menu
-            var themeGlyph = _viewModel.DarkTheme ? "☀" : "☾";
-            ActionsPanel.Children.Add(BuildAnimatedIconButton(themeGlyph, "Toggle Theme",
+            var themeKind = _viewModel.DarkTheme
+                ? PackIconMaterialKind.WhiteBalanceSunny
+                : PackIconMaterialKind.WeatherNight;
+            ActionsPanel.Children.Add(BuildIconButton(themeKind, "Toggle Theme",
                 () => ThemeToggled?.Invoke()));
 
-            ActionsPanel.Children.Add(BuildAnimatedIconButton("🎨", "Color Scheme",
+            ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.Palette, "Color Scheme",
                 () => ColorLensClicked?.Invoke()));
 
             ActionsPanel.Children.Add(BuildMenuButton());
@@ -100,7 +107,7 @@ namespace FountOfHopeStudyBiblePC.Controls
         // ═══════════════════════════════════════════════════════════
         //  Button factories
         // ═══════════════════════════════════════════════════════════
-        private Button BuildIconButton(string glyph, string tooltip, Action onClick)
+        private Button BuildIconButton(PackIconMaterialKind kind, string tooltip, Action onClick)
         {
             var btn = new Button
             {
@@ -114,22 +121,21 @@ namespace FountOfHopeStudyBiblePC.Controls
             };
             btn.Template = BuildTransparentCircleTemplate();
 
-            btn.Content = new TextBlock
+            var icon = new PackIconMaterial
             {
-                Text = glyph,
-                FontSize = 18,
-                Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor),
+                Kind = kind,
+                Width = 18,
+                Height = 18,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             };
+            // DynamicResource equivalent — repaints when ThemeResources.Refresh()
+            // swaps AppIconBrush on every theme change.
+            icon.SetResourceReference(Control.ForegroundProperty, ThemeResources.Icon);
 
+            btn.Content = icon;
             btn.Click += (_, _) => onClick();
             return btn;
-        }
-
-        private Button BuildAnimatedIconButton(string glyph, string tooltip, Action onClick)
-        {
-            return BuildIconButton(glyph, tooltip, onClick);
         }
 
         private Button BuildMenuButton()
@@ -146,14 +152,16 @@ namespace FountOfHopeStudyBiblePC.Controls
             };
             btn.Template = BuildTransparentCircleTemplate();
 
-            btn.Content = new TextBlock
+            var icon = new PackIconMaterial
             {
-                Text = "☰",
-                FontSize = 20,
-                Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor),
+                Kind = PackIconMaterialKind.Menu,
+                Width = 20,
+                Height = 20,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             };
+            icon.SetResourceReference(Control.ForegroundProperty, ThemeResources.Icon);
+            btn.Content = icon;
 
             var menu = BuildNavigationMenu();
             btn.Click += (_, _) =>
@@ -175,28 +183,41 @@ namespace FountOfHopeStudyBiblePC.Controls
                     : _viewModel.LightModalBackgroundColor),
             };
 
-            var items = new List<(string title, Screen screen)>
+            var items = new List<(string title, Screen screen, PackIconMaterialKind icon)>
             {
-                ("Home",      new Screen.Home()),
-                ("Reader",    new Screen.Reader(_viewModel.PrimaryPassage)),
-                ("Bookmarks", new Screen.Bookmarks()),
-                ("Notes",     new Screen.Notes()),
-                ("Search",    new Screen.Search()),
-                ("Settings",  new Screen.Settings()),
+                ("Home",      new Screen.Home(),                         PackIconMaterialKind.Home),
+                ("Reader",    new Screen.Reader(_viewModel.PrimaryPassage), PackIconMaterialKind.BookOpenPageVariant),
+                ("Bookmarks", new Screen.Bookmarks(),                    PackIconMaterialKind.Bookmark),
+                ("Notes",     new Screen.Notes(),                        PackIconMaterialKind.NoteText),
+                ("Search",    new Screen.Search(),                       PackIconMaterialKind.Magnify),
+                ("Settings",  new Screen.Settings(),                     PackIconMaterialKind.Cog),
             };
 
-            foreach (var (title, screen) in items)
+            foreach (var (title, screen, iconKind) in items)
             {
                 var isActive = ScreensMatch(_currentScreen, screen);
+
+                var menuIcon = new PackIconMaterial
+                {
+                    Kind = iconKind,
+                    Width = 16,
+                    Height = 16,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                menuIcon.SetResourceReference(Control.ForegroundProperty, ThemeResources.Icon);
 
                 var mi = new MenuItem
                 {
                     Header = title,
+                    Icon = menuIcon,
                     FontWeight = isActive ? FontWeights.Bold : FontWeights.Normal,
                     Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor),
                     Background = isActive
-                        ? new SolidColorBrush(Color.FromArgb(0x33, 0x7F, 0xB2, 0xFF))
-                        : Brushes.Transparent,
+                                ? new SolidColorBrush(Color.FromArgb(0x33,
+                                      ThemeManager.PrimaryColor.R,
+                                      ThemeManager.PrimaryColor.G,
+                                      ThemeManager.PrimaryColor.B))
+                                : Brushes.Transparent,
                 };
 
                 mi.Click += (_, _) =>

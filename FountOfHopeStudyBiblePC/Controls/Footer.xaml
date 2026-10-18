@@ -5,11 +5,22 @@
 
     <UserControl.Resources>
 
-        <!-- Color palette (adjust to match your app's theme) -->
-        <SolidColorBrush x:Key="Primary" Color="#1976D2" />
-        <SolidColorBrush x:Key="OnSurfaceVariant" Color="#49454F" />
+        <!--
+          Palette keys are NOT redeclared here.
+
+          Every colour used below (AppPrimaryBrush, OnSurfaceVariant,
+          DividerBrush) is installed into Application.Current.Resources by
+          ThemeResources.Install() and refreshed by ThemeResources.Refresh()
+          on every ThemeManager change. Redeclaring them locally would shadow
+          the app-level brush and freeze the footer to the initial colour
+          (which is exactly why the links stayed hard-coded blue).
+
+          SurfaceVariant is the one exception: it has no App-level key yet,
+          so it stays local. See the rectangle near the bottom of this file —
+          if you ever want that card to theme too, add a `SurfaceVariant`
+          key to ThemeResources and swap StaticResource → DynamicResource.
+        -->
         <SolidColorBrush x:Key="SurfaceVariant" Color="#E7E0EC" />
-        <SolidColorBrush x:Key="DividerBrush" Color="#E0E0E0" />
 
         <!-- Base text style -->
         <Style x:Key="FooterText" TargetType="TextBlock">
@@ -20,10 +31,10 @@
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
 
-        <!-- Hyperlink style -->
+        <!-- Hyperlink style — primary, reactive -->
         <Style x:Key="FooterLink" TargetType="Hyperlink">
             <Setter Property="FontSize" Value="12" />
-            <Setter Property="Foreground" Value="{StaticResource Primary}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppPrimaryBrush}" />
             <Setter Property="TextDecorations" Value="Underline" />
         </Style>
 

@@ -40,6 +40,12 @@ namespace FountOfHopeStudyBiblePC.Views
         private List<Verse>? _dailyVerses;
         private bool _isBookmarked;
 
+        /// <summary>Set once we're subscribed, so we can un-subscribe cleanly.</summary>
+        private bool _themeHooked;
+
+        /// <summary>Guards against re-entry while ApplyTheme is running.</summary>
+        private bool _applyingTheme;
+
         /// <summary>Bound from XAML via ElementName=HomeRoot.</summary>
         public ObservableCollection<QuickAction> QuickActions { get; } = new();
 
@@ -59,8 +65,8 @@ namespace FountOfHopeStudyBiblePC.Views
             Action? onOpenGenerationsClick = null)
         {
             var sw = Stopwatch.StartNew();
-
             App.Log("HomeScreen ctor - enter");
+
             InitializeComponent();
             App.Log($"HomeScreen ctor - InitializeComponent took {sw.ElapsedMilliseconds}ms");
 
@@ -82,7 +88,17 @@ namespace FountOfHopeStudyBiblePC.Views
             LoadPopularDevotionals();
             HookImageSection();
 
+            // React to theme changes from BOTH sources of truth.
+            ThemeManager.Changed += OnThemeChanged;
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            _themeHooked = true;
+
             Loaded += OnLoaded;
+            Unloaded += OnUnloaded;
+
+            // Apply the current palette once so items created before
+            // subscription still pick up the right colors.
+            Loaded += (_, __) => ApplyTheme();
 
             sw.Stop();
             App.Log($"HomeScreen ctor - COMPLETE, total {sw.ElapsedMilliseconds}ms");
@@ -101,6 +117,255 @@ namespace FountOfHopeStudyBiblePC.Views
             }), System.Windows.Threading.DispatcherPriority.Background);
         }
 
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            if (!_themeHooked) return;
+            ThemeManager.Changed -= OnThemeChanged;
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _themeHooked = false;
+        }
+
+        // ── Theme reactivity ────────────────────────────────────────────────
+        private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(AppViewModel.DarkTheme) ||
+                e.PropertyName == nameof(AppViewModel.HeaderButtonsColor))
+            {
+                OnThemeChanged();
+            }
+        }
+
+        private void OnThemeChanged()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(OnThemeChanged);
+                return;
+            }
+            ApplyTheme();
+        }
+
+        private void ApplyTheme()
+        {
+            if (_applyingTheme) return;
+            _applyingTheme = true;
+            try
+            {
+                // (1) Swap DynamicResource brushes.
+                ThemeResources.Refresh();
+
+                var isDark = ThemeManager.DarkTheme;
+                var primary = ThemeManager.PrimaryColor;
+
+                var textBrush = GetBrush(ThemeResources.Text);
+                var secondaryBrush = GetBrush(ThemeResources.SecondaryText);
+                var primaryBrush = GetBrush(ThemeResources.Primary);
+
+                // (2) Named controls. Plain text keeps the theme text colour;
+                //     icon buttons are "accent" components → primary.
+                DailyVerseText.Foreground = textBrush;
+                DailyVerseReference.Foreground = secondaryBrush;
+                RefreshVerseButton.Foreground = primaryBrush;
+                BookmarkVerseButton.Foreground = primaryBrush;
+                ShareVerseButton.Foreground = primaryBrush;
+
+                // (3) Item sweep — bold tile labels and icon glyphs use primary.
+                foreach (var ic in FindVisualChildren<ItemsControl>(this))
+                {
+                    if (ic.ItemsSource is null) continue;
+
+                    if (ReferenceEquals(ic.ItemsSource, QuickActions) ||
+                        ReferenceEquals(ic.ItemsSource, PopularDevotionals))
+                    {
+                        RefreshItemsControl(ic, primaryBrush, secondaryBrush, primaryBrush);
+                    }
+                }
+
+                // (4) Custom controls with their own theme DPs.
+                if (FindDescendant<FountRain>(this) is { } rain)
+                {
+                    rain.MatrixColor = primary;
+                    rain.OverlayColor = primary;
+                    rain.IsDarkTheme = isDark;
+                    rain.RefreshFromTheme();
+                }
+
+                TrySetIsDarkTheme(ImageSectionControl, isDark);
+
+                // (5) Recolor any originally non-white, non-theme-surface
+                //     element (background / border) to the primary color.
+                RecolorAccents(this, primary);
+
+                // (6) Root background.
+                if (Background is SolidColorBrush || Background == null)
+                    Background = GetBrush(ThemeResources.PageBackground);
+            }
+            finally
+            {
+                _applyingTheme = false;
+            }
+        }
+
+        // ── Theme helpers ───────────────────────────────────────────────────
+        private static Brush GetBrush(string key)
+        {
+            if (Application.Current?.Resources[key] is Brush b)
+                return b;
+            return Brushes.Transparent;
+        }
+
+        /// <summary>
+        /// Walk every realised container of an ItemsControl and repaint the
+        /// TextBlocks and Controls inside it. Bold text → primary; regular
+        /// text → secondary. Opt-out: set <c>Tag="NoTheme"</c>.
+        /// </summary>
+        private static void RefreshItemsControl(
+            ItemsControl? control, Brush primaryText, Brush secondaryText, Brush icon)
+        {
+            if (control == null) return;
+
+            foreach (var container in EnumerateContainers(control))
+            {
+                foreach (var tb in FindVisualChildren<TextBlock>(container))
+                {
+                    if (Equals(tb.Tag, "NoTheme")) continue;
+
+                    tb.Foreground = tb.FontWeight >= FontWeights.SemiBold
+                        ? primaryText
+                        : secondaryText;
+                }
+
+                // TextBlock is a FrameworkElement, not a Control — it can
+                // never appear in this loop, so there's no double-set.
+                foreach (var ctl in FindVisualChildren<Control>(container))
+                {
+                    if (Equals(ctl.Tag, "NoTheme")) continue;
+                    if (ctl.Foreground is SolidColorBrush) ctl.Foreground = icon;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Walks the visual tree and replaces Background / BorderBrush of
+        /// every element that has a non-neutral colour with the primary
+        /// colour, preserving the original alpha.
+        ///
+        /// "Non-neutral" = anything that isn't a plain grayscale, one of the
+        /// three dark-theme surfaces, or a low-alpha overlay. So anything
+        /// that was originally given a specific accent colour (blue, orange,
+        /// red, whatever) is on-brand after this sweep.
+        ///
+        /// Opt-out per element: set <c>Tag="NoTheme"</c>.
+        /// </summary>
+        private static void RecolorAccents(DependencyObject root, Color primary)
+        {
+            foreach (var fe in FindVisualChildren<FrameworkElement>(root))
+            {
+                if (Equals(fe.Tag, "NoTheme")) continue;
+
+                switch (fe)
+                {
+                    case Control ctl when ctl.Background is SolidColorBrush cbg
+                                      && !IsThemeNeutral(cbg.Color):
+                        ctl.Background = FrozenBrush(
+                            Color.FromArgb(cbg.Color.A, primary.R, primary.G, primary.B));
+                        break;
+
+                    case Border b when b.Background is SolidColorBrush bbg
+                                    && !IsThemeNeutral(bbg.Color):
+                        b.Background = FrozenBrush(
+                            Color.FromArgb(bbg.Color.A, primary.R, primary.G, primary.B));
+                        break;
+                }
+
+                switch (fe)
+                {
+                    case Control ctl when ctl.BorderBrush is SolidColorBrush cbb
+                                      && !IsThemeNeutral(cbb.Color):
+                        ctl.BorderBrush = FrozenBrush(
+                            Color.FromArgb(cbb.Color.A, primary.R, primary.G, primary.B));
+                        break;
+
+                    case Border b when b.BorderBrush is SolidColorBrush bbb
+                                    && !IsThemeNeutral(bbb.Color):
+                        b.BorderBrush = FrozenBrush(
+                            Color.FromArgb(bbb.Color.A, primary.R, primary.G, primary.B));
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// True if <paramref name="c"/> is a neutral theme surface / divider
+        /// that should be left alone by <see cref="RecolorAccents"/>.
+        /// </summary>
+        private static bool IsThemeNeutral(Color c)
+        {
+            // Opaque grayscale → white, black, or any gray (theme surfaces).
+            if (c.A == 255 && c.R == c.G && c.G == c.B) return true;
+
+            // The three opaque dark-theme surfaces MainWindow installs.
+            if (c.A == 255)
+            {
+                if (c == Color.FromRgb(0x10, 0x14, 0x18)) return true;
+                if (c == Color.FromRgb(0x1C, 0x21, 0x28)) return true;
+                if (c == Color.FromRgb(0x23, 0x2A, 0x33)) return true;
+            }
+
+            // Low-alpha grayscale → subtle overlays (dividers, hover tints).
+            if (c.A < 0x80 && c.R == c.G && c.G == c.B) return true;
+
+            return false;
+        }
+
+        private static Brush FrozenBrush(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
+        private static IEnumerable<DependencyObject> EnumerateContainers(ItemsControl control)
+        {
+            for (int i = 0; i < control.Items.Count; i++)
+            {
+                if (control.ItemContainerGenerator.ContainerFromIndex(i) is DependencyObject c)
+                    yield return c;
+            }
+        }
+
+        private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                if (child is T match) return match;
+                if (FindDescendant<T>(child) is { } deeper) return deeper;
+            }
+            return null;
+        }
+
+        private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
+        {
+            int n = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < n; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                if (child is T t) yield return t;
+                foreach (var d in FindVisualChildren<T>(child)) yield return d;
+            }
+        }
+
+        /// <summary>Reflection-free DP setter — uses a virtual call, not reflection.</summary>
+        private static void TrySetIsDarkTheme(DependencyObject? target, bool isDark)
+        {
+            if (target == null) return;
+            var prop = target.GetType().GetProperty("IsDarkTheme");
+            if (prop != null && prop.CanWrite && prop.PropertyType == typeof(bool))
+                prop.SetValue(target, isDark);
+        }
+
+        // ── Image section ───────────────────────────────────────────────────
         private void HookImageSection()
         {
             ImageSectionControl.DatabaseHelper = _databaseHelper;
@@ -111,6 +376,7 @@ namespace FountOfHopeStudyBiblePC.Views
             };
         }
 
+        // ── Quick actions ───────────────────────────────────────────────────
         private void BuildQuickActions()
         {
             App.Log($"BuildQuickActions: Textures.Count={_viewModel.Textures.Count}");
@@ -124,15 +390,14 @@ namespace FountOfHopeStudyBiblePC.Views
             while (uniqueQuickActionImages.Count < 5)
                 uniqueQuickActionImages.Add(string.Empty);
 
-            // ── Create the tiles immediately (no image yet) ─────────────
             var tiles = new[]
             {
-        new QuickAction { Title = "Reader",    Icon = "📖", OnClick = () => _onNavigateToScreen(new Screen.Reader())    },
-        new QuickAction { Title = "Bookmarks", Icon = "🔖", OnClick = () => _onNavigateToScreen(new Screen.Bookmarks()) },
-        new QuickAction { Title = "Notes",     Icon = "📝", OnClick = () => _onNavigateToScreen(new Screen.Notes())     },
-        new QuickAction { Title = "Search",    Icon = "🔍", OnClick = () => _onNavigateToScreen(new Screen.Search())    },
-        new QuickAction { Title = "Settings",  Icon = "⚙",  OnClick = () => _onNavigateToScreen(new Screen.Settings())  },
-    };
+                new QuickAction { Title = "Reader",    Icon = "📖", OnClick = () => _onNavigateToScreen(new Screen.Reader())    },
+                new QuickAction { Title = "Bookmarks", Icon = "🔖", OnClick = () => _onNavigateToScreen(new Screen.Bookmarks()) },
+                new QuickAction { Title = "Notes",     Icon = "📝", OnClick = () => _onNavigateToScreen(new Screen.Notes())     },
+                new QuickAction { Title = "Search",    Icon = "🔍", OnClick = () => _onNavigateToScreen(new Screen.Search())    },
+                new QuickAction { Title = "Settings",  Icon = "⚙",  OnClick = () => _onNavigateToScreen(new Screen.Settings())  },
+            };
 
             for (int i = 0; i < 5; i++)
             {
@@ -140,7 +405,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 QuickActions.Add(tiles[i]);
             }
 
-            // ── Load each image on the background thread; property update triggers rebind ──
             foreach (var tile in tiles)
             {
                 var path = tile.BackgroundImage;
@@ -150,9 +414,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 {
                     var thumb = LoadThumbnail(path);
                     if (thumb == null) return;
-
-                    // BitmapImage is Frozen() inside LoadThumbnail → safe to hand to UI thread.
-                    // Set the property on the UI thread so INotifyPropertyChanged fires there.
                     Dispatcher.Invoke(() => action.BackgroundImageSource = thumb);
                 });
             }
@@ -170,26 +431,21 @@ namespace FountOfHopeStudyBiblePC.Views
             {
                 Uri? uri = null;
 
-                // ── 1. WPF pack URI ──
                 if (pathOrUri.StartsWith("pack://", StringComparison.OrdinalIgnoreCase))
                 {
                     if (Uri.TryCreate(pathOrUri, UriKind.Absolute, out uri))
-                    {
                         App.Log($"LoadThumbnail: pack URI '{uri}'");
-                    }
                     else
                     {
                         App.Log($"LoadThumbnail: → null (invalid pack URI '{pathOrUri}')");
                         return null;
                     }
                 }
-                // ── 2. Absolute filesystem path ──
                 else if (File.Exists(pathOrUri))
                 {
                     uri = new Uri(pathOrUri, UriKind.Absolute);
                     App.Log($"LoadThumbnail: file path '{uri}'");
                 }
-                // ── 3. Relative path ──
                 else
                 {
                     var candidate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, pathOrUri);
@@ -212,10 +468,10 @@ namespace FountOfHopeStudyBiblePC.Views
                 bmp.DecodePixelWidth = decodeWidth;
                 bmp.CacheOption = BitmapCacheOption.OnLoad;
                 bmp.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-                bmp.EndInit();                // ← Line 1
-                bmp.Freeze();                 // ← Line 2 (REQUIRED for cross-thread handoff)
+                bmp.EndInit();
+                bmp.Freeze();
                 App.Log($"LoadThumbnail: → loaded {bmp.PixelWidth}x{bmp.PixelHeight}");
-                return bmp;                   // ← Line 3
+                return bmp;
             }
             catch (Exception ex)
             {

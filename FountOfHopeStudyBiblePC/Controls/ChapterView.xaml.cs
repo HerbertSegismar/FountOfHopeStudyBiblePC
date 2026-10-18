@@ -279,11 +279,15 @@ namespace FountOfHopeStudyBiblePC.Controls
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Render
-        // ═══════════════════════════════════════════════════════════════
         private void RenderAll()
         {
+            // ── CRITICAL: clear the processor cache before every render.
+            //    The cache stores ProcessedVerse objects that hold WPF Run
+            //    instances. Runs can only belong to one parent at a time, so
+            //    re-adding cached runs to a new TextBlock throws. Clearing the
+            //    cache forces ProcessVerse to build fresh runs each render.
+            _processor.ClearCache();
+
             VerseItems.Items.Clear();
 
             foreach (var item in _content)
@@ -401,8 +405,36 @@ namespace FountOfHopeStudyBiblePC.Controls
                     _onTagPress?.Invoke(m, _passage.BookNumber, _passage.Chapter,
                                         verseNumber, _isPrimary));
 
+            // ── DIAGNOSTIC: log every verse built, so we can spot blanks
+            //    without guessing. Fires for every verse, not just empty ones,
+            //    so we can confirm the whole chapter is being processed.
+            App.Log($"BuildVerseBlock: v={verse.VerseNumber} " +
+                    $"rawLen={verse.Text?.Length ?? -1} " +
+                    $"bodyCount={processed.Body.Count} " +
+                    $"raw=<{(verse.Text is { Length: > 0 } s ? s.Substring(0, Math.Min(80, s.Length)) : "")}>");
+
             foreach (var inline in processed.Body)
                 tb.Inlines.Add(inline);
+
+            // ── FALLBACK: if ProcessVerse produced no visible body for a
+            //    non-empty verse.Text, render the tag-stripped raw text so
+            //    the verse never appears blank. This covers unknown tag
+            //    shapes that the parser hasn't been taught yet.
+            if (processed.Body.Count == 0 && !string.IsNullOrWhiteSpace(verse.Text))
+            {
+                var stripped = System.Text.RegularExpressions.Regex
+                    .Replace(verse.Text, "<[^>]+>", "").Trim();
+                if (!string.IsNullOrWhiteSpace(stripped))
+                {
+                    App.Log($"BuildVerseBlock FALLBACK: v={verse.VerseNumber} " +
+                            $"using stripped text <{stripped}>");
+                    tb.Inlines.Add(new Run(stripped)
+                    {
+                        Foreground = new SolidColorBrush(themeColors.TextColor),
+                        FontSize = _viewModel.FontSize,
+                    });
+                }
+            }
 
             if (isBookmarked) tb.Inlines.Add(new Run(" 🔖"));
             if (hasNote) tb.Inlines.Add(new Run(" 📝"));

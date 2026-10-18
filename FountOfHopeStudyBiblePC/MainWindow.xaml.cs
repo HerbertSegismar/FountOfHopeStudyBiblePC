@@ -30,6 +30,9 @@ namespace FountOfHopeStudyBiblePC
             InitializeComponent();
             App.Log("MainWindow ctor - after InitializeComponent");
 
+            // ═══ Install theme resources BEFORE any view is created ═══
+            ThemeResources.Install();
+
             Loaded += (_, _) => App.Log("MainWindow.Loaded - event fired");
 
             _viewModel = new AppViewModel();
@@ -57,12 +60,10 @@ namespace FountOfHopeStudyBiblePC
                         break;
 
                     case nameof(AppViewModel.SecondaryDbName):
-                        // ReaderScreen manages its own _secondaryDatabaseHelper.
                         App.Log($"MainWindow: SecondaryDbName changed → " +
                                 $"{_viewModel.SecondaryDbName} (delegated to ReaderScreen)");
                         break;
 
-                    // ═══ NEW: keep the app bar version label in sync ═══
                     case nameof(AppViewModel.CurrentVersionAbbr):
                     case nameof(AppViewModel.SecondaryVersionAbbr):
                         UpdateAppBar();
@@ -101,9 +102,9 @@ namespace FountOfHopeStudyBiblePC
                         }
                         break;
 
-                    // ═══════════════════════════════════════════════════════
+                    // ═══════════════════════════════════════════════════
                     //  Color picker triggers
-                    // ═══════════════════════════════════════════════════════
+                    // ═══════════════════════════════════════════════════
                     case nameof(AppViewModel.ShowColorThemeDialog):
                         if (_viewModel.ShowColorThemeDialog)
                         {
@@ -270,7 +271,7 @@ namespace FountOfHopeStudyBiblePC
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  Database swap — single source of truth
+        //  Database swap
         // ═══════════════════════════════════════════════════════════════
         private void RefreshPrimaryDatabase()
         {
@@ -386,7 +387,7 @@ namespace FountOfHopeStudyBiblePC
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  Version picker modals — ABBR SET FIRST, THEN DB NAME
+        //  Version pickers
         // ═══════════════════════════════════════════════════════════════
         private void OpenPrimaryVersionModal()
         {
@@ -401,9 +402,6 @@ namespace FountOfHopeStudyBiblePC
                     {
                         App.Log($"MainWindow: primary version picked: {file}");
 
-                        // ═══ FIX: set abbreviation FIRST, then DB name ═══
-                        // Order matters: DB name change triggers ReaderScreen
-                        // rebuild, which reads the abbreviation at that moment.
                         _viewModel.CurrentVersionAbbr =
                             BibleVersionUtils.VersionMap.GetValueOrDefault(file, "Bible");
                         _viewModel.CurrentDbName = file;
@@ -435,7 +433,6 @@ namespace FountOfHopeStudyBiblePC
                     {
                         App.Log($"MainWindow: secondary version picked: {file}");
 
-                        // ═══ FIX: set abbreviation FIRST, then DB name ═══
                         _viewModel.SecondaryVersionAbbr =
                             BibleVersionUtils.VersionMap.GetValueOrDefault(file, "Bible");
                         _viewModel.SecondaryDbName = file;
@@ -524,7 +521,7 @@ namespace FountOfHopeStudyBiblePC
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  Window lifecycle overrides
+        //  Window lifecycle
         // ═══════════════════════════════════════════════════════════════
         protected override void OnSourceInitialized(EventArgs e)
         {
@@ -764,39 +761,25 @@ namespace FountOfHopeStudyBiblePC
             ApplyTheme();
         }
 
+        /// <summary>
+        /// Pushes the current view-model theme into <see cref="ThemeManager"/>,
+        /// then asks <see cref="ThemeResources"/> to refresh <c>App.Resources</c>.
+        /// Every <c>{DynamicResource …}</c> in the app repaints; every view that
+        /// subscribes to <c>ThemeManager.Changed</c> (HomeScreen, FountRain, …)
+        /// gets its own callback via the earlier subscription.
+        /// </summary>
         private void ApplyTheme()
         {
             var primary = _viewModel.SelectedColor ?? DefaultPrimaryColor;
             App.Log($"ApplyTheme: dark={_viewModel.DarkTheme}, primary={primary}");
 
-            ThemeManager.PrimaryColor = primary;
-            ThemeManager.DarkTheme = _viewModel.DarkTheme;
-            ThemeManager.IsCustomColor = _viewModel.IsCustomColor;
+            ThemeManager.Apply(primary, _viewModel.DarkTheme, _viewModel.IsCustomColor);
 
-            var res = Application.Current.Resources;
-
-            res["AppPrimaryColor"] = primary;
-
-            if (_viewModel.DarkTheme)
-            {
-                res["AppBackground"] = new SolidColorBrush(Color.FromRgb(0x10, 0x14, 0x18));
-                res["CardBackground"] = new SolidColorBrush(Color.FromRgb(0x1C, 0x21, 0x28));
-                res["CardBackgroundAlt"] = new SolidColorBrush(Color.FromRgb(0x23, 0x2A, 0x33));
-                res["OnSurface"] = new SolidColorBrush(Color.FromRgb(0xE6, 0xEA, 0xF0));
-                res["OnSurfaceVariant"] = new SolidColorBrush(Color.FromRgb(0xAA, 0xB4, 0xC0));
-                res["DividerBrush"] = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
-                res["HoverOverlayBrush"] = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
-            }
-            else
-            {
-                res["AppBackground"] = new SolidColorBrush(Color.FromRgb(0xF5, 0xF5, 0xF5));
-                res["CardBackground"] = new SolidColorBrush(Colors.White);
-                res["CardBackgroundAlt"] = new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0));
-                res["OnSurface"] = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A));
-                res["OnSurfaceVariant"] = new SolidColorBrush(Color.FromRgb(0x6B, 0x72, 0x80));
-                res["DividerBrush"] = new SolidColorBrush(Color.FromArgb(0x22, 0x00, 0x00, 0x00));
-                res["HoverOverlayBrush"] = new SolidColorBrush(Color.FromArgb(0x33, 0x00, 0x00, 0x00));
-            }
+            // Belt-and-braces: if the values happened to match ThemeManager's
+            // existing ones, no Changed event fires — so push the brushes
+            // directly once. Also covers the very first call from
+            // HookViewModelEvents() before any UI has subscribed.
+            ThemeResources.Refresh();
         }
 
         // ── Navigation ───────────────────────────────────────────────

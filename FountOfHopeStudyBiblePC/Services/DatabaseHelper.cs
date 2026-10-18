@@ -451,18 +451,20 @@ namespace FountOfHopeStudyBiblePC.Services
                     {
                         while (r.Read())
                         {
-                            try
-                            {
-                                var verseNumber = r.GetInt32(r.GetOrdinal(ColumnVerse));
-                                var text = r.GetString(r.GetOrdinal(ColumnText));
-                                verses.Add(new Verse(verseNumber, text));
-                            }
-                            catch { }
+                            var verseNumber = r.GetInt32(r.GetOrdinal(ColumnVerse));
+                            var textIdx = r.GetOrdinal(ColumnText);
+                            // NULL text → empty string, matching Kotlin's
+                            // cursor.getString() semantics. Never drop the row.
+                            var text = r.IsDBNull(textIdx) ? "" : r.GetString(textIdx);
+                            verses.Add(new Verse(verseNumber, text));
                         }
                     },
                     bookNumber, chapter);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                App.Log($"!!! GetVerses FAILED book={bookNumber} ch={chapter}: {ex}");
+            }
             return verses;
         }
 

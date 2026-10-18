@@ -1,6 +1,5 @@
 ﻿// Helpers/VerseTextProcessor.cs
 using FountOfHopeStudyBiblePC.Models;
-using Microsoft.Windows.Themes;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,7 +13,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
 {
     /// <summary>
     /// C# port of the Kotlin VerseTextProcessor.
-    /// Parses Bible verse text with light XML (<J>, <S>, <f>, <t>, <n>, …)
+    /// Parses Bible verse text with light XML (&lt;J&gt;, &lt;S&gt;, &lt;f&gt;, &lt;t&gt;, &lt;n&gt;, …)
     /// and produces a List&lt;Inline&gt; ready to be dropped into a TextBlock.
     /// </summary>
     public class VerseTextProcessor
@@ -26,6 +25,17 @@ namespace FountOfHopeStudyBiblePC.Helpers
             new(@"[.*+?^${}()|\[\]\\]", RegexOptions.Compiled);
         private static readonly Regex WordRegex =
             new(@"^[\p{L}\p{M}'-]+$", RegexOptions.Compiled);
+
+        // ── Preprocessing regexes (used when ShowStrongs = false) ─────
+        // 1. Bare Strong's number wrapped in <S>…</S> — strip content.
+        private static readonly Regex BareStrongsRegex =
+            new(@"<S[^>]*>[HG]?\d+</S>", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        // 2. Self-closing <S ... /> — strip content (none).
+        private static readonly Regex SelfClosingStrongsRegex =
+            new(@"<S[^>]*/>", RegexOptions.Compiled);
+        // 3. Remaining <S> tags (content is real text) — strip tags only.
+        private static readonly Regex StrongsTagOnlyRegex =
+            new(@"</?S[^>]*>", RegexOptions.Compiled);
 
         private readonly LinkedList<string> _cacheOrder = new();
         private readonly Dictionary<string, ProcessedVerse> _cache = new();
@@ -53,8 +63,13 @@ namespace FountOfHopeStudyBiblePC.Helpers
             var processedText = verseText;
             if (!options.ShowStrongs)
             {
-                processedText = Regex.Replace(processedText,
-                    "<S[^>]*>.*?</S>", "", RegexOptions.Singleline);
+                // Strip bare Strong's numbers (H123 / G456 / 789) entirely,
+                // self-closing <S .../>, then any remaining <S> tags but
+                // PRESERVE their content — some modules wrap words inside
+                // <S>...</S>, and stripping content wipes the verse body.
+                processedText = BareStrongsRegex.Replace(processedText, "");
+                processedText = SelfClosingStrongsRegex.Replace(processedText, "");
+                processedText = StrongsTagOnlyRegex.Replace(processedText, "");
                 processedText = Regex.Replace(processedText, "\\s+", " ");
             }
 
@@ -90,8 +105,24 @@ namespace FountOfHopeStudyBiblePC.Helpers
                 options.ShowHeaders && headerInlines.Count > 0 ? headerInlines : null,
                 bodyInlines);
 
+            // ── Diagnostic: log any verse that resolves to no visible text
+            //    so we can identify blank-render cases without guessing.
+            if (bodyInlines.Count == 0 && (result.Header == null || result.Header.Count == 0))
+            {
+                App.Log($"VerseTextProcessor: BLANK result");
+                App.Log($"  raw       : <{verseText}>");
+                App.Log($"  processed : <{processedText}>");
+                App.Log($"  showStrongs: {options.ShowStrongs}");
+            }
+
             CacheAdd(cacheKey, result);
             return result;
+        }
+
+        public void ClearCache()
+        {
+            _cache.Clear();
+            _cacheOrder.Clear();
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -201,7 +232,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
             var root = new List<TreeNode>();
             var stack = new Stack<List<TreeNode>>();
             var current = root;
-            int elementIndex = -1;
             var elementStack = new List<TreeNode.ElementNode>();
 
             foreach (var node in nodes)
@@ -216,7 +246,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
                         current.Add(el);
                         stack.Push(current);
                         elementStack.Add(el);
-                        elementIndex = elementStack.Count - 1;
                         current = el.Children;
                         break;
                     case ParsedNode.ClosingTag:
@@ -281,8 +310,13 @@ namespace FountOfHopeStudyBiblePC.Helpers
                     break;
 
                 case TreeNode.ElementNode el:
-                    if (el.Tag == "n") return;   // note refs are hidden
+                    if (el.Tag == "n") return;
 
+                    // ── Match Kotlin exactly: <t> does NOT set IsHeader.
+                    //    Kotlin's original code:
+                    //      "t" -> context.copy(isTextContainer = true, currentTag = node.tag)
+                    //    All text always goes to the body; <t> is only a
+                    //    styling hint (title font), not a header-routing flag.
                     var newContext = el.Tag switch
                     {
                         "J" => context with
