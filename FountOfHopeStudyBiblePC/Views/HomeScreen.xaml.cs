@@ -1,4 +1,9 @@
 ﻿// Views/HomeScreen.xaml.cs
+using FountOfHopeStudyBiblePC.Controls;
+using FountOfHopeStudyBiblePC.Helpers;
+using FountOfHopeStudyBiblePC.Models;
+using FountOfHopeStudyBiblePC.Services;
+using FountOfHopeStudyBiblePC.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -8,14 +13,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using FountOfHopeStudyBiblePC.Controls;
-using FountOfHopeStudyBiblePC.Helpers;
-using FountOfHopeStudyBiblePC.Models;
-using FountOfHopeStudyBiblePC.Services;
-using FountOfHopeStudyBiblePC.ViewModels;
 
 namespace FountOfHopeStudyBiblePC.Views
 {
@@ -104,10 +105,26 @@ namespace FountOfHopeStudyBiblePC.Views
             App.Log($"HomeScreen ctor - COMPLETE, total {sw.ElapsedMilliseconds}ms");
         }
 
-        // ── Lifecycle ───────────────────────────────────────────────────────
+        private void SetRandomBackgroundImage()
+        {
+            var textures = _viewModel.Textures;
+            if (textures is null || textures.Count == 0)
+                return;
+
+            var path = ImageAssets.GetAssetImagePath(textures[_rng.Next(textures.Count)]);
+
+            Task.Run(() =>
+            {
+                var img = LoadThumbnail(path, decodeWidth: 900);
+                if (img is not null)
+                    Dispatcher.Invoke(() => DailyVerseBackgroundImage.Source = img);
+            });
+        }
+
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            // Defer the DB query so the initial frame paints immediately
+            SetRandomBackgroundImage();
+
             Dispatcher.BeginInvoke(new Action(async () =>
             {
                 var sw = Stopwatch.StartNew();
@@ -160,14 +177,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 var textBrush = GetBrush(ThemeResources.Text);
                 var secondaryBrush = GetBrush(ThemeResources.SecondaryText);
                 var primaryBrush = GetBrush(ThemeResources.Primary);
-
-                // (2) Named controls. Plain text keeps the theme text colour;
-                //     icon buttons are "accent" components → primary.
-                DailyVerseText.Foreground = textBrush;
-                DailyVerseReference.Foreground = secondaryBrush;
-                RefreshVerseButton.Foreground = primaryBrush;
-                BookmarkVerseButton.Foreground = primaryBrush;
-                ShareVerseButton.Foreground = primaryBrush;
 
                 // (3) Item sweep — bold tile labels and icon glyphs use primary.
                 foreach (var ic in FindVisualChildren<ItemsControl>(this))
@@ -368,12 +377,12 @@ namespace FountOfHopeStudyBiblePC.Views
         // ── Image section ───────────────────────────────────────────────────
         private void HookImageSection()
         {
+            ImageSectionControl.ViewModel = _viewModel;
             ImageSectionControl.DatabaseHelper = _databaseHelper;
-            ImageSectionControl.ContinueReadingRequested += () =>
-            {
-                var verse = _dailyVerses?.FirstOrDefault();
-                _onNavigateToReader(BuildSelection(verse));
-            };
+            ImageSectionControl.IsDarkTheme = ThemeManager.DarkTheme;
+
+            ImageSectionControl.PassageSelected += (_, selection) =>
+                _onNavigateToReader(selection);
         }
 
         // ── Quick actions ───────────────────────────────────────────────────
@@ -486,19 +495,20 @@ namespace FountOfHopeStudyBiblePC.Views
                 action.OnClick?.Invoke();
         }
 
-        // ── Daily verse ─────────────────────────────────────────────────────
         private async Task RefreshDailyVerseAsync()
         {
             if (_databaseHelper is null)
             {
-                DailyVerseText.Text = "No database available.";
-                DailyVerseReference.Text = string.Empty;
+                _dailyVerses = null;
+                RenderDailyVerse();
                 return;
             }
 
-            DailyVerseText.Text = "Loading…";
-            _dailyVerses = await _databaseHelper.GetRandomVersesAsync();
+            // Kotlin shows the skeleton whenever verses is null/empty.
+            _dailyVerses = null;
+            RenderDailyVerse();
 
+            _dailyVerses = await _databaseHelper.GetRandomVersesAsync();
             RenderDailyVerse();
             await UpdateBookmarkStateAsync();
         }
@@ -507,20 +517,55 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             if (_dailyVerses is null || _dailyVerses.Count == 0)
             {
-                DailyVerseText.Text = "Tap ⟳ for a verse.";
-                DailyVerseReference.Text = string.Empty;
+                VerseContentPanel.Visibility = Visibility.Collapsed;
+                VerseSkeletonPanel.Visibility = Visibility.Visible;
                 return;
             }
 
+            VerseContentPanel.Visibility = Visibility.Visible;
+            VerseSkeletonPanel.Visibility = Visibility.Collapsed;
+
             var first = _dailyVerses[0];
-            DailyVerseText.Text = SimpleVerseProcessor.StripXmlTags(first.Text);
             DailyVerseReference.Text = $"{first.BookName} {first.Chapter}:{first.VerseNumber}";
+
+            DailyVerseText.Inlines.Clear();
+            for (int i = 0; i < _dailyVerses.Count; i++)
+            {
+                var verse = _dailyVerses[i];
+
+                // Bold verse number (15pt) – matches Kotlin SpanStyle
+                DailyVerseText.Inlines.Add(new Run($"{verse.VerseNumber} ")
+                {
+                    FontSize = 15,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = Brushes.White
+                });
+
+                // Body text
+                DailyVerseText.Inlines.Add(new Run(SimpleVerseProcessor.StripXmlTags(verse.Text)));
+
+                if (i < _dailyVerses.Count - 1)
+                    DailyVerseText.Inlines.Add(new LineBreak());
+            }
         }
 
         private async void RefreshVerseButton_Click(object sender, RoutedEventArgs e)
         {
             e.Handled = true;
-            await RefreshDailyVerseAsync();
+
+            RefreshIconText.Visibility = Visibility.Collapsed;
+            RefreshSpinner.Visibility = Visibility.Visible;
+            try
+            {
+                await RefreshDailyVerseAsync();
+                // Kotlin uses a 500 ms minimum so the spinner is visible.
+                await Task.Delay(500);
+            }
+            finally
+            {
+                RefreshIconText.Visibility = Visibility.Visible;
+                RefreshSpinner.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void DailyVerseCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -545,20 +590,20 @@ namespace FountOfHopeStudyBiblePC.Views
                 verse.VerseNumber);
         }
 
-        // ── Bookmark / share ────────────────────────────────────────────────
         private async Task UpdateBookmarkStateAsync()
         {
             if (_databaseHelper is null || _dailyVerses is null || _dailyVerses.Count == 0)
             {
                 _isBookmarked = false;
-                BookmarkVerseButton.Content = "🔖";
+                BookmarkIconText.Opacity = 0.6;
                 return;
             }
 
-            _isBookmarked = await BookmarkHelper.IsBookmarkedAsync(_dailyVerses[0], _databaseHelper)
-                                                .ConfigureAwait(true);
-            BookmarkVerseButton.Content = _isBookmarked ? "🔖" : "🔖";
-            BookmarkVerseButton.Opacity = _isBookmarked ? 1.0 : 0.6;
+            _isBookmarked = await BookmarkHelper
+                .IsBookmarkedAsync(_dailyVerses[0], _databaseHelper)
+                .ConfigureAwait(true);
+
+            BookmarkIconText.Opacity = _isBookmarked ? 1.0 : 0.6;
         }
 
         private async void BookmarkVerseButton_Click(object sender, RoutedEventArgs e)

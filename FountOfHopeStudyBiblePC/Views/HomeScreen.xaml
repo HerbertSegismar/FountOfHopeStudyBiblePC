@@ -20,59 +20,132 @@
             <!-- ── ImageSection(...) ─────────────────────────────────────── -->
             <controls:ImageSection x:Name="ImageSectionControl" Margin="0,8,0,0"/>
 
-            <!-- ── DailyVerseCard(...) ───────────────────────────────────── -->
-            <Border x:Name="DailyVerseCard"
-                    Margin="16,16,16,0"
-                    Padding="16"
-                    CornerRadius="18"
-                    Cursor="Hand"
-                    Background="{DynamicResource CardBackground}"
-                    MouseLeftButtonUp="DailyVerseCard_MouseLeftButtonUp">
-                <StackPanel>
-                    <DockPanel LastChildFill="False">
-                        <TextBlock Text="Verse of the Day"
-                                   DockPanel.Dock="Left"
-                                   FontSize="16"
-                                   FontWeight="Bold"
-                                   Foreground="{DynamicResource OnSurface}"/>
-                        <Button x:Name="RefreshVerseButton"
-                                DockPanel.Dock="Right"
-                                Content="⟳"
-                                Style="{StaticResource IconButtonStyle}"
-                                ToolTip="New verse"
-                                Click="RefreshVerseButton_Click"/>
-                    </DockPanel>
+            <!-- Daily Verse Card -->
+<Border x:Name="DailyVerseCard"
+        Margin="16,0"
+        CornerRadius="20"
+        MouseLeftButtonUp="DailyVerseCard_MouseLeftButtonUp"
+        Cursor="Hand">
+    <Border.Effect>
+        <DropShadowEffect BlurRadius="20" ShadowDepth="6" Direction="270"
+                          Color="Black" Opacity="0.35"/>
+    </Border.Effect>
+    <Grid MinHeight="100">
+        <!-- Random background image -->
+        <Image x:Name="DailyVerseBackgroundImage" Stretch="UniformToFill" Margin="0,12,0,-12"/>
 
-                    <TextBlock x:Name="DailyVerseText"
-                               Margin="0,12,0,0"
-                               FontSize="15"
-                               LineHeight="22"
-                               TextWrapping="Wrap"
-                               Foreground="{DynamicResource OnSurface}"
-                               Text="Loading…"/>
+        <!-- Gradient overlay (matches Kotlin: 0.7 / 0.5 / 0.6 black) -->
+        <Border ClipToBounds="True" Margin="0,12,0,-12">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#B3000000" Offset="0.0"/>
+                    <GradientStop Color="#80000000" Offset="0.5"/>
+                    <GradientStop Color="#99000000" Offset="1.0"/>
+                </LinearGradientBrush>
+            </Border.Background>
+        </Border>
 
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header: title + refresh -->
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Fresh Revelations"
+                           FontSize="20" FontWeight="Bold"
+                           Foreground="White" VerticalAlignment="Center"/>
+                <Button x:Name="RefreshVerseButton"
+                        Grid.Column="1" Width="32" Height="32"
+                        Background="Transparent" BorderThickness="0"
+                        Click="RefreshVerseButton_Click" Cursor="Hand">
+                    <Grid>
+                        <TextBlock x:Name="RefreshIconText" Text="⟳"
+                                   FontSize="18" Foreground="White"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock x:Name="RefreshSpinner" Text="◌"
+                                   FontSize="18" Foreground="White"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Visibility="Collapsed"
+                                   RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <RotateTransform x:Name="SpinnerRotate"/>
+                            </TextBlock.RenderTransform>
+                            <TextBlock.Triggers>
+                                <EventTrigger RoutedEvent="Loaded">
+                                    <BeginStoryboard>
+                                        <Storyboard RepeatBehavior="Forever">
+                                            <DoubleAnimation Storyboard.TargetName="SpinnerRotate"
+                                                             Storyboard.TargetProperty="Angle"
+                                                             From="0" To="360"
+                                                             Duration="0:0:1"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </EventTrigger>
+                            </TextBlock.Triggers>
+                        </TextBlock>
+                    </Grid>
+                </Button>
+            </Grid>
+
+            <!-- HorizontalDivider -->
+            <Border Grid.Row="1" Height="1" Background="White" Margin="0,2,0,25"/>
+
+            <!-- Verse content OR skeleton -->
+            <Grid Grid.Row="2">
+                <StackPanel x:Name="VerseContentPanel">
                     <TextBlock x:Name="DailyVerseReference"
-                               Margin="0,8,0,0"
-                               FontSize="13"
-                               FontStyle="Italic"
-                               Foreground="{DynamicResource OnSurfaceVariant}"/>
-
-                    <StackPanel Orientation="Horizontal"
-                                HorizontalAlignment="Right"
-                                Margin="0,12,0,0">
-                        <Button x:Name="BookmarkVerseButton"
-                                Content="🔖"
-                                Style="{StaticResource IconButtonStyle}"
-                                ToolTip="Bookmark"
-                                Click="BookmarkVerseButton_Click"/>
-                        <Button x:Name="ShareVerseButton"
-                                Content="↗"
-                                Style="{StaticResource IconButtonStyle}"
-                                ToolTip="Share"
-                                Click="ShareVerseButton_Click"/>
-                    </StackPanel>
+                               FontSize="14" Foreground="#E6FFFFFF"
+                               Margin="0,0,0,8"/>
+                    <TextBlock x:Name="DailyVerseText"
+                               FontSize="18" LineHeight="22"
+                               TextWrapping="Wrap" TextAlignment="Justify"
+                               Foreground="White"/>
                 </StackPanel>
-            </Border>
+                <StackPanel x:Name="VerseSkeletonPanel" Visibility="Collapsed">
+                    <Border Height="20" Background="#4DFFFFFF" CornerRadius="4" Margin="0,0,0,8"/>
+                    <Border Height="20" Background="#4DFFFFFF" CornerRadius="4" Margin="0,0,0,8"/>
+                    <Border Height="20" Background="#4DFFFFFF" CornerRadius="4"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Bookmark + Share -->
+            <Grid Grid.Row="3" Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button x:Name="BookmarkVerseButton"
+                        Width="40" Height="40"
+                        Background="Transparent" BorderThickness="0"
+                        HorizontalAlignment="Left"
+                        Click="BookmarkVerseButton_Click" Cursor="Hand">
+                    <TextBlock x:Name="BookmarkIconText" Text="🔖"
+                               FontSize="18" Foreground="White"
+                               Opacity="0.6"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </Button>
+                <Border Grid.Column="1"
+                        BorderBrush="White" BorderThickness="1"
+                        CornerRadius="8" Padding="16,8"
+                        Background="Transparent" Cursor="Hand"
+                        MouseLeftButtonUp="ShareVerseButton_Click">
+                    <TextBlock x:Name="ShareVerseButton" Text="Share" Foreground="White"/>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</Border>
 
             <!-- ── "Quick Access" + QuickAccessCarousel(...) ─────────────── -->
             <TextBlock Text="Quick Access"
