@@ -5,78 +5,78 @@
              xmlns:controls="clr-namespace:FountOfHopeStudyBiblePC.Controls"
              x:Name="ReaderRoot">
 
-	<Grid Background="{DynamicResource AppBackground}">
+    <Grid Background="{DynamicResource AppBackground}">
 
-		<!-- ── Mode host: Single / Synced / Independent ────────────────── -->
-		<ContentControl x:Name="ReaderHost"
+        <!-- ── Mode host: Single / Synced / Independent ────────────────── -->
+        <ContentControl x:Name="ReaderHost"
                         HorizontalAlignment="Stretch"
                         VerticalAlignment="Stretch"/>
 
-		<!-- ── FAB / word-highlight color picker (bottom center) ──────── -->
-		<Grid HorizontalAlignment="Center"
+        <!-- ── FAB / word-highlight color picker (bottom center) ──────── -->
+        <Grid HorizontalAlignment="Center"
               VerticalAlignment="Bottom"
               Margin="0,0,0,8">
 
-			<!-- Word-highlight color picker (visible when in highlight mode) -->
-			<Border x:Name="HighlightColorBar"
+            <!-- Word-highlight color picker (visible when in highlight mode) -->
+            <Border x:Name="HighlightColorBar"
                     Visibility="Collapsed"
                     CornerRadius="25"
                     Padding="8,6"
                     Background="#1A7FB2FF">
-				<StackPanel x:Name="HighlightColorList"
+                <StackPanel x:Name="HighlightColorList"
                             Orientation="Horizontal"/>
-			</Border>
+            </Border>
 
-			<!-- Fullscreen FAB -->
-			<Button x:Name="FullscreenFab"
+            <!-- Fullscreen FAB -->
+            <Button x:Name="FullscreenFab"
                     Width="50" Height="50"
                     Cursor="Hand"
                     Click="FullscreenFab_Click">
-				<Button.Template>
-					<ControlTemplate TargetType="Button">
-						<Border CornerRadius="25"
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border CornerRadius="25"
                                 Background="{DynamicResource AccentBrush}">
-							<TextBlock x:Name="FabIcon"
+                            <TextBlock x:Name="FabIcon"
                                        Text="⛶"
                                        FontSize="22"
                                        Foreground="White"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"/>
-						</Border>
-					</ControlTemplate>
-				</Button.Template>
-			</Button>
-		</Grid>
+                        </Border>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </Grid>
 
-		<!-- ── Options menu (top-end) ──────────────────────────────────── -->
-		<Popup x:Name="OptionsMenuPopup"
+        <!-- ── Options menu (top-end) ──────────────────────────────────── -->
+        <Popup x:Name="OptionsMenuPopup"
                Placement="Top"
                HorizontalOffset="-20"
                VerticalOffset="40"
                StaysOpen="False">
-			<Border x:Name="OptionsMenuBorder"
+            <Border x:Name="OptionsMenuBorder"
                     CornerRadius="12"
                     Padding="4"
                     Background="{DynamicResource CardBackground}"
                     MinWidth="200">
-				<StackPanel>
-					<Button Content="Background Texture"
+                <StackPanel>
+                    <Button Content="Background Texture"
                             HorizontalContentAlignment="Left"
                             Padding="12,8"
                             Click="BackgroundTextureMenu_Click"
                             Background="Transparent"
                             BorderThickness="0"
                             Foreground="{DynamicResource OnSurface}"/>
-					<TextBlock Text="Overlay Opacity"
+                    <TextBlock Text="Overlay Opacity"
                                Margin="12,12,12,4"
                                Foreground="{DynamicResource OnSurfaceVariant}"/>
-					<Slider x:Name="OverlayOpacitySlider"
+                    <Slider x:Name="OverlayOpacitySlider"
                             Margin="12,0,12,12"
                             Minimum="0" Maximum="1"
                             ValueChanged="OverlayOpacitySlider_ValueChanged"/>
-				</StackPanel>
-			</Border>
-		</Popup>
+                </StackPanel>
+            </Border>
+        </Popup>
 
-	</Grid>
+    </Grid>
 </UserControl>

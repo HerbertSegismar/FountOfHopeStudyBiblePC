@@ -3,6 +3,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Fount of Hope Study Bible"
+        Icon="/Assets/logo/fohs-512x512.png"
         Height="900" Width="640"
         MinHeight="520" MinWidth="380"
         Background="{DynamicResource AppBackground}"

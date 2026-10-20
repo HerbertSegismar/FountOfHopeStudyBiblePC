@@ -1,13 +1,20 @@
 <UserControl x:Class="FountOfHopeStudyBiblePC.Controls.ReaderAppBar"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks">
     <Grid>
         <!-- Left: back -->
         <Button x:Name="BackButton" Click="BackButton_Click"
                 Width="30" Height="30" HorizontalAlignment="Left"
                 VerticalAlignment="Center" Margin="6,0,0,0"
                 Background="Transparent" BorderThickness="0"
-                Cursor="Hand"/>
+                Cursor="Hand" ToolTip="Back">
+            <iconPacks:PackIconMaterial x:Name="BackIcon"
+                                        Kind="ArrowLeft"
+                                        Width="20" Height="20"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"/>
+        </Button>
 
         <!-- Center: title row (weighted) -->
         <Grid x:Name="TitleRow" Margin="40,0,300,0" VerticalAlignment="Center">

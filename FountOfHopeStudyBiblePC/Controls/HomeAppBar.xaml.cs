@@ -33,7 +33,10 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             PopulateContent();
 
-            // Re-render when theme or header color changes
+            // Re-render when theme changes.
+            // ── DarkTheme:       the theme toggle icon (sun ↔ moon) swaps.
+            // ── HeaderButtonsColor: the dropdown menu items pick up the
+            //    new color. (The app bar itself stays white — see below.)
             _viewModel.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(AppViewModel.DarkTheme) ||
@@ -57,7 +60,9 @@ namespace FountOfHopeStudyBiblePC.Controls
         private void PopulateContent()
         {
             TitleText.Text = GetScreenTitle(_currentScreen);
-            TitleText.Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor);
+
+            // App bar content sits on the primary-color gradient → always white.
+            TitleText.Foreground = Brushes.White;
 
             ActionsPanel.Children.Clear();
 
@@ -128,10 +133,9 @@ namespace FountOfHopeStudyBiblePC.Controls
                 Height = 18,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
+                // App bar overlays the primary-color gradient — always white.
+                Foreground = Brushes.White,
             };
-            // DynamicResource equivalent — repaints when ThemeResources.Refresh()
-            // swaps AppIconBrush on every theme change.
-            icon.SetResourceReference(Control.ForegroundProperty, ThemeResources.Icon);
 
             btn.Content = icon;
             btn.Click += (_, _) => onClick();
@@ -159,8 +163,9 @@ namespace FountOfHopeStudyBiblePC.Controls
                 Height = 20,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
+                // App bar overlays the primary-color gradient — always white.
+                Foreground = Brushes.White,
             };
-            icon.SetResourceReference(Control.ForegroundProperty, ThemeResources.Icon);
             btn.Content = icon;
 
             var menu = BuildNavigationMenu();
@@ -174,6 +179,10 @@ namespace FountOfHopeStudyBiblePC.Controls
             return btn;
         }
 
+        // ═══════════════════════════════════════════════════════════
+        //  Dropdown menu — sits on the modal background, NOT the app
+        //  bar gradient, so its icons/text remain theme-aware.
+        // ═══════════════════════════════════════════════════════════
         private ContextMenu BuildNavigationMenu()
         {
             var menu = new ContextMenu
@@ -204,6 +213,8 @@ namespace FountOfHopeStudyBiblePC.Controls
                     Height = 16,
                     VerticalAlignment = VerticalAlignment.Center,
                 };
+                // Menu icon is drawn on the modal background, so keep the
+                // theme-derived color here (not white).
                 menuIcon.SetResourceReference(Control.ForegroundProperty, ThemeResources.Icon);
 
                 var mi = new MenuItem

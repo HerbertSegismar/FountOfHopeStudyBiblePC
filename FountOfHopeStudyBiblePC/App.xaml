@@ -20,6 +20,86 @@
             <SolidColorBrush x:Key="AppPrimaryBrush" Color="{DynamicResource AppPrimaryColor}"/>
             <SolidColorBrush x:Key="AccentBrush"     Color="{DynamicResource AppPrimaryColor}"/>
 
+            <!-- ═══════════════════════════════════════════════════════════
+                 MODERN SCROLLBAR — Material 3 style, applied app-wide
+                 ─ Thumb: 8px wide, rounded pill, 60% opacity idle
+                 ─ Track: invisible (transparent) with no arrow buttons
+                 ─ Page-click still works: invisible repeat buttons
+                 ─ Theme-aware via DynamicResource OnSurfaceVariant
+
+                 Declared BEFORE ModernScrollBar because ModernScrollBar
+                 references ModernScrollBarThumb via StaticResource.
+                 ═══════════════════════════════════════════════════════════ -->
+            <Style x:Key="ModernScrollBarThumb" TargetType="Thumb">
+                <Setter Property="OverridesDefaultStyle" Value="True"/>
+                <Setter Property="IsTabStop" Value="False"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Thumb">
+                            <Border x:Name="Bd"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="3"
+                                    Margin="1"/>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Opacity" Value="1"/>
+                                </Trigger>
+                                <Trigger Property="IsDragging" Value="True">
+                                    <Setter TargetName="Bd" Property="Opacity" Value="1"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Setter Property="Background" Value="{DynamicResource OnSurfaceVariant}"/>
+                <Setter Property="Opacity" Value="0.6"/>
+            </Style>
+
+            <Style x:Key="ModernScrollBar" TargetType="ScrollBar">
+                <Setter Property="OverridesDefaultStyle" Value="True"/>
+                <Setter Property="SnapsToDevicePixels" Value="True"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ScrollBar">
+                            <Grid Background="Transparent">
+                                <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                    <Track.DecreaseRepeatButton>
+                                        <RepeatButton Command="ScrollBar.PageUpCommand"
+                                                      Opacity="0"
+                                                      Focusable="False"
+                                                      IsTabStop="False"/>
+                                    </Track.DecreaseRepeatButton>
+                                    <Track.Thumb>
+                                        <Thumb Style="{StaticResource ModernScrollBarThumb}"/>
+                                    </Track.Thumb>
+                                    <Track.IncreaseRepeatButton>
+                                        <RepeatButton Command="ScrollBar.PageDownCommand"
+                                                      Opacity="0"
+                                                      Focusable="False"
+                                                      IsTabStop="False"/>
+                                    </Track.IncreaseRepeatButton>
+                                </Track>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <Trigger Property="Orientation" Value="Vertical">
+                        <Setter Property="Width" Value="8"/>
+                        <Setter Property="MinWidth" Value="8"/>
+                    </Trigger>
+                    <Trigger Property="Orientation" Value="Horizontal">
+                        <Setter Property="Height" Value="8"/>
+                        <Setter Property="MinHeight" Value="8"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- Implicit style — applies to every ScrollBar in the app that
+                 doesn't explicitly override the style itself. -->
+            <Style TargetType="ScrollBar" BasedOn="{StaticResource ModernScrollBar}"/>
+
             <!-- ══ Quick-action tile style ══ -->
             <Style x:Key="QuickActionButtonStyle" TargetType="Button">
                 <Setter Property="Width" Value="112"/>
@@ -37,7 +117,6 @@
                                     ClipToBounds="True"
                                     Background="{DynamicResource CardBackgroundAlt}">
                                 <Grid>
-                                    <!-- ══ CHANGED: bind to the pre-loaded ImageSource, not the string path ══ -->
                                     <Image x:Name="Bg"
                                            Source="{Binding BackgroundImageSource}"
                                            Stretch="UniformToFill"

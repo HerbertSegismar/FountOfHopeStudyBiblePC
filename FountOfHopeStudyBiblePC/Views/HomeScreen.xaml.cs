@@ -22,7 +22,7 @@ namespace FountOfHopeStudyBiblePC.Views
 {
     public partial class HomeScreen : UserControl
     {
-        // ── Dependencies ────────────────────────────────────────────────────
+        public AppViewModel ViewModel => _viewModel;
         private readonly AppViewModel _viewModel;
         private readonly Action<PassageSelection> _onNavigateToReader;
         private readonly Action<Screen> _onNavigateToScreen;
@@ -117,7 +117,7 @@ namespace FountOfHopeStudyBiblePC.Views
             {
                 var img = LoadThumbnail(path, decodeWidth: 900);
                 if (img is not null)
-                    Dispatcher.Invoke(() => DailyVerseBackgroundImage.Source = img);
+                    Dispatcher.Invoke(() => DailyVerseBackgroundBrush.ImageSource = img);
             });
         }
 
@@ -244,8 +244,6 @@ namespace FountOfHopeStudyBiblePC.Views
                         : secondaryText;
                 }
 
-                // TextBlock is a FrameworkElement, not a Control — it can
-                // never appear in this loop, so there's no double-set.
                 foreach (var ctl in FindVisualChildren<Control>(container))
                 {
                     if (Equals(ctl.Tag, "NoTheme")) continue;
@@ -254,18 +252,6 @@ namespace FountOfHopeStudyBiblePC.Views
             }
         }
 
-        /// <summary>
-        /// Walks the visual tree and replaces Background / BorderBrush of
-        /// every element that has a non-neutral colour with the primary
-        /// colour, preserving the original alpha.
-        ///
-        /// "Non-neutral" = anything that isn't a plain grayscale, one of the
-        /// three dark-theme surfaces, or a low-alpha overlay. So anything
-        /// that was originally given a specific accent colour (blue, orange,
-        /// red, whatever) is on-brand after this sweep.
-        ///
-        /// Opt-out per element: set <c>Tag="NoTheme"</c>.
-        /// </summary>
         private static void RecolorAccents(DependencyObject root, Color primary)
         {
             foreach (var fe in FindVisualChildren<FrameworkElement>(root))
@@ -304,10 +290,6 @@ namespace FountOfHopeStudyBiblePC.Views
             }
         }
 
-        /// <summary>
-        /// True if <paramref name="c"/> is a neutral theme surface / divider
-        /// that should be left alone by <see cref="RecolorAccents"/>.
-        /// </summary>
         private static bool IsThemeNeutral(Color c)
         {
             // Opaque grayscale → white, black, or any gray (theme surfaces).
@@ -504,11 +486,15 @@ namespace FountOfHopeStudyBiblePC.Views
                 return;
             }
 
-            // Kotlin shows the skeleton whenever verses is null/empty.
+            // Show skeleton while loading.
             _dailyVerses = null;
             RenderDailyVerse();
 
-            _dailyVerses = await _databaseHelper.GetRandomVersesAsync();
+            _dailyVerses = await _databaseHelper.GetRandomVersesAsync(5);
+
+            if (_dailyVerses is { Count: 0 })
+                _dailyVerses = null;
+
             RenderDailyVerse();
             await UpdateBookmarkStateAsync();
         }
@@ -636,12 +622,13 @@ namespace FountOfHopeStudyBiblePC.Views
                 PopularDevotionals.Add(devotional);
         }
 
-        private void Devotional_Click(object sender, RoutedEventArgs e)
+        private void Devotional_Click(object sender, MouseButtonEventArgs e)
         {
-            if (sender is not Button { Tag: PopularDevotional d }) return;
-
-            var bookNumber = BibleData.GetBookByName(d.BookName)?.CustomNumber ?? 1;
-            _onNavigateToReader(new PassageSelection(bookNumber, d.BookName, d.Chapter, d.Verse));
+            if (sender is FrameworkElement { Tag: PopularDevotional d })
+            {
+                var bookNumber = BibleData.GetBookByName(d.BookName)?.CustomNumber ?? 1;
+                _onNavigateToReader(new PassageSelection(bookNumber, d.BookName, d.Chapter, d.Verse));
+            }
         }
 
         /// <summary>Direct port of getRandomDevotionals().</summary>

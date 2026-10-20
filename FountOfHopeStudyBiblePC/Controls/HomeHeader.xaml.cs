@@ -5,6 +5,9 @@ namespace FountOfHopeStudyBiblePC.Controls
 {
     public partial class HomeHeader : UserControl
     {
-        public HomeHeader() => InitializeComponent();
+        public HomeHeader()
+        {
+            InitializeComponent();
+        }
     }
 }

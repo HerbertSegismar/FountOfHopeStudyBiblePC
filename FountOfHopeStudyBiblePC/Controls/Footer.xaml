@@ -74,7 +74,7 @@
                 Margin="0,16,0,0"
                 CornerRadius="8"
                 ClipToBounds="True">
-            <Image Source="/Assets/images/christisrisen.png"
+            <Image Source="/Assets/logo/christisrisen.png"
                    Stretch="Uniform"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center" />

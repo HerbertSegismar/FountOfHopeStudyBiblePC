@@ -2,14 +2,46 @@
 <UserControl x:Class="FountOfHopeStudyBiblePC.Controls.HomeHeader"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <StackPanel Margin="16,8,16,8">
+
+    <StackPanel>
+
+        <!-- "Fount of Hope" — 25sp, rubikglitch, primary -->
         <TextBlock Text="Fount of Hope"
-                   FontSize="28"
-                   FontWeight="Bold"
-                   Foreground="{DynamicResource OnSurface}"/>
+                   FontFamily="Rubik Glitch"
+                   FontSize="25"
+                   Foreground="{DynamicResource AccentBrush}"
+                   TextAlignment="Center"
+                   Margin="8"/>
+
+        <!-- Logo — 160×160, rounded 8, ContentScale.Fit -->
+        <Border Width="160" Height="160"
+                CornerRadius="8"
+                ClipToBounds="True"
+                HorizontalAlignment="Center">
+            <Image Source="/Assets/logo/fohs-512x512.png"
+                   Stretch="Uniform"
+                   RenderOptions.BitmapScalingMode="HighQuality"/>
+        </Border>
+
+        <!-- "Study Bible" — 30sp, rubikglitch, primary -->
         <TextBlock Text="Study Bible"
-                   FontSize="15"
-                   Margin="0,2,0,0"
-                   Foreground="{DynamicResource OnSurfaceVariant}"/>
+                   FontFamily="Rubik Glitch"
+                   FontSize="30"
+                   Foreground="{DynamicResource AccentBrush}"
+                   TextAlignment="Center"
+                   Margin="8"/>
+
+        <!-- "Your Daily Source of Inspiration" — 20sp, oswald, onSurface @ 60% -->
+        <TextBlock Text="Your Daily Source of Inspiration"
+                   FontFamily="Oswald"
+                   FontSize="20"
+                   Foreground="{DynamicResource OnSurface}"
+                   Opacity="0.6"
+                   TextAlignment="Center"
+                   Margin="0,8,0,0"/>
+
+        <!-- Spacer(30.dp) -->
+        <FrameworkElement Height="30"/>
+
     </StackPanel>
 </UserControl>

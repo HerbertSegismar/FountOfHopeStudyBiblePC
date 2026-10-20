@@ -11,149 +11,153 @@
                   Background="{DynamicResource AppBackground}">
         <StackPanel>
 
-            <!-- ── Spacer(8.dp) ──────────────────────────────────────────── -->
+            <!-- Spacer(8.dp) -->
             <FrameworkElement Height="8"/>
 
-            <!-- ── HomeHeader() ──────────────────────────────────────────── -->
+            <!-- HomeHeader() -->
             <controls:HomeHeader/>
 
-            <!-- ── ImageSection(...) ─────────────────────────────────────── -->
-            <controls:ImageSection x:Name="ImageSectionControl" Margin="0,8,0,0"/>
+            <!-- LazyColumn spacedBy(16.dp) → ImageSection -->
+            <controls:ImageSection x:Name="ImageSectionControl" Margin="0,16,0,0"/>
 
-            <!-- Daily Verse Card -->
-<Border x:Name="DailyVerseCard"
-        Margin="16,0"
-        CornerRadius="20"
-        MouseLeftButtonUp="DailyVerseCard_MouseLeftButtonUp"
-        Cursor="Hand">
-    <Border.Effect>
-        <DropShadowEffect BlurRadius="20" ShadowDepth="6" Direction="270"
-                          Color="Black" Opacity="0.35"/>
-    </Border.Effect>
-    <Grid MinHeight="100">
-        <!-- Random background image -->
-        <Image x:Name="DailyVerseBackgroundImage" Stretch="UniformToFill" Margin="0,12,0,-12"/>
+            <!-- DailyVerseCard -->
+            <Border x:Name="DailyVerseCard"
+                    Margin="16,16,16,0"
+                    CornerRadius="20"
+                    ClipToBounds="True"
+                    MouseLeftButtonUp="DailyVerseCard_MouseLeftButtonUp"
+                    Cursor="Hand">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="20" ShadowDepth="6" Direction="270"
+                                      Color="Black" Opacity="0.35"/>
+                </Border.Effect>
 
-        <!-- Gradient overlay (matches Kotlin: 0.7 / 0.5 / 0.6 black) -->
-        <Border ClipToBounds="True" Margin="0,12,0,-12">
-            <Border.Background>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                    <GradientStop Color="#B3000000" Offset="0.0"/>
-                    <GradientStop Color="#80000000" Offset="0.5"/>
-                    <GradientStop Color="#99000000" Offset="1.0"/>
-                </LinearGradientBrush>
-            </Border.Background>
-        </Border>
+                <!-- Random background image — ImageBrush does not affect layout -->
+                <Border.Background>
+                    <ImageBrush x:Name="DailyVerseBackgroundBrush" Stretch="UniformToFill"/>
+                </Border.Background>
 
-        <Grid Margin="20">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+                <Grid MinHeight="100">
+                    <!-- Gradient overlay (0.7 / 0.5 / 0.6 black) -->
+                    <Border CornerRadius="20">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#B3000000" Offset="0.0"/>
+                                <GradientStop Color="#80000000" Offset="0.5"/>
+                                <GradientStop Color="#99000000" Offset="1.0"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
 
-            <!-- Header: title + refresh -->
-            <Grid Grid.Row="0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Fresh Revelations"
-                           FontSize="20" FontWeight="Bold"
-                           Foreground="White" VerticalAlignment="Center"/>
-                <Button x:Name="RefreshVerseButton"
-                        Grid.Column="1" Width="32" Height="32"
-                        Background="Transparent" BorderThickness="0"
-                        Click="RefreshVerseButton_Click" Cursor="Hand">
-                    <Grid>
-                        <TextBlock x:Name="RefreshIconText" Text="⟳"
-                                   FontSize="18" Foreground="White"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
-                        <TextBlock x:Name="RefreshSpinner" Text="◌"
-                                   FontSize="18" Foreground="White"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Visibility="Collapsed"
-                                   RenderTransformOrigin="0.5,0.5">
-                            <TextBlock.RenderTransform>
-                                <RotateTransform x:Name="SpinnerRotate"/>
-                            </TextBlock.RenderTransform>
-                            <TextBlock.Triggers>
-                                <EventTrigger RoutedEvent="Loaded">
-                                    <BeginStoryboard>
-                                        <Storyboard RepeatBehavior="Forever">
-                                            <DoubleAnimation Storyboard.TargetName="SpinnerRotate"
-                                                             Storyboard.TargetProperty="Angle"
-                                                             From="0" To="360"
-                                                             Duration="0:0:1"/>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </EventTrigger>
-                            </TextBlock.Triggers>
-                        </TextBlock>
+                    <Grid Margin="20">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Header: title + refresh -->
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Fresh Revelations"
+                                       FontSize="20" FontWeight="Bold"
+                                       Foreground="White" VerticalAlignment="Center"/>
+                            <Button x:Name="RefreshVerseButton"
+                                    Grid.Column="1" Width="32" Height="32"
+                                    Background="Transparent" BorderThickness="0"
+                                    Click="RefreshVerseButton_Click" Cursor="Hand">
+                                <Grid>
+                                    <TextBlock x:Name="RefreshIconText" Text="⟳"
+                                               FontSize="18" Foreground="White"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="RefreshSpinner" Text="◌"
+                                               FontSize="18" Foreground="White"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Visibility="Collapsed"
+                                               RenderTransformOrigin="0.5,0.5">
+                                        <TextBlock.RenderTransform>
+                                            <RotateTransform x:Name="SpinnerRotate"/>
+                                        </TextBlock.RenderTransform>
+                                        <TextBlock.Triggers>
+                                            <EventTrigger RoutedEvent="Loaded">
+                                                <BeginStoryboard>
+                                                    <Storyboard RepeatBehavior="Forever">
+                                                        <DoubleAnimation Storyboard.TargetName="SpinnerRotate"
+                                                                         Storyboard.TargetProperty="Angle"
+                                                                         From="0" To="360"
+                                                                         Duration="0:0:1"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </EventTrigger>
+                                        </TextBlock.Triggers>
+                                    </TextBlock>
+                                </Grid>
+                            </Button>
+                        </Grid>
+
+                        <Border Grid.Row="1" Height="1" Background="White" Margin="0,2,0,25"/>
+
+                        <!-- Verse content OR skeleton -->
+                        <Grid Grid.Row="2">
+                            <StackPanel x:Name="VerseContentPanel">
+                                <TextBlock x:Name="DailyVerseReference"
+                                           FontSize="14" Foreground="#E6FFFFFF"
+                                           Margin="0,0,0,8"/>
+                                <TextBlock x:Name="DailyVerseText"
+                                           FontSize="18" LineHeight="22"
+                                           TextWrapping="Wrap" TextAlignment="Justify"
+                                           Foreground="White"/>
+                            </StackPanel>
+                            <StackPanel x:Name="VerseSkeletonPanel" Visibility="Collapsed">
+                                <Border Height="20" Background="#4DFFFFFF" CornerRadius="4" Margin="0,0,0,8"/>
+                                <Border Height="20" Background="#4DFFFFFF" CornerRadius="4" Margin="0,0,0,8"/>
+                                <Border Height="20" Background="#4DFFFFFF" CornerRadius="4"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Bookmark + Share -->
+                        <Grid Grid.Row="3" Margin="0,16,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="BookmarkVerseButton"
+                                    Width="40" Height="40"
+                                    Background="Transparent" BorderThickness="0"
+                                    HorizontalAlignment="Left"
+                                    Click="BookmarkVerseButton_Click" Cursor="Hand">
+                                <TextBlock x:Name="BookmarkIconText" Text="🔖"
+                                           FontSize="18" Foreground="White"
+                                           Opacity="0.6"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Button>
+                            <Border Grid.Column="1"
+                                    BorderBrush="White" BorderThickness="1"
+                                    CornerRadius="8" Padding="16,8"
+                                    Background="Transparent" Cursor="Hand"
+                                    MouseLeftButtonUp="ShareVerseButton_Click">
+                                <TextBlock x:Name="ShareVerseButton" Text="Share" Foreground="White"/>
+                            </Border>
+                        </Grid>
                     </Grid>
-                </Button>
-            </Grid>
+                </Grid>
+            </Border>
 
-            <!-- HorizontalDivider -->
-            <Border Grid.Row="1" Height="1" Background="White" Margin="0,2,0,25"/>
-
-            <!-- Verse content OR skeleton -->
-            <Grid Grid.Row="2">
-                <StackPanel x:Name="VerseContentPanel">
-                    <TextBlock x:Name="DailyVerseReference"
-                               FontSize="14" Foreground="#E6FFFFFF"
-                               Margin="0,0,0,8"/>
-                    <TextBlock x:Name="DailyVerseText"
-                               FontSize="18" LineHeight="22"
-                               TextWrapping="Wrap" TextAlignment="Justify"
-                               Foreground="White"/>
-                </StackPanel>
-                <StackPanel x:Name="VerseSkeletonPanel" Visibility="Collapsed">
-                    <Border Height="20" Background="#4DFFFFFF" CornerRadius="4" Margin="0,0,0,8"/>
-                    <Border Height="20" Background="#4DFFFFFF" CornerRadius="4" Margin="0,0,0,8"/>
-                    <Border Height="20" Background="#4DFFFFFF" CornerRadius="4"/>
-                </StackPanel>
-            </Grid>
-
-            <!-- Bookmark + Share -->
-            <Grid Grid.Row="3" Margin="0,16,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <Button x:Name="BookmarkVerseButton"
-                        Width="40" Height="40"
-                        Background="Transparent" BorderThickness="0"
-                        HorizontalAlignment="Left"
-                        Click="BookmarkVerseButton_Click" Cursor="Hand">
-                    <TextBlock x:Name="BookmarkIconText" Text="🔖"
-                               FontSize="18" Foreground="White"
-                               Opacity="0.6"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
-                </Button>
-                <Border Grid.Column="1"
-                        BorderBrush="White" BorderThickness="1"
-                        CornerRadius="8" Padding="16,8"
-                        Background="Transparent" Cursor="Hand"
-                        MouseLeftButtonUp="ShareVerseButton_Click">
-                    <TextBlock x:Name="ShareVerseButton" Text="Share" Foreground="White"/>
-                </Border>
-            </Grid>
-        </Grid>
-    </Grid>
-</Border>
-
-            <!-- ── "Quick Access" + QuickAccessCarousel(...) ─────────────── -->
+            <!-- Quick Access -->
             <TextBlock Text="Quick Access"
-                       Margin="16,20,16,8"
+                       Margin="16,16,16,8"
                        FontSize="16"
                        FontWeight="Bold"
                        Foreground="{DynamicResource OnSurface}"/>
 
+            <!-- QuickAccessCarousel() -->
             <ScrollViewer HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Disabled"
                           Padding="16,0,16,0">
@@ -166,17 +170,90 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type models:QuickAction}">
-                            <Button Style="{StaticResource QuickActionButtonStyle}"
+                            <!-- QuickActionCarouselItem: 140×120 card -->
+                            <Button Width="140" Height="120"
+                                    Margin="0,0,12,0"
+                                    Padding="0" BorderThickness="0"
+                                    Background="Transparent"
                                     Click="QuickAction_Click"
-                                    Tag="{Binding}"/>
+                                    Tag="{Binding}"
+                                    Cursor="Hand">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border CornerRadius="16"
+                                                ClipToBounds="True"
+                                                Background="{DynamicResource AccentBrush}">
+                                            <Border.Effect>
+                                                <DropShadowEffect BlurRadius="8" ShadowDepth="3"
+                                                                  Direction="270"
+                                                                  Color="Black" Opacity="0.4"/>
+                                            </Border.Effect>
+                                            <Grid>
+                                                <!-- Background image -->
+                                                <Border CornerRadius="16" ClipToBounds="True">
+                                                    <Border.Background>
+                                                        <ImageBrush ImageSource="{Binding BackgroundImageSource}"
+                                                                    Stretch="UniformToFill"
+                                                                    Opacity="0.9"/>
+                                                    </Border.Background>
+                                                </Border>
+
+                                                <!-- Gradient overlay: black → transparent -->
+                                                <Border CornerRadius="16">
+                                                    <Border.Background>
+                                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                            <GradientStop Color="#FF000000" Offset="0.0"/>
+                                                            <GradientStop Color="#B3000000" Offset="0.30"/>
+                                                            <GradientStop Color="#80000000" Offset="0.55"/>
+                                                            <GradientStop Color="#40000000" Offset="0.80"/>
+                                                            <GradientStop Color="#00000000" Offset="1.0"/>
+                                                        </LinearGradientBrush>
+                                                    </Border.Background>
+                                                </Border>
+
+                                                <!-- Icon + label -->
+                                                <StackPanel HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Icon}"
+                                                               FontSize="28"
+                                                               Foreground="White"
+                                                               HorizontalAlignment="Center">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Title}" Value="Notes">
+                                                                        <Setter Property="LayoutTransform">
+                                                                            <Setter.Value>
+                                                                                <RotateTransform Angle="90"/>
+                                                                            </Setter.Value>
+                                                                        </Setter>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding Title}"
+                                                               FontSize="13"
+                                                               FontWeight="Medium"
+                                                               Foreground="White"
+                                                               HorizontalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               MaxWidth="120"
+                                                               Margin="0,8,0,0"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
 
-            <!-- ── PopularDevotionalsSection(...) ────────────────────────── -->
+            <!-- Popular Devotionals -->
             <TextBlock Text="Popular Devotionals"
-                       Margin="16,22,16,8"
+                       Margin="16,16,16,8"
                        FontSize="16"
                        FontWeight="Bold"
                        Foreground="{DynamicResource OnSurface}"/>
@@ -185,104 +262,343 @@
                           ItemsSource="{Binding PopularDevotionals, ElementName=HomeRoot}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type models:PopularDevotional}">
-                        <Button Style="{StaticResource DevotionalButtonStyle}"
-                                Click="Devotional_Click"
+                        <!-- DevotionalItem -->
+                        <Border Background="Transparent"
+                                Cursor="Hand"
+                                MouseLeftButtonUp="Devotional_Click"
                                 Tag="{Binding}">
                             <StackPanel>
-                                <TextBlock Text="{Binding Title}"
-                                           FontSize="14"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource OnSurface}"/>
-                                <TextBlock Text="{Binding Snippet}"
-                                           Margin="0,4,0,0"
-                                           FontSize="12"
-                                           TextTrimming="CharacterEllipsis"
-                                           Foreground="{DynamicResource OnSurfaceVariant}"/>
-                                <TextBlock Margin="0,6,0,0"
-                                           FontSize="11"
-                                           Foreground="{DynamicResource AccentBrush}">
-                                    <Run Text="{Binding BookName, Mode=OneWay}"/>
-                                    <Run Text=" "/>
-                                    <Run Text="{Binding Chapter, Mode=OneWay}"/>
-                                    <Run Text=":"/>
-                                    <Run Text="{Binding Verse, Mode=OneWay}"/>
-                                </TextBlock>
+                                <Grid Margin="16,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- 48×48 gradient icon box with PlayArrow -->
+                                    <Border Grid.Column="0"
+                                            Width="48" Height="48"
+                                            CornerRadius="12">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#66A855F7" Offset="0"/>
+                                                <GradientStop Color="#05A855F7" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <TextBlock Text="▶"
+                                                   FontSize="20"
+                                                   Foreground="White"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+
+                                    <!-- Title + preview -->
+                                    <StackPanel Grid.Column="1" Margin="16,0,0,0"
+                                                VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}"
+                                                   FontSize="14"
+                                                   FontWeight="Medium"
+                                                   Foreground="{DynamicResource OnSurface}"/>
+                                        <TextBlock Text="{Binding Snippet}"
+                                                   FontSize="12"
+                                                   Foreground="{DynamicResource OnSurfaceVariant}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Margin="0,4,0,0"
+                                                   MaxHeight="32"/>
+                                    </StackPanel>
+
+                                    <!-- Bookmark icon (decorative) -->
+                                    <TextBlock Grid.Column="2"
+                                               Text="🔖"
+                                               FontSize="18"
+                                               Foreground="{DynamicResource AccentBrush}"
+                                               VerticalAlignment="Center"
+                                               Margin="8,0,0,0"/>
+                                </Grid>
+
+                                <!-- HorizontalDivider -->
+                                <Border Height="1"
+                                        Background="{DynamicResource OnSurface}"
+                                        Opacity="0.15"
+                                        Margin="16,0"/>
                             </StackPanel>
-                        </Button>
+                        </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <!-- ── Spacer + UsefulSpaceGrid(...) ─────────────────────────── -->
+            <!-- UsefulSpaceGrid -->
             <FrameworkElement Height="16"/>
 
-            <UniformGrid x:Name="UsefulSpaceGrid"
-                         Columns="2"
-                         Margin="10,0,10,0">
-                <Button Style="{StaticResource UsefulTileStyle}"
-                        Click="TakeBibleQuiz_Click">
-                    <StackPanel>
-                        <TextBlock Text="🎯" FontSize="26" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Bible Quiz" Margin="0,6,0,0"
-                                   Foreground="{DynamicResource OnSurface}"/>
-                    </StackPanel>
-                </Button>
+            <Border x:Name="UsefulSpaceGrid">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Margin" Value="16,0"/>
+                        <Setter Property="Padding" Value="20"/>
+                        <Setter Property="CornerRadius" Value="16"/>
+                        <Setter Property="Background" Value="#1A1976D2"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ViewModel.DarkTheme, ElementName=HomeRoot}"
+                                         Value="True">
+                                <Setter Property="Background" Value="#80000000"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
 
-                <Button Style="{StaticResource UsefulTileStyle}"
-                        Click="LearnHebrew_Click">
-                    <StackPanel>
-                        <TextBlock Text="א" FontSize="26" HorizontalAlignment="Center"
-                                   Foreground="{DynamicResource OnSurface}"/>
-                        <TextBlock Text="Learn Hebrew" Margin="0,6,0,0"
-                                   Foreground="{DynamicResource OnSurface}"/>
-                    </StackPanel>
-                </Button>
+                <StackPanel>
+                    <TextBlock Text="Useful Space"
+                               FontSize="20"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource OnSurface}"/>
 
-                <Button Style="{StaticResource UsefulTileStyle}"
-                        Click="LearnGreek_Click">
-                    <StackPanel>
-                        <TextBlock Text="Ω" FontSize="26" HorizontalAlignment="Center"
-                                   Foreground="{DynamicResource OnSurface}"/>
-                        <TextBlock Text="Learn Greek" Margin="0,6,0,0"
-                                   Foreground="{DynamicResource OnSurface}"/>
-                    </StackPanel>
-                </Button>
+                    <FrameworkElement Height="16"/>
 
-                <Button Style="{StaticResource UsefulTileStyle}"
-                        Click="OpenDictionary_Click">
-                    <StackPanel>
-                        <TextBlock Text="📚" FontSize="26" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Dictionary" Margin="0,6,0,0"
-                                   Foreground="{DynamicResource OnSurface}"/>
-                    </StackPanel>
-                </Button>
+                    <!-- 3×3 grid -->
+                    <UniformGrid Columns="3" Rows="3">
 
-                <Button Style="{StaticResource UsefulTileStyle}"
-                        Click="OpenAnimator_Click">
-                    <StackPanel>
-                        <TextBlock Text="🎬" FontSize="26" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Animator" Margin="0,6,0,0"
-                                   Foreground="{DynamicResource OnSurface}"/>
-                    </StackPanel>
-                </Button>
+                        <!-- Row 1 — Bible Quiz -->
+                        <Button Height="110" Margin="4"
+                                Background="Transparent" BorderThickness="0" Padding="0"
+                                Click="TakeBibleQuiz_Click" Cursor="Hand">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border CornerRadius="16" ClipToBounds="True">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#66FF6B35" Offset="0"/>
+                                                <GradientStop Color="#05FF6B35" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <StackPanel HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Margin="8">
+                                            <TextBlock Text="❓" FontSize="24"
+                                                       HorizontalAlignment="Center"
+                                                       Foreground="{DynamicResource AccentBrush}"/>
+                                            <TextBlock Text="Bible Quiz"
+                                                       FontSize="11" FontWeight="Bold"
+                                                       TextAlignment="Center" TextWrapping="Wrap"
+                                                       Margin="0,8,0,0"
+                                                       Foreground="{DynamicResource OnSurface}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
 
-                <Button Style="{StaticResource UsefulTileStyle}"
-                        Click="OpenGenerations_Click">
-                    <StackPanel>
-                        <TextBlock Text="🌳" FontSize="26" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Generations" Margin="0,6,0,0"
-                                   Foreground="{DynamicResource OnSurface}"/>
-                    </StackPanel>
-                </Button>
-            </UniformGrid>
+                        <!-- Row 1 — Learn Hebrew -->
+                        <Button Height="110" Margin="4"
+                                Background="Transparent" BorderThickness="0" Padding="0"
+                                Click="LearnHebrew_Click" Cursor="Hand">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border CornerRadius="16" ClipToBounds="True">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#666BBF7B" Offset="0"/>
+                                                <GradientStop Color="#056BBF7B" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <StackPanel HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Margin="8">
+                                            <TextBlock Text="א" FontSize="24"
+                                                       HorizontalAlignment="Center"
+                                                       Foreground="{DynamicResource AccentBrush}"/>
+                                            <TextBlock Text="Learn Hebrew"
+                                                       FontSize="11" FontWeight="Bold"
+                                                       TextAlignment="Center" TextWrapping="Wrap"
+                                                       Margin="0,8,0,0"
+                                                       Foreground="{DynamicResource OnSurface}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
 
-            <!-- ── Spacer(17.dp) ─────────────────────────────────────────── -->
+                        <!-- Row 1 — Learn Greek -->
+                        <Button Height="110" Margin="4"
+                                Background="Transparent" BorderThickness="0" Padding="0"
+                                Click="LearnGreek_Click" Cursor="Hand">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border CornerRadius="16" ClipToBounds="True">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#667C8FF5" Offset="0"/>
+                                                <GradientStop Color="#057C8FF5" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <StackPanel HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Margin="8">
+                                            <TextBlock Text="Ω" FontSize="24"
+                                                       HorizontalAlignment="Center"
+                                                       Foreground="{DynamicResource AccentBrush}"/>
+                                            <TextBlock Text="Learn Greek"
+                                                       FontSize="11" FontWeight="Bold"
+                                                       TextAlignment="Center" TextWrapping="Wrap"
+                                                       Margin="0,8,0,0"
+                                                       Foreground="{DynamicResource OnSurface}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+
+                        <!-- Row 2 — Dictionary -->
+                        <Button Height="110" Margin="4"
+                                Background="Transparent" BorderThickness="0" Padding="0"
+                                Click="OpenDictionary_Click" Cursor="Hand">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border CornerRadius="16" ClipToBounds="True">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#66FBBF24" Offset="0"/>
+                                                <GradientStop Color="#05FBBF24" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <StackPanel HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Margin="8">
+                                            <TextBlock Text="📚" FontSize="24"
+                                                       HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Dictionary"
+                                                       FontSize="11" FontWeight="Bold"
+                                                       TextAlignment="Center" TextWrapping="Wrap"
+                                                       Margin="0,8,0,0"
+                                                       Foreground="{DynamicResource OnSurface}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+
+                        <!-- Row 2 — GFX Animator -->
+                        <Button Height="110" Margin="4"
+                                Background="Transparent" BorderThickness="0" Padding="0"
+                                Click="OpenAnimator_Click" Cursor="Hand">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border CornerRadius="16" ClipToBounds="True">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#66EF4444" Offset="0"/>
+                                                <GradientStop Color="#05EF4444" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <StackPanel HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Margin="8">
+                                            <TextBlock Text="🎬" FontSize="24"
+                                                       HorizontalAlignment="Center"/>
+                                            <TextBlock Text="GFX Animator"
+                                                       FontSize="11" FontWeight="Bold"
+                                                       TextAlignment="Center" TextWrapping="Wrap"
+                                                       Margin="0,8,0,0"
+                                                       Foreground="{DynamicResource OnSurface}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+
+                        <!-- Row 2 — Generations -->
+                        <Button Height="110" Margin="4"
+                                Background="Transparent" BorderThickness="0" Padding="0"
+                                Click="OpenGenerations_Click" Cursor="Hand">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border CornerRadius="16" ClipToBounds="True">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#66A855F7" Offset="0"/>
+                                                <GradientStop Color="#05A855F7" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <StackPanel HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Margin="8">
+                                            <TextBlock Text="🌳" FontSize="24"
+                                                       HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Generations"
+                                                       FontSize="11" FontWeight="Bold"
+                                                       TextAlignment="Center" TextWrapping="Wrap"
+                                                       Margin="0,8,0,0"
+                                                       Foreground="{DynamicResource OnSurface}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+
+                        <!-- Row 3 — Coming Soon ×3 -->
+                        <Border Height="110" Margin="4" CornerRadius="16" ClipToBounds="True">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Color="#40666666" Offset="0"/>
+                                    <GradientStop Color="#05666666" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <StackPanel HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Margin="8">
+                                <TextBlock Text="✨" FontSize="24" HorizontalAlignment="Center"/>
+                                <TextBlock Text="Coming Soon"
+                                           FontSize="10" FontWeight="Bold"
+                                           TextAlignment="Center" TextWrapping="Wrap"
+                                           Margin="0,4,0,0"
+                                           Foreground="{DynamicResource OnSurface}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Height="110" Margin="4" CornerRadius="16" ClipToBounds="True">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Color="#40666666" Offset="0"/>
+                                    <GradientStop Color="#05666666" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <StackPanel HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Margin="8">
+                                <TextBlock Text="✨" FontSize="24" HorizontalAlignment="Center"/>
+                                <TextBlock Text="Coming Soon"
+                                           FontSize="10" FontWeight="Bold"
+                                           TextAlignment="Center" TextWrapping="Wrap"
+                                           Margin="0,4,0,0"
+                                           Foreground="{DynamicResource OnSurface}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Height="110" Margin="4" CornerRadius="16" ClipToBounds="True">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Color="#40666666" Offset="0"/>
+                                    <GradientStop Color="#05666666" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <StackPanel HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Margin="8">
+                                <TextBlock Text="✨" FontSize="24" HorizontalAlignment="Center"/>
+                                <TextBlock Text="Coming Soon"
+                                           FontSize="10" FontWeight="Bold"
+                                           TextAlignment="Center" TextWrapping="Wrap"
+                                           Margin="0,4,0,0"
+                                           Foreground="{DynamicResource OnSurface}"/>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+
             <FrameworkElement Height="17"/>
 
-            <!-- ── FountRain() ───────────────────────────────────────────── -->
             <controls:FountRain x:Name="FountRainControl" Height="460"/>
 
-            <!-- ── Spacer(40.dp) + Footer() + Spacer(20.dp) ─────────────── -->
             <FrameworkElement Height="40"/>
             <controls:Footer/>
             <FrameworkElement Height="20"/>
