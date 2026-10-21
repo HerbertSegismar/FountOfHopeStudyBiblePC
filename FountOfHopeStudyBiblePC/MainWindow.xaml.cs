@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace FountOfHopeStudyBiblePC
@@ -20,6 +21,9 @@ namespace FountOfHopeStudyBiblePC
         private readonly AppViewModel _viewModel;
         private readonly PreferencesService _prefs = new();
         private DatabaseHelper _databaseHelper;
+
+        // ── ADDED: app-wide fullscreen chrome manager ────────────────
+        private readonly FullScreenManager _fullScreenManager;
 
         private Uri? _pendingTemplateUri;
         private Uri? _animatorTemplateUri;
@@ -38,6 +42,10 @@ namespace FountOfHopeStudyBiblePC
             _viewModel = new AppViewModel();
             ViewModels.AppViewModelAccessor.Current = _viewModel;
             App.Log("MainWindow ctor - after AppViewModel");
+
+            // ── ADDED: create the fullscreen manager before any
+            //    PropertyChanged handler is wired, so it's always live.
+            _fullScreenManager = new FullScreenManager(this);
 
             LoadPreferences();
             App.Log("MainWindow ctor - after LoadPreferences");
@@ -73,6 +81,14 @@ namespace FountOfHopeStudyBiblePC
                     case nameof(AppViewModel.SelectedColor):
                     case nameof(AppViewModel.IsCustomColor):
                         ApplyTheme();
+                        break;
+
+                    // ── ADDED: app-wide fullscreen — the only place
+                    //    the window chrome is ever touched. Any screen
+                    //    that toggles the flag gets fullscreen, and the
+                    //    state survives navigation between screens.
+                    case nameof(AppViewModel.IsReaderFullScreen):
+                        _fullScreenManager.Apply(_viewModel.IsReaderFullScreen);
                         break;
 
                     case nameof(AppViewModel.ShowNavigationModal):
@@ -263,11 +279,36 @@ namespace FountOfHopeStudyBiblePC
             };
             App.Log("MainWindow ctor - after PropertyChanged hookup");
 
+            // ── ADDED: global keyboard shortcuts (F11 toggles fullscreen
+            //    from any screen; Esc exits fullscreen). Window-level
+            //    PreviewKeyDown fires before any child control sees the
+            //    key, so it works regardless of which screen is active.
+            //    Modals that use ShowDialog disable the owner window, so
+            //    they naturally take priority.
+            PreviewKeyDown += OnMainWindowPreviewKeyDown;
+
             NavigateToCurrentScreen();
             App.Log("MainWindow ctor - after NavigateToCurrentScreen");
 
             HandleIntent(_pendingTemplateUri);
             App.Log("MainWindow ctor - COMPLETE");
+        }
+
+        // ── ADDED: global keyboard shortcuts ─────────────────────────
+        private void OnMainWindowPreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.F11)
+            {
+                // Toggle from any screen — MainWindow's property handler
+                // applies the chrome change immediately.
+                _viewModel.IsReaderFullScreen = !_viewModel.IsReaderFullScreen;
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape && _viewModel.IsReaderFullScreen)
+            {
+                _viewModel.IsReaderFullScreen = false;
+                e.Handled = true;
+            }
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -527,6 +568,13 @@ namespace FountOfHopeStudyBiblePC
         {
             App.Log("MainWindow.OnSourceInitialized");
             base.OnSourceInitialized(e);
+
+            // ── ADDED: apply any persisted fullscreen state before
+            //    the window is fully shown, so a user who left the
+            //    app in fullscreen gets it back on relaunch with no
+            //    flash of the windowed chrome.
+            if (_viewModel.IsReaderFullScreen)
+                _fullScreenManager.Apply(true);
         }
 
         protected override void OnContentRendered(EventArgs e)
@@ -641,6 +689,9 @@ namespace FountOfHopeStudyBiblePC
             _viewModel.RenderOrbs = _prefs.GetBool(PrefKeys.RenderOrbs, false);
             _viewModel.OrbsCount = _prefs.GetInt(PrefKeys.OrbsCount, 3);
 
+            // ── ADDED: restore last session's fullscreen state ──
+            _viewModel.IsReaderFullScreen = _prefs.GetBool(PrefKeys.IsReaderFullScreen, false);
+
             _viewModel.PrimaryPassage = new PassageSelection(
                 _prefs.GetInt(PrefKeys.PrimaryBookNumber, 10),
                 _prefs.GetString(PrefKeys.PrimaryBookName, "Genesis"),
@@ -724,6 +775,11 @@ namespace FountOfHopeStudyBiblePC
                     case nameof(AppViewModel.SelectedVerseCommentary): _prefs.Set(PrefKeys.SelectedVerseCommentary, _viewModel.SelectedVerseCommentary); break;
                     case nameof(AppViewModel.SelectedCrossReferenceDatabase): _prefs.Set(PrefKeys.SelectedCrossRefDb, _viewModel.SelectedCrossReferenceDatabase); break;
                     case nameof(AppViewModel.CustomTextureUri): _prefs.Set(PrefKeys.CustomTexture, _viewModel.CustomTextureUri); break;
+
+                    // ── ADDED: persist fullscreen so it survives restart ──
+                    case nameof(AppViewModel.IsReaderFullScreen):
+                        _prefs.Set(PrefKeys.IsReaderFullScreen, _viewModel.IsReaderFullScreen);
+                        break;
                 }
             };
 

@@ -130,8 +130,10 @@ namespace FountOfHopeStudyBiblePC.Controls
             var isLandscape = IsLandscape;
             Height = isLandscape ? LandscapeHeight : PortraitHeight;
 
-            TitleBookCol.Width = new GridLength(isLandscape ? 2 : 1.2, GridUnitType.Star);
-            TitleVersionCol.Width = new GridLength(1, GridUnitType.Star);
+            // Title columns are now Auto-sized (content-driven) and capped by
+            // MaxWidth in XAML. This keeps the verse-reference buttons hugging
+            // their text on wide desktop layouts while still allowing the Grid
+            // to squeeze them naturally in narrow portrait windows.
 
             var changed = _lastIsLandscape != isLandscape;
             _lastIsLandscape = isLandscape;

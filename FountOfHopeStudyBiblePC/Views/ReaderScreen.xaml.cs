@@ -168,6 +168,10 @@ namespace FountOfHopeStudyBiblePC.Views
             _secondaryCommentaryDbHelper?.Dispose();
             _subheadingsDbHelper?.Dispose();
             _secondaryDatabaseHelper?.Dispose();
+
+            // NOTE: fullscreen state deliberately NOT reset here — it is
+            // owned by MainWindow via AppViewModel.IsReaderFullScreen, so
+            // the toggled state persists when the user navigates away.
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -204,6 +208,10 @@ namespace FountOfHopeStudyBiblePC.Views
                     _primaryLoadedVerses.Clear();
                     RenderCurrentMode();
                     break;
+
+                // NOTE: IsReaderFullScreen is NOT handled here anymore.
+                // MainWindow owns fullscreen chrome management and reacts
+                // to the flag directly.
 
                 // ── Properties that affect rendered verse content ──
                 case nameof(AppViewModel.DarkTheme):
@@ -300,9 +308,14 @@ namespace FountOfHopeStudyBiblePC.Views
             FullscreenFab.BeginAnimation(UIElement.OpacityProperty, anim);
         }
 
+        // ── Toggle only the shared VM flag ─────────────────────────────
+        // MainWindow watches IsReaderFullScreen and applies window chrome.
+        // This makes the toggled state app-wide and persistent across
+        // navigation, instead of a reader-local effect.
         private void FullscreenFab_Click(object sender, RoutedEventArgs e)
         {
             _viewModel.IsReaderFullScreen = !_viewModel.IsReaderFullScreen;
+
             _isButtonVisible = true;
             UpdateFabVisibility();
             ScheduleFade();

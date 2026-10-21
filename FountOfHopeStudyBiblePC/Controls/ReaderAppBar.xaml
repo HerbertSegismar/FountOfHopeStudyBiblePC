@@ -16,24 +16,29 @@
                                         VerticalAlignment="Center"/>
         </Button>
 
-        <!-- Center: title row (weighted) -->
+        <!-- Center: title row (content-sized, capped) -->
         <Grid x:Name="TitleRow" Margin="40,0,300,0" VerticalAlignment="Center">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="TitleBookCol" Width="2*"/>
-                <ColumnDefinition x:Name="TitleVersionCol" Width="1*"/>
+                <!-- Auto + MaxWidth = "just wide enough for the reference, never wider" -->
+                <ColumnDefinition x:Name="TitleBookCol"    Width="Auto" MaxWidth="240"/>
+                <ColumnDefinition x:Name="TitleVersionCol" Width="Auto" MaxWidth="100"/>
             </Grid.ColumnDefinitions>
+
             <Button x:Name="BookChapterButton" Grid.Column="0"
-                    Click="BookChapterButton_Click" Height="25" Margin="0,0,4,0"
-                    Background="Transparent" BorderThickness="0" Cursor="Hand">
+            Click="BookChapterButton_Click" Height="25" Margin="0,0,4,0"
+            Background="Transparent" BorderThickness="0" Cursor="Hand">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock x:Name="BookText" FontSize="16" FontWeight="Bold"/>
+                    <TextBlock x:Name="BookText" FontSize="16" FontWeight="Bold"
+                       MaxWidth="180" TextTrimming="CharacterEllipsis"/>
                     <TextBlock x:Name="ChapterText" FontSize="16" FontWeight="Bold"/>
                 </StackPanel>
             </Button>
+
             <Button x:Name="VersionButton" Grid.Column="1"
-                    Click="VersionButton_Click" Height="25"
-                    Background="Transparent" BorderThickness="0" Cursor="Hand">
-                <TextBlock x:Name="VersionText" FontSize="16" FontWeight="Bold"/>
+            Click="VersionButton_Click" Height="25"
+            Background="Transparent" BorderThickness="0" Cursor="Hand">
+                <TextBlock x:Name="VersionText" FontSize="16" FontWeight="Bold"
+                   MaxWidth="80" TextTrimming="CharacterEllipsis"/>
             </Button>
         </Grid>
 
