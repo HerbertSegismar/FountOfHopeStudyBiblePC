@@ -43,8 +43,8 @@ namespace FountOfHopeStudyBiblePC.Views
         private DatabaseHelper? _primaryDictionaryDbHelper;
         private DatabaseHelper? _secondaryDictionaryDbHelper;
         private DatabaseHelper? _strongDbHelper;
-        private DatabaseHelper? _commentaryDbHelper;
-        private DatabaseHelper? _secondaryCommentaryDbHelper;
+        private DatabaseHelper? _commentaryDbHelper;            // footnotes for primary version
+        private DatabaseHelper? _secondaryCommentaryDbHelper;   // footnotes for secondary version
         private readonly DatabaseHelper? _subheadingsDbHelper;
 
         // ── FAB / highlight state ───────────────────────────────────────
@@ -55,19 +55,19 @@ namespace FountOfHopeStudyBiblePC.Views
 
         // ── Modal state ─────────────────────────────────────────────────
         private ReaderModalState _modalState = new ReaderModalState.None();
-        private List<Verse> _selectedVersesForNote = new();
+        private List<Verse> _selectedVersesForNote = new();   // dead — kept for parity
 
         // ── Verse options state ─────────────────────────────────────────
         private Verse? _selectedVerse;
         private PassageSelection? _selectedPassage;
         private bool _selectedIsPrimary;
 
-        // ── Cross-ref state ─────────────────────────────────────────────
+        // ── Cross-ref state (dead — kept for parity with Kotlin) ────────
         private int _crossRefBook;
         private int _crossRefChapter;
         private int _crossRefVerse;
 
-        // ── Commentary context ──────────────────────────────────────────
+        // ── Commentary context (dead — kept for parity with Kotlin) ─────
         private int _verseCommentaryBook;
         private int _verseCommentaryChapter;
         private int _verseCommentaryVerse;
@@ -168,15 +168,10 @@ namespace FountOfHopeStudyBiblePC.Views
             _secondaryCommentaryDbHelper?.Dispose();
             _subheadingsDbHelper?.Dispose();
             _secondaryDatabaseHelper?.Dispose();
-
-            // NOTE: fullscreen state deliberately NOT reset here — it is
-            // owned by MainWindow via AppViewModel.IsReaderFullScreen, so
-            // the toggled state persists when the user navigates away.
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  ViewModel subscription — every property that affects the
-        //  rendered verse text triggers a re-render.
+        //  ViewModel subscription
         // ═══════════════════════════════════════════════════════════════
         private void OnViewModelPropertyChanged(object? sender,
             System.ComponentModel.PropertyChangedEventArgs e)
@@ -209,11 +204,6 @@ namespace FountOfHopeStudyBiblePC.Views
                     RenderCurrentMode();
                     break;
 
-                // NOTE: IsReaderFullScreen is NOT handled here anymore.
-                // MainWindow owns fullscreen chrome management and reacts
-                // to the flag directly.
-
-                // ── Properties that affect rendered verse content ──
                 case nameof(AppViewModel.DarkTheme):
                 case nameof(AppViewModel.WordsOfJesus):
                 case nameof(AppViewModel.FontSize):
@@ -276,11 +266,31 @@ namespace FountOfHopeStudyBiblePC.Views
                 _secondaryDatabaseHelper?.DatabaseName);
         }
 
+        // ── FIXED: footnote DB is "<version>com.sqlite3", NOT ".commentaries.sqlite3" ──
         private static DatabaseHelper? CreateCommentaryHelperIfExists(string? bibleDbName)
         {
             if (string.IsNullOrWhiteSpace(bibleDbName)) return null;
-            var name = bibleDbName.Replace(".sqlite3", ".commentaries.sqlite3");
-            return new DatabaseHelper(name);
+
+            var comDbName = bibleDbName.Replace(".sqlite3", "com.sqlite3");
+
+            // Only open if the file can actually be found — otherwise GetCommentary
+            // would silently return null because _connection is null.
+            var localPath = DatabaseHelper.GetDatabaseFilePath(comDbName);
+            if (System.IO.File.Exists(localPath))
+                return new DatabaseHelper(comDbName);
+
+            var assetCandidates = new[]
+            {
+                System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "databases", comDbName),
+                System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", comDbName),
+            };
+            foreach (var asset in assetCandidates)
+                if (System.IO.File.Exists(asset))
+                    return new DatabaseHelper(comDbName);
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[Reader.CreateCommentaryHelper] '{comDbName}' not found. Footnotes disabled.");
+            return null;
         }
 
         private void ReloadSecondaryDatabase()
@@ -290,6 +300,11 @@ namespace FountOfHopeStudyBiblePC.Views
                 _viewModel.MultiVersion && !string.IsNullOrWhiteSpace(_viewModel.SecondaryDbName)
                     ? new DatabaseHelper(_viewModel.SecondaryDbName)
                     : null;
+
+            // Secondary footnote DB must be reloaded whenever the secondary version changes.
+            _secondaryCommentaryDbHelper?.Dispose();
+            _secondaryCommentaryDbHelper = CreateCommentaryHelperIfExists(
+                _secondaryDatabaseHelper?.DatabaseName);
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -308,10 +323,6 @@ namespace FountOfHopeStudyBiblePC.Views
             FullscreenFab.BeginAnimation(UIElement.OpacityProperty, anim);
         }
 
-        // ── Toggle only the shared VM flag ─────────────────────────────
-        // MainWindow watches IsReaderFullScreen and applies window chrome.
-        // This makes the toggled state app-wide and persistent across
-        // navigation, instead of a reader-local effect.
         private void FullscreenFab_Click(object sender, RoutedEventArgs e)
         {
             _viewModel.IsReaderFullScreen = !_viewModel.IsReaderFullScreen;
@@ -804,11 +815,6 @@ namespace FountOfHopeStudyBiblePC.Views
             App.Log("Reader: NotesModal closed — refreshing chapter");
 
             RenderCurrentMode();
-        }
-
-        private void ShowNotesModal()
-        {
-            App.Log($"Reader: Notes modal with {_selectedVersesForNote.Count} verses");
         }
     }
 }

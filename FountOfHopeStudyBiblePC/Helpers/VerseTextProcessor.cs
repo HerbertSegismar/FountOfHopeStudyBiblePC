@@ -7,18 +7,15 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace FountOfHopeStudyBiblePC.Helpers
 {
-    /// <summary>
-    /// C# port of the Kotlin VerseTextProcessor.
-    /// Parses Bible verse text with light XML (&lt;J&gt;, &lt;S&gt;, &lt;f&gt;, &lt;t&gt;, &lt;n&gt;, …)
-    /// and produces a List&lt;Inline&gt; ready to be dropped into a TextBlock.
-    /// </summary>
     public class VerseTextProcessor
     {
         private const int CacheSize = 200;
+
         private static readonly Regex AttributeRegex =
             new("(\\w+)=\"([^\"]*)\"", RegexOptions.Compiled);
         private static readonly Regex EscapeRegexPattern =
@@ -26,14 +23,10 @@ namespace FountOfHopeStudyBiblePC.Helpers
         private static readonly Regex WordRegex =
             new(@"^[\p{L}\p{M}'-]+$", RegexOptions.Compiled);
 
-        // ── Preprocessing regexes (used when ShowStrongs = false) ─────
-        // 1. Bare Strong's number wrapped in <S>…</S> — strip content.
         private static readonly Regex BareStrongsRegex =
             new(@"<S[^>]*>[HG]?\d+</S>", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        // 2. Self-closing <S ... /> — strip content (none).
         private static readonly Regex SelfClosingStrongsRegex =
             new(@"<S[^>]*/>", RegexOptions.Compiled);
-        // 3. Remaining <S> tags (content is real text) — strip tags only.
         private static readonly Regex StrongsTagOnlyRegex =
             new(@"</?S[^>]*>", RegexOptions.Compiled);
 
@@ -41,7 +34,8 @@ namespace FountOfHopeStudyBiblePC.Helpers
         private readonly Dictionary<string, ProcessedVerse> _cache = new();
 
         // ═══════════════════════════════════════════════════════════════
-        //  Public entry point
+        //  Public entry point  — signature matches Kotlin exactly.
+        //  Callbacks come in as PARAMETERS, not through options.
         // ═══════════════════════════════════════════════════════════════
         public ProcessedVerse ProcessVerse(
             string? verseText,
@@ -63,20 +57,19 @@ namespace FountOfHopeStudyBiblePC.Helpers
             var processedText = verseText;
             if (!options.ShowStrongs)
             {
-                // Strip bare Strong's numbers (H123 / G456 / 789) entirely,
-                // self-closing <S .../>, then any remaining <S> tags but
-                // PRESERVE their content — some modules wrap words inside
-                // <S>...</S>, and stripping content wipes the verse body.
                 processedText = BareStrongsRegex.Replace(processedText, "");
                 processedText = SelfClosingStrongsRegex.Replace(processedText, "");
                 processedText = StrongsTagOnlyRegex.Replace(processedText, "");
                 processedText = Regex.Replace(processedText, "\\s+", " ");
             }
 
+            // ── Cache key matches Kotlin's enable* pattern ─────────
             var cacheKey = BuildCacheKey(
                 verseText, baseFontSize, textColor, isOldTestament,
                 highlight, isHighlighted, options, themeColors, wordHighlights,
-                onTagPress != null, onStrongsPress != null, onWordPress != null);
+                enableTagClick: options.EnableTagClick && onTagPress != null,
+                enableStrongsClick: options.EnableStrongsClick && onStrongsPress != null,
+                enableWordClick: options.EnableWordClick && onWordPress != null);
 
             if (_cache.TryGetValue(cacheKey, out var cached))
                 return cached;
@@ -97,6 +90,8 @@ namespace FountOfHopeStudyBiblePC.Helpers
 
             var headerInlines = new List<Inline>();
             var bodyInlines = new List<Inline>();
+
+            // ── Pass the actual parameters down (Kotlin does the same) ──
             TraverseChildren(tree, headerInlines, bodyInlines, context,
                 highlight, themeColors, onTagPress, onWordPress, onStrongsPress,
                 isHighlighted, options, wordHighlights);
@@ -105,8 +100,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
                 options.ShowHeaders && headerInlines.Count > 0 ? headerInlines : null,
                 bodyInlines);
 
-            // ── Diagnostic: log any verse that resolves to no visible text
-            //    so we can identify blank-render cases without guessing.
             if (bodyInlines.Count == 0 && (result.Header == null || result.Header.Count == 0))
             {
                 App.Log($"VerseTextProcessor: BLANK result");
@@ -146,21 +139,24 @@ namespace FountOfHopeStudyBiblePC.Helpers
             bool isOldTestament, string? highlight, bool isHighlighted,
             ProcessingOptions options, ThemeColors themeColors,
             HashSet<string>? wordHighlights,
-            bool enableTag, bool enableStrongs, bool enableWord)
+            bool enableTagClick, bool enableStrongsClick, bool enableWordClick)
         {
             var sb = new StringBuilder();
             sb.Append(verseText.GetHashCode())
               .Append('|').Append(baseFontSize)
               .Append('|').Append(textColor.GetHashCode())
               .Append('|').Append(isOldTestament)
-              .Append('|').Append(highlight)
+              .Append('|').Append(highlight ?? "")
               .Append('|').Append(isHighlighted)
-              .Append('|').Append(options.GetHashCode())
+              .Append("|ss=").Append(options.ShowStrongs)
+              .Append("|sh=").Append(options.ShowHeaders)
+              .Append("|sf=").Append(options.ShowFootnotesInline)
+              .Append("|pw=").Append(options.PreserveWhitespace)
               .Append('|').Append(themeColors.GetHashCode())
               .Append('|').Append(wordHighlights?.Count ?? 0)
-              .Append("|tag=").Append(enableTag)
-              .Append("|str=").Append(enableStrongs)
-              .Append("|wrd=").Append(enableWord);
+              .Append("|tag=").Append(enableTagClick)
+              .Append("|str=").Append(enableStrongsClick)
+              .Append("|wrd=").Append(enableWordClick);
             return sb.ToString();
         }
 
@@ -312,11 +308,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
                 case TreeNode.ElementNode el:
                     if (el.Tag == "n") return;
 
-                    // ── Match Kotlin exactly: <t> does NOT set IsHeader.
-                    //    Kotlin's original code:
-                    //      "t" -> context.copy(isTextContainer = true, currentTag = node.tag)
-                    //    All text always goes to the body; <t> is only a
-                    //    styling hint (title font), not a header-routing flag.
                     var newContext = el.Tag switch
                     {
                         "J" => context with
@@ -387,16 +378,60 @@ namespace FountOfHopeStudyBiblePC.Helpers
                         onWordPress, options, wordHighlights);
                     break;
 
+                // ══ <f>…</f>: matches Kotlin's three sub-cases ══
                 case "f":
-                    if (options.EnableTagClick && onTagPress != null && rawText.Trim().Length > 0)
+                    if (options.EnableTagClick && onTagPress != null)
                     {
-                        var visible = MakeRun(rawText, textContext, themeColors);
-                        visible.FontSize = textContext.BaseFontSize * textContext.FontSizeMultiplier;
-                        visible.Tag = new VerseAnnotation("tag", rawText.Trim());
-                        target.Add(visible);
+                        var marker = rawText.Trim();
+                        var innerRun = MakeRun(rawText, textContext, themeColors);
+                        innerRun.FontSize = textContext.BaseFontSize * textContext.FontSizeMultiplier;
+
+                        // Mirrors Kotlin's `builder.pushStringAnnotation("tag", trimmed)`
+                        innerRun.Tag = new VerseAnnotation("tag", marker);
+
+                        var link = new Hyperlink(innerRun)
+                        {
+                            TextDecorations = null,
+                            Cursor = Cursors.Hand,
+                        };
+
+                        // Encircled marker (① ② ③ …) — add a trailing
+                        // zero-width space inside the link so the clickable
+                        // area isn't a single narrow character.
+                        if (IsEncircled(node.Content) && marker.Length > 0)
+                        {
+                            link.Inlines.Add(new Run("\u200B")
+                            {
+                                Foreground = Brushes.Transparent,
+                                FontSize = textContext.BaseFontSize * textContext.FontSizeMultiplier,
+                            });
+                        }
+
+                        var capturedCallback = onTagPress;
+                        var capturedMarker = marker;
+                        link.Click += (_, _) =>
+                        {
+                            System.Diagnostics.Debug.WriteLine(
+                                $"[VerseTextProcessor] OnTagPress fired: '{capturedMarker}'");
+                            capturedCallback.Invoke(capturedMarker);
+                        };
+
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[VerseTextProcessor] <f> marker wired: '{marker}' " +
+                            $"encircled={IsEncircled(node.Content)}");
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[VerseTextProcessor] <f> wired: '{marker}' codepoints=[{string.Join(" ", marker.Select(c => $"U+{(int)c:X4}"))}]");
+                        target.Add(link);
                     }
-                    else ProcessNormalText(rawText, target, textContext, highlight, themeColors,
-                        onWordPress, options, wordHighlights);
+                    else
+                    {
+                        // No callback → render as plain text (Kotlin does the same).
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[VerseTextProcessor] <f> marker '{rawText}' " +
+                            $"NOT clickable (onTagPress null or EnableTagClick false)");
+                        ProcessNormalText(rawText, target, textContext, highlight, themeColors,
+                            onWordPress, options, wordHighlights);
+                    }
                     break;
 
                 default:
@@ -419,7 +454,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  Normal text (word-annotated)
+        //  Normal text
         // ═══════════════════════════════════════════════════════════════
         private void ProcessNormalText(
             string text, List<Inline> target, TraversalContext context,
@@ -480,7 +515,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  Self-closing tag (e.g. <f content="…"/>)
+        //  Self-closing tag
         // ═══════════════════════════════════════════════════════════════
         private static void ProcessSelfClosingTag(
             TreeNode.SelfClosingNode node, List<Inline> target,

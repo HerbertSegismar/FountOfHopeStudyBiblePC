@@ -1,67 +1,63 @@
-﻿using System.Collections.Generic;
+﻿// Helpers/InteractiveModalUtils.cs
+using System.Collections.Generic;
 
 namespace FountOfHopeStudyBiblePC.Helpers
 {
     public static class InteractiveModalUtils
     {
-        /// <summary>Language → list of dictionary keys.</summary>
-        public static Dictionary<string, List<string>> DictionariesByLanguage { get; } = new()
+        public static readonly Dictionary<string, List<string>> DictionariesByLanguage = new()
         {
-            ["English"] = new() { "atsbd", "cbtel", "vines", "oxford", "topical", "webster" },
-            ["Greek"] = new() { "greekdict" },
-            ["Hebrew"] = new() { "hebrewdict" },
-            ["Latin"] = new() { "latin" },
+            ["English"] = new() { "atsbd", "cbtel", "isbe", "noah", "oxford", "topical", "tcr" },
+            ["Arabic"] = new() { "ardbt" },
+            ["Spanish"] = new() { "eunsa" },
+            ["Hebrew"] = new() { "gesenius" },
+            ["Russian"] = new() { "rbo", "Брокгауз", "ББС" },
+            ["Chinese"] = new() { "白云晓" }
         };
 
-        public static Dictionary<string, string> DictionaryDisplayNames { get; } = new()
+        public static readonly Dictionary<string, string> DictionaryDisplayNames = new()
         {
-            ["atsbd"] = "ATS Bible Dictionary",
-            ["cbtel"] = "CBTEL Dictionary",
-            ["vines"] = "Vine's Expository",
-            ["oxford"] = "Oxford Bible Dictionary",
-            ["topical"] = "Nave's Topical Bible",
-            ["webster"] = "Webster's 1828",
-            ["greekdict"] = "Greek Lexicon",
-            ["hebrewdict"] = "Hebrew Lexicon",
-            ["latin"] = "Latin Dictionary",
+            ["atsbd"] = "ATSBD",
+            ["cbtel"] = "CBTEL",
+            ["eunsa"] = "Sagrada Biblia Spanish Dictionary",
+            ["isbe"] = "Int'l Standard Bible Encyclopedia",
+            ["noah"] = "Noah Webster's Dictionary",
+            ["oxford"] = "Oxford Dictionary",
+            ["rbo"] = "Modern Russian Translation Dictionary",
+            ["topical"] = "Topical Bible Dictionary",
+            ["tcr"] = "Thompson Chain Reference",
+            ["gesenius"] = "Hebrew and Chaldee Lexicon",
+            ["ardbt"] = "Arabic Dictionary of Biblical Theology",
+            ["Брокгауз"] = "Библейская Энциклопедия Брокгауза",
+            ["ББС"] = "Большой Библейский Словарь",
+            ["白云晓"] = "白云晓圣经词典"
         };
 
-        public static List<string> VerseCommentaries { get; } = new()
+        public static readonly List<string> VerseCommentaries = new()
         {
-            "cbsc", "mh", "jfb", "barnes", "clarke", "pnt", "wesley", "calvin"
+            "cbsc", "spurgeon", "ebc", "fairbairn",
+            "hawker", "mhwbc", "scofield", "tsk"
         };
 
-        public static Dictionary<string, string> VerseCommentaryDisplayNames { get; } = new()
+        public static readonly Dictionary<string, string> VerseCommentaryDisplayNames = new()
         {
-            ["cbsc"] = "Cambridge Bible for Schools and Colleges",
-            ["mh"] = "Matthew Henry Commentary",
-            ["jfb"] = "Jamieson-Fausset-Brown",
-            ["barnes"] = "Barnes' Notes",
-            ["clarke"] = "Adam Clarke Commentary",
-            ["pnt"] = "People's New Testament",
-            ["wesley"] = "John Wesley's Notes",
-            ["calvin"] = "Calvin's Commentaries",
+            ["cbsc"] = "Cambridge Bible Commentary",
+            ["spurgeon"] = "Charles Spurgeon's Commentary",
+            ["ebc"] = "Expositor's Bible Commentary",
+            ["fairbairn"] = "Fairbairn's Typology of Scripture",
+            ["hawker"] = "Hawker's Poor Man's Commentary",
+            ["mhwbc"] = "Matthew Henry's Commentary",
+            ["scofield"] = "Scofield Reference Bible",
+            ["tsk"] = "Treasury of Scripture Knowledge"
         };
 
-        public static List<string> CrossReferenceDatabases { get; } = new()
-        {
-            "obx", "tsk", "nave", "torrey"
-        };
+        public static readonly List<string> CrossReferenceDatabases = new() { "esv", "niv11", "obx" };
 
-        public static Dictionary<string, string> CrossReferenceDatabaseDisplayNames { get; } = new()
+        public static readonly Dictionary<string, string> CrossReferenceDatabaseDisplayNames = new()
         {
-            ["obx"] = "OpenBible Cross References",
-            ["tsk"] = "Treasury of Scripture Knowledge",
-            ["nave"] = "Nave's Cross References",
-            ["torrey"] = "Torrey's Cross References",
+            ["esv"] = "References from ESV",
+            ["niv11"] = "References from NIV",
+            ["obx"] = "References from OpenBible Project"
         };
-
-        /// <summary>Return the language for a dictionary key, or null.</summary>
-        public static string? GetLanguageForDictionary(string dictKey)
-        {
-            foreach (var kv in DictionariesByLanguage)
-                if (kv.Value.Contains(dictKey)) return kv.Key;
-            return null;
-        }
     }
 }

@@ -81,12 +81,114 @@ namespace FountOfHopeStudyBiblePC.Helpers
                     $"<b>{p.topic}</b>\n" + SanitizeHtmlContent(p.definition)));
         }
 
-        // ── Verse commentary lookup ─────────────────────────────────
         public static List<VerseCommentary>? GetVerseCommentaries(
-            DatabaseHelper? db, int book, int chapter, int verse)
+    DatabaseHelper? dbHelper, int bookNumber, int chapter, int verse)
         {
-            if (db == null) return null;
-            return db.GetCommentariesForVerse(book, chapter, verse);
+            if (dbHelper == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[Commentary] dbHelper is null");
+                return null;
+            }
+
+            var result = new List<VerseCommentary>();
+            try
+            {
+                // ── Open a fresh connection to the same file ─────────────
+                // (Assumes DatabaseHelper's constructor path is AppDomain.CurrentDomain.BaseDirectory
+                //  + databaseName, matching the Kotlin asset-copy behaviour.)
+                // If DatabaseHelper exposes Database/Connection, use that instead:
+                //     var conn = dbHelper.Database;   // reuse
+                var dbPath = System.IO.Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory, dbHelper.DatabaseName);
+
+                if (!System.IO.File.Exists(dbPath))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Commentary] DB file not found: {dbPath}");
+                    return result;
+                }
+
+                using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
+                conn.Open();
+
+                using var cmd = conn.CreateCommand();
+
+                // ── CRITICAL: chapter_number_to = 0 must be treated like NULL ──
+                cmd.CommandText = @"
+            SELECT text,
+                   chapter_number_from, verse_number_from,
+                   chapter_number_to,   verse_number_to
+            FROM commentaries
+            WHERE book_number = @book
+              AND (chapter_number_from IS NULL OR chapter_number_from = 0
+                   OR chapter_number_from <= @chapter)
+              AND (chapter_number_to   IS NULL OR chapter_number_to   = 0
+                   OR chapter_number_to   >= @chapter)";
+                cmd.Parameters.AddWithValue("@book", bookNumber);
+                cmd.Parameters.AddWithValue("@chapter", chapter);
+
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    var text = reader.IsDBNull(0) ? "" : reader.GetString(0);
+
+                    var chFrom = reader.IsDBNull(1) ? 1 : reader.GetInt32(1);
+                    if (chFrom <= 0) chFrom = 1;
+
+                    var vFrom = reader.IsDBNull(2) || reader.GetInt32(2) <= 0
+                        ? 1 : reader.GetInt32(2);
+
+                    var chTo = reader.IsDBNull(3) ? (int?)null : reader.GetInt32(3);
+                    if (chTo is <= 0) chTo = null;
+
+                    var vTo = reader.IsDBNull(4) ? (int?)null : reader.GetInt32(4);
+                    if (vTo is <= 0) vTo = null;
+
+                    // ── Single-verse entry: both To fields are null/0 ─────
+                    if (chTo == null && vTo == null)
+                    {
+                        if (chapter == chFrom && verse == vFrom)
+                        {
+                            result.Add(new VerseCommentary(
+                                SanitizeCommentaryText(text), chFrom, vFrom, null, null));
+                        }
+                        continue;
+                    }
+
+                    // ── Chapter range check ──────────────────────────────
+                    if (chapter < chFrom) continue;
+                    if (chTo is int ct && chapter > ct) continue;
+
+                    // ── Verse range check (only when on the boundary chapter) ──
+                    var lowerMet = chapter != chFrom || verse >= vFrom;
+                    var upperMet = chTo == null
+                                || chapter != chTo
+                                || vTo == null
+                                || verse <= vTo.Value;
+
+                    if (lowerMet && upperMet)
+                    {
+                        result.Add(new VerseCommentary(
+                            SanitizeCommentaryText(text), chFrom, vFrom, chTo, vTo));
+                    }
+                }
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"[Commentary] book={bookNumber} chapter={chapter} verse={verse} → {result.Count} row(s)");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Commentary] Query failed: {ex}");
+            }
+
+            return result;
+        }
+
+        private static string SanitizeCommentaryText(string text)
+        {
+            text = Regex.Replace(text, "<script[\\s\\S]*?</script>", "");
+            text = Regex.Replace(text, "</i>(\\w)", "</i> $1", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, "</em>(\\w)", "</em> $1", RegexOptions.IgnoreCase);
+            return text;
         }
 
         // ── Fetch verses for cross-reference targets ────────────────

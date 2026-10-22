@@ -1,6 +1,7 @@
 ﻿// Views/Modals/InteractiveModal.xaml.cs
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -17,7 +18,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 {
     public partial class InteractiveModal : Window
     {
-        // ── Dependencies ────────────────────────────────────────────
         private readonly AppViewModel _viewModel;
         private readonly DatabaseHelper? _bibleDb;
         private readonly Action<PassageSelection> _onNavigateToReader;
@@ -28,11 +28,13 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private DatabaseHelper? _dictionaryDb;
         private DatabaseHelper? _secondaryDictionaryDb;
         private DatabaseHelper? _strongDb;
-        private DatabaseHelper? _commentaryDb;
-        private DatabaseHelper? _verseCommentaryDb;
+        private DatabaseHelper? _commentaryDb;        // <version>com.sqlite3 (footnotes)
+        private DatabaseHelper? _verseCommentaryDb;   // <name>.commentaries.sqlite3
         private DatabaseHelper? _crossRefDb;
 
-        // ── Constructor ─────────────────────────────────────────────
+        // Cross-reference counts for the currently-displayed verse page
+        private readonly Dictionary<int, int> _crossRefCounts = new();
+
         public InteractiveModal(
             AppViewModel viewModel,
             DatabaseHelper? bibleDb,
@@ -40,7 +42,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             string initialType,
             bool isOldTestament,
             bool useSecondaryDictionary = false,
-            // Optional content depending on type
             string initialTitle = "",
             string initialContent = "",
             string word = "",
@@ -52,6 +53,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             int? verse = null)
         {
             InitializeComponent();
+            System.Diagnostics.Debug.WriteLine(">>> InteractiveModal v3 LOADED <<<");
 
             _viewModel = viewModel;
             _bibleDb = bibleDb;
@@ -59,17 +61,15 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             _useSecondaryDictionary = useSecondaryDictionary;
 
             LoadAllHelpers();
-
             ApplyTheme();
             BuildInitialPage(initialType, isOldTestament, initialTitle,
                 initialContent, word, definition, strongNumber, strongDefinition,
                 bookNumber, chapter, verse);
-
             UpdateView();
         }
 
         // ═══════════════════════════════════════════════════════════
-        //  DB / helper loading
+        //  DB loading
         // ═══════════════════════════════════════════════════════════
         private void LoadAllHelpers()
         {
@@ -86,12 +86,8 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             _strongDb?.Dispose();
             _strongDb = new DatabaseHelper("secedictionary.sqlite3");
 
-            if (!string.IsNullOrWhiteSpace(_bibleDb?.DatabaseName))
-            {
-                var comName = _bibleDb!.DatabaseName.Replace(".sqlite3", "com.sqlite3");
-                _commentaryDb?.Dispose();
-                _commentaryDb = new DatabaseHelper(comName);
-            }
+            _commentaryDb?.Dispose();
+            _commentaryDb = CreateCommentaryHelperIfExists(_bibleDb?.DatabaseName);
 
             _verseCommentaryDb?.Dispose();
             _verseCommentaryDb = !string.IsNullOrWhiteSpace(_viewModel.SelectedVerseCommentary)
@@ -102,6 +98,28 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             _crossRefDb = !string.IsNullOrWhiteSpace(_viewModel.SelectedCrossReferenceDatabase)
                 ? new DatabaseHelper($"{_viewModel.SelectedCrossReferenceDatabase}.crossreferences.sqlite3")
                 : null;
+        }
+
+        private DatabaseHelper? CreateCommentaryHelperIfExists(string? bibleDbName)
+        {
+            if (string.IsNullOrWhiteSpace(bibleDbName)) return null;
+
+            var comDbName = bibleDbName.Replace(".sqlite3", "com.sqlite3");
+
+            var localPath = DatabaseHelper.GetDatabaseFilePath(comDbName);
+            if (File.Exists(localPath))
+                return new DatabaseHelper(comDbName);
+
+            var assetCandidates = new[]
+            {
+                Path.Combine(AppContext.BaseDirectory, "Assets", "databases", comDbName),
+                Path.Combine(AppContext.BaseDirectory, "Assets", comDbName),
+            };
+            foreach (var asset in assetCandidates)
+                if (File.Exists(asset))
+                    return new DatabaseHelper(comDbName);
+
+            return null;
         }
 
         private void ApplyTheme()
@@ -127,6 +145,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             int? bookNumber, int? chapter, int? verse)
         {
             _stack.Clear();
+            _crossRefCounts.Clear();
 
             switch (type)
             {
@@ -156,8 +175,8 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     break;
 
                 case "versecommentary":
-                    BuildVerseCommentaryInitial(bookNumber ?? 10, chapter ?? 1, verse ?? 1,
-                        isOldTestament);
+                    BuildVerseCommentaryInitial(
+                        bookNumber ?? 10, chapter ?? 1, verse ?? 1, isOldTestament);
                     break;
 
                 case "crossreference":
@@ -175,6 +194,39 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                         Verse = verse,
                     });
                     break;
+
+                case "verses":
+                    {
+                        var bookNum = bookNumber ?? 1;
+                        var chap = chapter ?? 1;
+                        var vers = verse ?? 1;
+                        var bookName = BibleData.GetBookByCustomNumber(bookNum)?.Name ?? "Book";
+
+                        var passage = new PassageSelection
+                        {
+                            BookNumber = bookNum,
+                            BookName = bookName,
+                            Chapter = chap,
+                            Verse = vers,
+                        };
+
+                        var verses = ModalContentHelpers.FetchVerses(passage, _bibleDb);
+                        LoadCrossRefCounts(bookNum, verses);
+
+                        _stack.Add(new ModalPage
+                        {
+                            Title = $"{bookName} {chap}:{vers}",
+                            Type = "verses",
+                            Content = "",
+                            Verses = verses,
+                            Passage = passage,
+                            IsOldTestament = isOldTestament,
+                            BookNumber = bookNum,
+                            Chapter = chap,
+                            Verse = vers,
+                        });
+                        break;
+                    }
             }
         }
 
@@ -215,7 +267,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 return;
             }
 
-            // Look up in DB
             var pairs = ModalContentHelpers.GetDefinitionOrClosest(db, word);
             if (pairs != null && pairs.Count > 0)
             {
@@ -246,25 +297,39 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        private void BuildVerseCommentaryInitial(int book, int chapter, int verse, bool isOldTestament)
+        private void BuildVerseCommentaryInitial(
+            int book, int chapter, int verse, bool isOldTestament)
         {
-            var dbDisplay = InteractiveModalUtils.VerseCommentaryDisplayNames
-                .GetValueOrDefault(_viewModel.SelectedVerseCommentary, "");
-
+            var selected = _viewModel.SelectedVerseCommentary;
             var bookName = BibleData.GetBookByCustomNumber(book)?.Name ?? "Book";
-            var commentaries = ModalContentHelpers.GetVerseCommentaries(
-                _verseCommentaryDb, book, chapter, verse);
 
-            var content = commentaries == null || commentaries.Count == 0
-                ? "No commentaries available for this verse."
-                : string.Join("\n\n──────────\n\n", commentaries.Select(c => c.Text));
+            string content;
+            if (string.IsNullOrWhiteSpace(selected))
+            {
+                content = "No verse commentary is selected in Settings.";
+            }
+            else if (_verseCommentaryDb == null)
+            {
+                content = $"Could not open '{selected}.commentaries.sqlite3'.";
+            }
+            else
+            {
+                var commentaries = _verseCommentaryDb
+                    .GetCommentariesForVerse(book, chapter, verse);
+
+                content = commentaries == null || commentaries.Count == 0
+                    ? "No commentaries available for this verse."
+                    : string.Join("\n\n──────────\n\n",
+                        commentaries.Select(c => c.Text));
+            }
 
             _stack.Add(new ModalPage
             {
                 Title = $"Notes on {bookName} {chapter}:{verse}",
                 Type = "versecommentary",
                 Content = content,
-                Description = dbDisplay,
+                Description = InteractiveModalUtils.VerseCommentaryDisplayNames
+                    .GetValueOrDefault(selected, selected ?? ""),
                 IsOldTestament = isOldTestament,
                 BookNumber = book,
                 Chapter = chapter,
@@ -273,17 +338,32 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         }
 
         // ═══════════════════════════════════════════════════════════
-        //  View updates
+        //  View refresh
         // ═══════════════════════════════════════════════════════════
         private void UpdateView()
         {
             if (_stack.Count == 0) { Close(); return; }
             var page = _stack[^1];
 
-            // Title row
+            // ── Title ──
             if (page.Type == "definition" && !string.IsNullOrWhiteSpace(page.Word))
             {
-                TitleText.Text = "Definition of";
+                var selectedDict = _useSecondaryDictionary
+                    ? _viewModel.SelectedSecondaryDictionary
+                    : _viewModel.SelectedPrimaryDictionary;
+                var isTopical = selectedDict == "topical";
+
+                string prefix;
+                if (isTopical) prefix = "References for ";
+                else if (page.Title.StartsWith("Definition of ", StringComparison.OrdinalIgnoreCase))
+                    prefix = "Definition of ";
+                else if (page.Title.StartsWith("Closest match for ", StringComparison.OrdinalIgnoreCase))
+                    prefix = "Closest match for ";
+                else if (page.Title.StartsWith("Matches for ", StringComparison.OrdinalIgnoreCase))
+                    prefix = "Matches for ";
+                else prefix = "Definition of ";
+
+                TitleText.Text = prefix;
                 TitleWordLink.Text = Capitalize(page.Word);
                 TitleWordLink.Visibility = Visibility.Visible;
             }
@@ -293,24 +373,36 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 TitleWordLink.Visibility = Visibility.Collapsed;
             }
 
-            // Description row
+            // PlayInReaderButton is generated from XAML (x:Name). Reference it directly.
+            PlayInReaderButton.Visibility = page.Type == "verses" && page.Passage != null
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            // ── Description + fast-forward ──
             if (!string.IsNullOrWhiteSpace(page.Description))
             {
                 DescriptionPanel.Visibility = Visibility.Visible;
                 DescriptionText.Text = page.Description;
-                NextDbButton.Visibility = page.Type == "definition"
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
+                NextDbButton.Visibility =
+                    page.Type is "definition" or "versecommentary" or "crossreference"
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
             }
-            else DescriptionPanel.Visibility = Visibility.Collapsed;
+            else
+            {
+                DescriptionPanel.Visibility = Visibility.Collapsed;
+                NextDbButton.Visibility = Visibility.Collapsed;
+            }
 
-            // Body
+            // ── Body ──
             BodyText.Inlines.Clear();
             RenderBody(page);
 
-            // Buttons
             BackButton.Visibility = _stack.Count > 1
-                ? Visibility.Visible : Visibility.Collapsed;
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            BodyScroller?.ScrollToTop();
         }
 
         private void RenderBody(ModalPage page)
@@ -320,11 +412,12 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 RenderVerseList(page);
                 return;
             }
-
-            // Default: render text with hyperlinks
             RenderInlineHtml(page.Content);
         }
 
+        // ═══════════════════════════════════════════════════════════
+        //  Verse list
+        // ═══════════════════════════════════════════════════════════
         private void RenderVerseList(ModalPage page)
         {
             var passage = page.Passage;
@@ -344,27 +437,139 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 HighlightIcon: _viewModel.HeaderButtonsColor,
                 WordHighlightBg: _viewModel.WordMarkerColor);
 
+            // Pattern-match so this compiles whether Chapter is int or int?
+            var showChapterHeaders = page.Verses
+                .Select(v => v.Chapter is int c ? c : 0)
+                .Where(c => c > 0)
+                .Distinct()
+                .Count() > 1;
+
+            int? lastChapter = null;
+
             foreach (var verse in page.Verses)
             {
-                // Bold verse number
+                // Current chapter as a plain int (0 if unset)
+                int currentChapter = verse.Chapter is int cc ? cc : 0;
+
+                // ── Chapter header ──
+                if (showChapterHeaders && currentChapter != lastChapter)
+                {
+                    BodyText.Inlines.Add(new Run($"Chapter {currentChapter}")
+                    {
+                        FontWeight = FontWeights.Bold,
+                        FontSize = 14,
+                        Foreground = new SolidColorBrush(themeColors.Primary),
+                    });
+                    BodyText.Inlines.Add(new LineBreak());
+                    lastChapter = currentChapter;
+                }
+
+                // ── Verse number ──
                 BodyText.Inlines.Add(new Run($" {verse.VerseNumber} ")
                 {
                     FontWeight = FontWeights.Bold,
                     Foreground = new SolidColorBrush(themeColors.VerseNumber),
                 });
 
-                // Processed body
+                // Resolve book / chapter to plain ints (nullable-safe)
+                int vBook = passage.BookNumber is int pb && pb > 0 ? pb : 1;
+                int vChapter =
+                    verse.Chapter is int vcc && vcc > 0 ? vcc
+                    : passage.Chapter is int pcc && pcc > 0 ? pcc
+                    : 1;
+                var vVerse = verse.VerseNumber;
+                var vIsOld = page.IsOldTestament;
+
+                // ── Verse body with all three tap handlers ──
                 var processed = processor.ProcessVerse(
                     verseText: verse.Text,
                     baseFontSize: 12,
                     themeColors: themeColors,
                     textColor: themeColors.TextColor,
-                    isOldTestament: page.IsOldTestament,
-                    options: new ProcessingOptions { ShowStrongs = _viewModel.ShowStrongs });
+                    isOldTestament: vIsOld,
+                    options: new ProcessingOptions { ShowStrongs = _viewModel.ShowStrongs },
+                    onTagPress: marker =>
+                        OpenFootnoteCommentary(marker, vBook, vChapter, vVerse, vIsOld),
+                    onWordPress: w =>
+                        OnWordPressInVerse(w, vBook, vChapter, vVerse, vIsOld),
+                    onStrongsPress: (num) =>
+                        OnStrongsPressInVerse(num, vBook, vChapter, vVerse, vIsOld));
 
                 foreach (var inline in processed.Body) BodyText.Inlines.Add(inline);
 
+                // ── [n] cross-reference badge ──
+                if (_crossRefCounts.TryGetValue(vVerse, out var refCount) && refCount > 0)
+                {
+                    BodyText.Inlines.Add(new Run(" "));
+                    var refLink = new Hyperlink(new Run($"[{refCount}]"))
+                    {
+                        Foreground = new SolidColorBrush(themeColors.Primary),
+                        FontWeight = FontWeights.Bold,
+                        TextDecorations = null,
+                        Cursor = Cursors.Hand,
+                        ToolTip = "Open cross-references",
+                        Tag = new VerseCommentaryTagInfo
+                        {
+                            BookNumber = vBook,
+                            Chapter = vChapter,
+                            VerseNumber = vVerse,
+                            IsOldTestament = vIsOld,
+                        },
+                    };
+                    refLink.Click += CrossRefLink_Click;
+                    BodyText.Inlines.Add(refLink);
+                }
+
+                // ── [C] verse-commentary marker ──
+                BodyText.Inlines.Add(new Run(" "));
+                var star = new Hyperlink(new Run("[C]"))
+                {
+                    Foreground = new SolidColorBrush(themeColors.VerseNumber),
+                    FontWeight = FontWeights.Bold,
+                    TextDecorations = null,
+                    Cursor = Cursors.Hand,
+                    ToolTip = "Open verse commentary",
+                    Tag = new VerseCommentaryTagInfo
+                    {
+                        BookNumber = vBook,
+                        Chapter = vChapter,
+                        VerseNumber = vVerse,
+                        IsOldTestament = vIsOld,
+                    },
+                };
+                star.Click += VerseCommentaryLink_Click;
+                BodyText.Inlines.Add(star);
+
                 BodyText.Inlines.Add(new LineBreak());
+            }
+        }
+
+        // ── Fixed: enumerates into plain ints so no int? leaks downstream ──
+        private void LoadCrossRefCounts(int book, List<Verse> verses)
+        {
+            _crossRefCounts.Clear();
+            if (_crossRefDb == null || verses == null) return;
+
+            var chapters = verses
+                .Select(v => v.Chapter is int c ? c : 0)
+                .Where(c => c > 0)
+                .Distinct()
+                .ToList();
+
+            foreach (var chapter in chapters) // chapter is int here
+            {
+                try
+                {
+                    var counts = _crossRefDb.GetCrossReferenceCountsForChapter(book, chapter);
+                    if (counts == null) continue;
+                    foreach (var kv in counts)
+                        _crossRefCounts[kv.Key] = kv.Value;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[LoadCrossRefCounts] ch={chapter} failed: {ex.Message}");
+                }
             }
         }
 
@@ -372,7 +577,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         {
             if (string.IsNullOrEmpty(content)) return;
 
-            // Find and convert <a href="...">text</a> into clickable Hyperlinks
             var linkRegex = new Regex("<a\\s+href=\"([^\"]+)\"[^>]*>(.*?)</a>",
                 RegexOptions.IgnoreCase);
 
@@ -380,10 +584,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             foreach (Match m in linkRegex.Matches(content))
             {
                 if (m.Index > cursor)
-                {
-                    var prefix = StripTags(content.Substring(cursor, m.Index - cursor));
-                    BodyText.Inlines.Add(new Run(prefix));
-                }
+                    BodyText.Inlines.Add(new Run(StripTags(content.Substring(cursor, m.Index - cursor))));
 
                 var href = m.Groups[1].Value;
                 var text = StripTags(m.Groups[2].Value);
@@ -401,10 +602,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
 
             if (cursor < content.Length)
-            {
-                var tail = StripTags(content.Substring(cursor));
-                BodyText.Inlines.Add(new Run(tail));
-            }
+                BodyText.Inlines.Add(new Run(StripTags(content.Substring(cursor))));
         }
 
         private static string StripTags(string text)
@@ -417,69 +615,514 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         {
             if (sender is not Hyperlink link) return;
             var href = link.Tag as string ?? "";
+            var linkText = link.Inlines.OfType<Run>().FirstOrDefault()?.Text ?? "";
 
             if (href.StartsWith("B:"))
-            {
-                var passage = ModalContentHelpers.ParseVerseLink(href, link.Inlines
-                    .OfType<Run>().FirstOrDefault()?.Text ?? "");
-                if (passage != null)
-                {
-                    var verses = ModalContentHelpers.FetchVerses(passage, _bibleDb);
-                    _stack.Add(new ModalPage
-                    {
-                        Title = $"{passage.BookName} {passage.Chapter}:{passage.Verse}",
-                        Type = "verses",
-                        Verses = verses,
-                        Passage = passage,
-                        IsOldTestament = BibleData.GetBookByCustomNumber(passage.BookNumber)?.Testament
-                            == Testament.Old,
-                    });
-                    UpdateView();
-                }
-            }
+                NavigateToPassage(href, linkText);
+            else if (href.StartsWith("S:"))
+                HandleSeeLink(href, linkText);
         }
 
+        private void VerseCommentaryLink_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Hyperlink link) return;
+            if (link.Tag is not VerseCommentaryTagInfo tag) return;
+
+            BuildVerseCommentaryInitial(
+                tag.BookNumber, tag.Chapter, tag.VerseNumber, tag.IsOldTestament);
+            UpdateView();
+        }
+
+        private void CrossRefLink_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Hyperlink link) return;
+            if (link.Tag is not VerseCommentaryTagInfo tag) return;
+            if (_crossRefDb == null)
+            {
+                _stack.Add(new ModalPage
+                {
+                    Title = "Cross-references unavailable",
+                    Type = "crossreference",
+                    Content = "No cross-reference database is selected.",
+                    IsOldTestament = tag.IsOldTestament,
+                });
+                UpdateView();
+                return;
+            }
+
+            var refs = _crossRefDb.GetCrossReferences(
+                tag.BookNumber, tag.Chapter, tag.VerseNumber) ?? new List<CrossReference>();
+            var bookName = BibleData.GetBookByCustomNumber(tag.BookNumber)?.Name ?? "Book";
+
+            var html = refs.Count == 0
+                ? "No references available."
+                : string.Join("<br>", refs.Select(r =>
+                {
+                    var toBook = BibleData.GetBookByCustomNumber(r.BookTo)?.Name ?? r.BookTo.ToString();
+                    var vr = r.VerseToStart == r.VerseToEnd
+                        ? r.VerseToStart.ToString()
+                        : $"{r.VerseToStart}-{r.VerseToEnd}";
+                    var href = $"B:{r.BookTo} {r.ChapterTo}:{vr}";
+                    return $"<a href=\"{href}\">{toBook} {r.ChapterTo}:{vr}</a>";
+                }));
+
+            _stack.Add(new ModalPage
+            {
+                Title = $"References for {bookName} {tag.Chapter}:{tag.VerseNumber}",
+                Type = "crossreference",
+                Content = html,
+                Description = InteractiveModalUtils
+                    .CrossReferenceDatabaseDisplayNames
+                    .GetValueOrDefault(_viewModel.SelectedCrossReferenceDatabase, ""),
+                IsOldTestament = tag.IsOldTestament,
+                BookNumber = tag.BookNumber,
+                Chapter = tag.Chapter,
+                Verse = tag.VerseNumber,
+            });
+            UpdateView();
+        }
+
+        private void NavigateToPassage(string href, string linkText)
+        {
+            var passage = ModalContentHelpers.ParseVerseLink(href, linkText);
+            if (passage == null) return;
+
+            // Defensive int extraction — works for int or int?
+            int passageBook = passage.BookNumber is int pb && pb > 0 ? pb : 1;
+            int passageChapter = passage.Chapter is int pc && pc > 0 ? pc : 1;
+            int passageVerse = passage.Verse is int pv && pv > 0 ? pv : 1;
+
+            var verses = ModalContentHelpers.FetchVerses(passage, _bibleDb);
+            LoadCrossRefCounts(passageBook, verses);
+
+            _stack.Add(new ModalPage
+            {
+                Title = $"{passage.BookName} {passage.Chapter}:{passage.Verse}",
+                Type = "verses",
+                Verses = verses,
+                Passage = passage,
+                IsOldTestament = BibleData.GetBookByCustomNumber(passageBook)?.Testament == Testament.Old,
+                BookNumber = passageBook,
+                Chapter = passageChapter,
+                Verse = passageVerse,
+            });
+            UpdateView();
+        }
+
+        private void HandleSeeLink(string href, string linkText)
+        {
+            var seeContent = href.Substring(2).Trim();
+
+            if (seeContent.StartsWith("B:"))
+            {
+                NavigateToPassage(seeContent, linkText);
+                return;
+            }
+            if (Regex.IsMatch(seeContent, @"^[HG]\d+"))
+            {
+                ShowStrongDefinition(seeContent);
+                return;
+            }
+            if (Regex.IsMatch(seeContent, @"^\d+"))
+            {
+                var isOld = _stack[^1].IsOldTestament;
+                ShowCombinedStrongDefinition("H" + seeContent, "G" + seeContent, isOld);
+                return;
+            }
+
+            var wordToFetch = Regex.Replace(linkText, @"^See\s+", "",
+                RegexOptions.IgnoreCase).Trim();
+            if (string.IsNullOrEmpty(wordToFetch)) wordToFetch = seeContent;
+
+            BuildDefinitionInitial(wordToFetch, "", _stack[^1].IsOldTestament);
+            UpdateView();
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  Word / Strong's taps inside verses
+        // ═══════════════════════════════════════════════════════════
+        private void OnWordPressInVerse(string word, int book, int chapter, int verse, bool isOldTestament)
+        {
+            var trimmed = (word ?? "").Trim();
+            if (string.IsNullOrEmpty(trimmed) || Regex.IsMatch(trimmed, "\\d")) return;
+
+            BuildDefinitionInitial(trimmed, "", isOldTestament);
+            UpdateView();
+        }
+
+        private void OnStrongsPressInVerse(string strongNumber, int book, int chapter, int verse, bool isOldTestament)
+        {
+            var trimmed = (strongNumber ?? "").Trim();
+            if (string.IsNullOrEmpty(trimmed)) return;
+
+            string prefixed;
+            if (char.IsLetter(trimmed[0]))
+                prefixed = trimmed.ToUpperInvariant();
+            else
+                prefixed = (isOldTestament ? "H" : "G") + trimmed;
+
+            if (!Regex.IsMatch(prefixed, @"^[HG]\d+")) return;
+
+            ShowStrongDefinition(prefixed);
+        }
+
+        private void ShowStrongDefinition(string strongNumber)
+        {
+            var isOld = strongNumber.StartsWith("H");
+            var definition = _strongDb?.GetStrongDefinition(strongNumber)
+                ?? "Strong's definition not found.";
+            _stack.Add(new ModalPage
+            {
+                Title = $"Strong's Definition for {strongNumber}",
+                Type = "strong",
+                Content = ModalContentHelpers.PrepareStrongContent(definition),
+                StrongNumber = strongNumber,
+                IsOldTestament = isOld,
+            });
+            UpdateView();
+        }
+
+        private void ShowCombinedStrongDefinition(string hNum, string gNum, bool isOldTestament)
+        {
+            var hDef = _strongDb?.GetStrongDefinition(hNum) ?? "";
+            var gDef = _strongDb?.GetStrongDefinition(gNum) ?? "";
+            var preparedH = !string.IsNullOrWhiteSpace(hDef) ? ModalContentHelpers.PrepareStrongContent(hDef) : "";
+            var preparedG = !string.IsNullOrWhiteSpace(gDef) ? ModalContentHelpers.PrepareStrongContent(gDef) : "";
+
+            string title, content, strongNum;
+            if (preparedH.Length > 0 && preparedG.Length > 0)
+            {
+                title = $"Strong's Definition for {hNum} and {gNum}";
+                content = $"{hNum}:\n{preparedH}\n\n{gNum}:\n{preparedG}";
+                strongNum = $"{hNum},{gNum}";
+            }
+            else if (preparedH.Length > 0)
+            { title = $"Strong's Definition for {hNum}"; content = preparedH; strongNum = hNum; }
+            else if (preparedG.Length > 0)
+            { title = $"Strong's Definition for {gNum}"; content = preparedG; strongNum = gNum; }
+            else { title = "Strong's Definition not found"; content = "No definition found."; strongNum = ""; }
+
+            _stack.Add(new ModalPage
+            {
+                Title = title,
+                Type = "strong",
+                Content = content,
+                StrongNumber = strongNum,
+                IsOldTestament = isOldTestament,
+            });
+            UpdateView();
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  Footnotes
+        // ═══════════════════════════════════════════════════════════
+        private void OpenFootnoteCommentary(
+            string marker, int book, int chapter, int verse, bool isOldTestament)
+        {
+            if (string.IsNullOrEmpty(marker)) return;
+
+            var bookName = BibleData.GetBookByCustomNumber(book)?.Name ?? $"Book {book}";
+
+            string content;
+            if (_commentaryDb == null)
+            {
+                var expected = (_bibleDb?.DatabaseName ?? "").Replace(".sqlite3", "com.sqlite3");
+                content =
+                    $"No footnote database is available for this Bible version " +
+                    $"(expected '{expected}' in Assets/databases/).";
+            }
+            else
+            {
+                var text = _commentaryDb.GetCommentary(book, chapter, verse, marker);
+                content = string.IsNullOrWhiteSpace(text)
+                    ? $"No commentary found for marker \"{marker}\" at {bookName} {chapter}:{verse}."
+                    : ModalContentHelpers.SanitizeHtmlContent(text);
+            }
+
+            _stack.Add(new ModalPage
+            {
+                Title = $"Notes on {bookName} {chapter}:{verse}{marker}",
+                Type = "commentary",
+                Content = content,
+                IsOldTestament = isOldTestament,
+                BookNumber = book,
+                Chapter = chapter,
+                Verse = verse,
+            });
+            UpdateView();
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  Edit-word dialog
+        // ═══════════════════════════════════════════════════════════
         private void TitleWordLink_Click(object sender, MouseButtonEventArgs e)
         {
-            // TODO: open edit-word dialog. For now, no-op.
+            var page = _stack[^1];
+            if (page.Type != "definition" || string.IsNullOrWhiteSpace(page.Word)) return;
+
+            var newWord = PromptForWord(page.Word);
+            if (string.IsNullOrWhiteSpace(newWord) ||
+                newWord.Equals(page.Word, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            var capitalized = Capitalize(newWord);
+            var loading = page with
+            {
+                Title = $"Searching for {capitalized}...",
+                Content = "Loading...",
+                Word = newWord,
+            };
+            _stack[^1] = loading;
+            UpdateView();
+
+            var dict = _useSecondaryDictionary
+                ? _viewModel.SelectedSecondaryDictionary
+                : _viewModel.SelectedPrimaryDictionary;
+            var db = _useSecondaryDictionary ? _secondaryDictionaryDb : _dictionaryDb;
+            var display = InteractiveModalUtils.DictionaryDisplayNames
+                .GetValueOrDefault(dict, dict);
+
+            var pairs = ModalContentHelpers.GetDefinitionOrClosest(db, newWord);
+            string title, content;
+            if (pairs != null && pairs.Count > 0)
+            {
+                var isExact = pairs.Count == 1 &&
+                              pairs[0].topic.Equals(newWord, StringComparison.OrdinalIgnoreCase);
+                var isTopical = dict == "topical";
+                title = isTopical ? $"References for {capitalized}"
+                      : isExact ? $"Definition of {Capitalize(pairs[0].topic)}"
+                      : pairs.Count == 1 ? $"Closest match for {Capitalize(pairs[0].topic)}"
+                      : $"Matches for \"{capitalized}\"";
+                content = ModalContentHelpers.BuildDefinitionContent(
+                    newWord, pairs, dict == "oxford", isTopical);
+            }
+            else
+            {
+                title = $"Definition of {capitalized} not found";
+                content = $"No results for \"{newWord}\".";
+            }
+
+            _stack[^1] = page with
+            {
+                Title = title,
+                Content = content,
+                Word = newWord,
+                Description = display,
+            };
+            UpdateView();
         }
 
+        private string? PromptForWord(string initial)
+        {
+            var dlg = new Window
+            {
+                Title = "Edit Word",
+                Width = 320,
+                Height = 160,
+                Owner = this,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ResizeMode = ResizeMode.NoResize,
+            };
+
+            var panel = new StackPanel { Margin = new Thickness(12) };
+            var tb = new TextBox { Text = initial, Margin = new Thickness(0, 4, 0, 12), FontSize = 14 };
+            var buttons = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+            };
+            var ok = new Button { Content = "Update", Width = 80, Margin = new Thickness(4, 0, 0, 0) };
+            var cancel = new Button { Content = "Cancel", Width = 80 };
+
+            ok.Click += (_, _) => { dlg.DialogResult = true; dlg.Close(); };
+            cancel.Click += (_, _) => { dlg.DialogResult = false; dlg.Close(); };
+
+            buttons.Children.Add(cancel);
+            buttons.Children.Add(ok);
+            panel.Children.Add(new TextBlock { Text = "Enter word:" });
+            panel.Children.Add(tb);
+            panel.Children.Add(buttons);
+            dlg.Content = panel;
+
+            return dlg.ShowDialog() == true ? tb.Text.Trim() : null;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  Misc handlers
+        // ═══════════════════════════════════════════════════════════
         private void DescriptionButton_Click(object sender, RoutedEventArgs e)
         {
-            // TODO: open the description dropdown (dictionary/commentary switcher).
+            var page = _stack[^1];
+            var menu = new ContextMenu();
+
+            switch (page.Type)
+            {
+                case "definition":
+                    {
+                        var lang = _useSecondaryDictionary
+                            ? _viewModel.SelectedSecondaryDictLanguage
+                            : _viewModel.SelectedPrimaryDictLanguage;
+                        var dicts = InteractiveModalUtils.DictionariesByLanguage
+                            .GetValueOrDefault(lang, new List<string>());
+                        foreach (var key in dicts)
+                        {
+                            var item = new MenuItem
+                            {
+                                Header = InteractiveModalUtils.DictionaryDisplayNames
+                                    .GetValueOrDefault(key, key),
+                                IsChecked = key == (_useSecondaryDictionary
+                                    ? _viewModel.SelectedSecondaryDictionary
+                                    : _viewModel.SelectedPrimaryDictionary),
+                            };
+                            var captured = key;
+                            item.Click += (_, _) => SwitchToDictionary(captured);
+                            menu.Items.Add(item);
+                        }
+                        break;
+                    }
+                case "versecommentary":
+                    {
+                        foreach (var key in InteractiveModalUtils.VerseCommentaryDisplayNames.Keys)
+                        {
+                            var item = new MenuItem
+                            {
+                                Header = InteractiveModalUtils.VerseCommentaryDisplayNames[key],
+                                IsChecked = key == _viewModel.SelectedVerseCommentary,
+                            };
+                            var captured = key;
+                            item.Click += (_, _) => SwitchToVerseCommentary(captured);
+                            menu.Items.Add(item);
+                        }
+                        break;
+                    }
+                case "crossreference":
+                    {
+                        foreach (var key in InteractiveModalUtils.CrossReferenceDatabaseDisplayNames.Keys)
+                        {
+                            var item = new MenuItem
+                            {
+                                Header = InteractiveModalUtils.CrossReferenceDatabaseDisplayNames[key],
+                                IsChecked = key == _viewModel.SelectedCrossReferenceDatabase,
+                            };
+                            var captured = key;
+                            item.Click += (_, _) => SwitchToCrossReference(captured);
+                            menu.Items.Add(item);
+                        }
+                        break;
+                    }
+                default:
+                    return;
+            }
+
+            if (menu.Items.Count == 0) return;
+            menu.PlacementTarget = sender as UIElement ?? DescriptionPanel;
+            menu.IsOpen = true;
+        }
+
+        private void PlayInReaderButton_Click(object sender, RoutedEventArgs e)
+        {
+            var page = _stack[^1];
+            if (page.Type != "verses" || page.Passage == null) return;
+            _onNavigateToReader?.Invoke(page.Passage);
+            Close();
         }
 
         private void NextDbButton_Click(object sender, RoutedEventArgs e)
         {
             var page = _stack[^1];
+            switch (page.Type)
+            {
+                case "definition":
+                    {
+                        var lang = _useSecondaryDictionary
+                            ? _viewModel.SelectedSecondaryDictLanguage
+                            : _viewModel.SelectedPrimaryDictLanguage;
+                        var dicts = InteractiveModalUtils.DictionariesByLanguage
+                            .GetValueOrDefault(lang, new List<string>());
+                        if (dicts.Count <= 1) return;
+
+                        var current = _useSecondaryDictionary
+                            ? _viewModel.SelectedSecondaryDictionary
+                            : _viewModel.SelectedPrimaryDictionary;
+                        var idx = dicts.IndexOf(current);
+                        var next = dicts[(idx + 1) % dicts.Count];
+                        SwitchToDictionary(next);
+                        break;
+                    }
+                case "versecommentary":
+                    {
+                        var keys = InteractiveModalUtils.VerseCommentaryDisplayNames.Keys.ToList();
+                        if (keys.Count <= 1) return;
+                        var idx = keys.IndexOf(_viewModel.SelectedVerseCommentary);
+                        var next = keys[(idx + 1) % keys.Count];
+                        SwitchToVerseCommentary(next);
+                        break;
+                    }
+                case "crossreference":
+                    {
+                        var keys = InteractiveModalUtils.CrossReferenceDatabaseDisplayNames.Keys.ToList();
+                        if (keys.Count <= 1) return;
+                        var idx = keys.IndexOf(_viewModel.SelectedCrossReferenceDatabase);
+                        var next = keys[(idx + 1) % keys.Count];
+                        SwitchToCrossReference(next);
+                        break;
+                    }
+            }
+        }
+
+        // ── Cleaned up: drop current, rebuild fresh (no tangled stack surgery) ──
+        private void SwitchToDictionary(string newDict)
+        {
+            if (_useSecondaryDictionary) _viewModel.SelectedSecondaryDictionary = newDict;
+            else _viewModel.SelectedPrimaryDictionary = newDict;
+            LoadAllHelpers();
+
+            var page = _stack[^1];
             if (page.Type == "definition" && !string.IsNullOrWhiteSpace(page.Word))
             {
-                // Cycle through dictionaries for the current language
-                var lang = _useSecondaryDictionary
-                    ? _viewModel.SelectedSecondaryDictLanguage
-                    : _viewModel.SelectedPrimaryDictLanguage;
-                var dicts = InteractiveModalUtils.DictionariesByLanguage
-                    .GetValueOrDefault(lang, new List<string>());
-                if (dicts.Count <= 1) return;
-
-                var current = _useSecondaryDictionary
-                    ? _viewModel.SelectedSecondaryDictionary
-                    : _viewModel.SelectedPrimaryDictionary;
-                var idx = dicts.IndexOf(current);
-                var next = dicts[(idx + 1) % dicts.Count];
-
-                if (_useSecondaryDictionary) _viewModel.SelectedSecondaryDictionary = next;
-                else _viewModel.SelectedPrimaryDictionary = next;
-
-                LoadAllHelpers();
+                _stack.RemoveAt(_stack.Count - 1);
                 BuildDefinitionInitial(page.Word, "", page.IsOldTestament);
                 UpdateView();
             }
         }
 
+        private void SwitchToVerseCommentary(string newComKey)
+        {
+            _viewModel.SelectedVerseCommentary = newComKey;
+            LoadAllHelpers();
+
+            var page = _stack[^1];
+            if (page.BookNumber is int book && page.Chapter is int chap && page.Verse is int vers)
+            {
+                _stack.RemoveAt(_stack.Count - 1);
+                BuildVerseCommentaryInitial(book, chap, vers, page.IsOldTestament);
+                UpdateView();
+            }
+        }
+
+        private void SwitchToCrossReference(string newDbKey)
+        {
+            _viewModel.SelectedCrossReferenceDatabase = newDbKey;
+            LoadAllHelpers();
+
+            var page = _stack[^1];
+            if (page.BookNumber is int book && page.Chapter is int chap && page.Verse is int vers)
+            {
+                _stack.RemoveAt(_stack.Count - 1);
+                var tag = new VerseCommentaryTagInfo
+                {
+                    BookNumber = book,
+                    Chapter = chap,
+                    VerseNumber = vers,
+                    IsOldTestament = page.IsOldTestament,
+                };
+                // CrossRefLink_Click appends the new page and calls UpdateView()
+                CrossRefLink_Click(new Hyperlink { Tag = tag }, new RoutedEventArgs());
+            }
+        }
+
         private void ColorSwatchButton_Click(object sender, RoutedEventArgs e)
         {
-            // TODO: open ColorWheelDialog. For now, alternate between light/dark.
             _viewModel.DarkTheme = !_viewModel.DarkTheme;
             ApplyTheme();
         }
@@ -489,14 +1132,12 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             if (_stack.Count > 1)
             {
                 _stack.RemoveAt(_stack.Count - 1);
+                _crossRefCounts.Clear();
                 UpdateView();
             }
         }
 
-        private void CloseButton_Click(object sender, RoutedEventArgs e)
-        {
-            Close();
-        }
+        private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
 
         protected override void OnClosed(EventArgs e)
         {
@@ -509,11 +1150,17 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             _crossRefDb?.Dispose();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Helpers
-        // ═══════════════════════════════════════════════════════════
         private static string Capitalize(string s)
-            => string.IsNullOrEmpty(s) ? s
-               : char.ToUpperInvariant(s[0]) + s.Substring(1);
+            => string.IsNullOrEmpty(s)
+                ? s
+                : char.ToUpperInvariant(s[0]) + s.Substring(1);
+
+        private sealed class VerseCommentaryTagInfo
+        {
+            public int BookNumber { get; init; }
+            public int Chapter { get; init; }
+            public int VerseNumber { get; init; }
+            public bool IsOldTestament { get; init; }
+        }
     }
 }

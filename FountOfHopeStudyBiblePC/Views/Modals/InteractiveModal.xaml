@@ -13,34 +13,38 @@
         WindowStyle="None"
         ResizeMode="CanResizeWithGrip">
 
-    <Border x:Name="RootBorder"
+	<Border x:Name="RootBorder"
             CornerRadius="16"
             Padding="20"
             Background="{DynamicResource CardBackground}"
             BorderBrush="{DynamicResource DividerBrush}"
             BorderThickness="1">
-        <Border.Effect>
-            <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
-        </Border.Effect>
+		<Border.Effect>
+			<DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+		</Border.Effect>
 
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+		<Grid>
+			<Grid.RowDefinitions>
+				<RowDefinition Height="Auto"/>
+				<RowDefinition Height="Auto"/>
+				<RowDefinition Height="*"/>
+				<RowDefinition Height="Auto"/>
+			</Grid.RowDefinitions>
 
-            <!-- ── Row 0: Title row ─────────────────────────────────── -->
-            <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,10">
-                <TextBlock x:Name="TitleText"
+			<!-- ── Row 0: Title row ─────────────────────────────────── -->
+			<DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,10">
+
+				<!-- Title text (prefix, e.g. "Definition of", "Matches for") -->
+				<TextBlock x:Name="TitleText"
                            DockPanel.Dock="Left"
                            FontSize="18"
                            FontWeight="SemiBold"
                            Foreground="#FF7FB2FF"
                            VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis"/>
-                <TextBlock x:Name="TitleWordLink"
+
+				<!-- Underlined, clickable word (definition pages only) -->
+				<TextBlock x:Name="TitleWordLink"
                            DockPanel.Dock="Left"
                            Margin="6,0,0,0"
                            FontSize="18"
@@ -50,73 +54,107 @@
                            VerticalAlignment="Center"
                            Visibility="Collapsed"
                            MouseLeftButtonUp="TitleWordLink_Click"/>
-                <Button x:Name="ColorSwatchButton"
+
+				<!-- ▶ Play in reader (verses pages only) -->
+				<Button x:Name="PlayInReaderButton"
+                        DockPanel.Dock="Left"
+                        Width="24" Height="24"
+                        Margin="8,0,0,0"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Cursor="Hand"
+                        VerticalAlignment="Center"
+                        Visibility="Collapsed"
+                        ToolTip="Read in Reader"
+                        Click="PlayInReaderButton_Click">
+					<TextBlock Text="▶"
+                               FontSize="13"
+                               Foreground="#FF7FB2FF"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+				</Button>
+
+				<!-- Theme swatch (top-right) -->
+				<Button x:Name="ColorSwatchButton"
                         DockPanel.Dock="Right"
                         Width="22" Height="22"
                         Background="Transparent"
                         BorderThickness="0"
                         Click="ColorSwatchButton_Click"
                         ToolTip="Modal color">
-                    <Border CornerRadius="11"
+					<Border CornerRadius="11"
                             BorderBrush="#44FFFFFF"
                             BorderThickness="1">
-                        <Border.Background>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                <GradientStop Color="#FFE6EAF0" Offset="0"/>
-                                <GradientStop Color="#FF121523" Offset="1"/>
-                            </LinearGradientBrush>
-                        </Border.Background>
-                    </Border>
-                </Button>
-            </DockPanel>
+						<Border.Background>
+							<LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+								<GradientStop Color="#FFE6EAF0" Offset="0"/>
+								<GradientStop Color="#FF121523" Offset="1"/>
+							</LinearGradientBrush>
+						</Border.Background>
+					</Border>
+				</Button>
+			</DockPanel>
 
-            <!-- ── Row 1: Description / db-switcher row ─────────────── -->
-            <StackPanel x:Name="DescriptionPanel"
+			<!-- ── Row 1: Description / db-switcher row ─────────────── -->
+			<StackPanel x:Name="DescriptionPanel"
                         Grid.Row="1"
                         Orientation="Horizontal"
                         Margin="0,0,0,10">
-                <Button x:Name="DescriptionButton"
+
+				<!-- Clicking this opens the DB picker ContextMenu for
+                     definition / versecommentary / crossreference pages.
+                     On commentary / strong / verses pages it is inert. -->
+				<Button x:Name="DescriptionButton"
                         Padding="4,2"
                         Background="Transparent"
                         BorderThickness="0"
                         Foreground="{DynamicResource OnSurfaceVariant}"
                         Cursor="Hand"
                         Click="DescriptionButton_Click">
-                    <TextBlock x:Name="DescriptionText"
+					<TextBlock x:Name="DescriptionText"
                                FontSize="12"
                                Foreground="{DynamicResource OnSurfaceVariant}"/>
-                </Button>
-                <Button x:Name="NextDbButton"
+				</Button>
+
+				<!-- ⏭ Cycles to the next DB of the same kind:
+                     dictionary → next dictionary in same language
+                     versecommentary → next verse-commentary db
+                     crossreference → next cross-reference db -->
+				<Button x:Name="NextDbButton"
                         Width="24" Height="24"
                         Margin="6,0,0,0"
                         Background="Transparent"
                         BorderThickness="0"
                         Cursor="Hand"
                         ToolTip="Next source"
+                        Visibility="Collapsed"
                         Click="NextDbButton_Click">
-                    <TextBlock Text="⏭" FontSize="14" Foreground="{DynamicResource OnSurfaceVariant}"/>
-                </Button>
-            </StackPanel>
+					<TextBlock Text="⏭"
+                               FontSize="14"
+                               Foreground="{DynamicResource OnSurfaceVariant}"/>
+				</Button>
+			</StackPanel>
 
-            <!-- ── Row 2: Body ──────────────────────────────────────── -->
-            <ScrollViewer x:Name="BodyScroller"
+			<!-- ── Row 2: Body ──────────────────────────────────────── -->
+			<ScrollViewer x:Name="BodyScroller"
                           Grid.Row="2"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
                           Padding="0,4">
-                <TextBlock x:Name="BodyText"
+				<TextBlock x:Name="BodyText"
                            FontSize="14"
                            LineHeight="20"
                            TextWrapping="Wrap"
                            Foreground="{DynamicResource OnSurface}"/>
-            </ScrollViewer>
+			</ScrollViewer>
 
-            <!-- ── Row 3: Buttons ───────────────────────────────────── -->
-            <StackPanel Grid.Row="3"
+			<!-- ── Row 3: Buttons ───────────────────────────────────── -->
+			<StackPanel Grid.Row="3"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         Margin="0,12,0,0">
-                <Button x:Name="BackButton"
+				<Button x:Name="BackButton"
                         Content="Back"
                         Padding="14,6"
                         Margin="0,0,8,0"
@@ -127,7 +165,7 @@
                         Cursor="Hand"
                         Visibility="Collapsed"
                         Click="BackButton_Click"/>
-                <Button x:Name="CloseButton"
+				<Button x:Name="CloseButton"
                         Content="Close"
                         Padding="14,6"
                         Background="#FF7FB2FF"
@@ -135,7 +173,7 @@
                         Foreground="White"
                         Cursor="Hand"
                         Click="CloseButton_Click"/>
-            </StackPanel>
-        </Grid>
-    </Border>
+			</StackPanel>
+		</Grid>
+	</Border>
 </Window>
