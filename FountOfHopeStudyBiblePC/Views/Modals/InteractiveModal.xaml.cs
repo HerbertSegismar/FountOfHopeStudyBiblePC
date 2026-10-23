@@ -55,6 +55,11 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             InitializeComponent();
             System.Diagnostics.Debug.WriteLine(">>> InteractiveModal v3 LOADED <<<");
 
+            // ── Word / Strong's runs carry VerseAnnotation tags. This
+            //    handler hit-tests each click and dispatches to the right
+            //    callback, mirroring ChapterView.VerseTextBlock_MouseLeftButtonUp. ──
+            BodyText.MouseLeftButtonUp += BodyText_MouseLeftButtonUp;
+
             _viewModel = viewModel;
             _bibleDb = bibleDb;
             _onNavigateToReader = onNavigateToReader;
@@ -319,8 +324,9 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
                 content = commentaries == null || commentaries.Count == 0
                     ? "No commentaries available for this verse."
-                    : string.Join("\n\n──────────\n\n",
-                        commentaries.Select(c => c.Text));
+                    : ModalContentHelpers.SanitizeHtmlContent(
+                        string.Join("\n\n──────────\n\n",
+                            commentaries.Select(c => c.Text)));
             }
 
             _stack.Add(new ModalPage
@@ -373,7 +379,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 TitleWordLink.Visibility = Visibility.Collapsed;
             }
 
-            // PlayInReaderButton is generated from XAML (x:Name). Reference it directly.
             PlayInReaderButton.Visibility = page.Type == "verses" && page.Passage != null
                 ? Visibility.Visible
                 : Visibility.Collapsed;
@@ -437,7 +442,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 HighlightIcon: _viewModel.HeaderButtonsColor,
                 WordHighlightBg: _viewModel.WordMarkerColor);
 
-            // Pattern-match so this compiles whether Chapter is int or int?
             var showChapterHeaders = page.Verses
                 .Select(v => v.Chapter is int c ? c : 0)
                 .Where(c => c > 0)
@@ -448,10 +452,8 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
             foreach (var verse in page.Verses)
             {
-                // Current chapter as a plain int (0 if unset)
                 int currentChapter = verse.Chapter is int cc ? cc : 0;
 
-                // ── Chapter header ──
                 if (showChapterHeaders && currentChapter != lastChapter)
                 {
                     BodyText.Inlines.Add(new Run($"Chapter {currentChapter}")
@@ -464,14 +466,12 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     lastChapter = currentChapter;
                 }
 
-                // ── Verse number ──
                 BodyText.Inlines.Add(new Run($" {verse.VerseNumber} ")
                 {
                     FontWeight = FontWeights.Bold,
                     Foreground = new SolidColorBrush(themeColors.VerseNumber),
                 });
 
-                // Resolve book / chapter to plain ints (nullable-safe)
                 int vBook = passage.BookNumber is int pb && pb > 0 ? pb : 1;
                 int vChapter =
                     verse.Chapter is int vcc && vcc > 0 ? vcc
@@ -480,19 +480,24 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 var vVerse = verse.VerseNumber;
                 var vIsOld = page.IsOldTestament;
 
-                // ── Verse body with all three tap handlers ──
                 var processed = processor.ProcessVerse(
                     verseText: verse.Text,
                     baseFontSize: 12,
                     themeColors: themeColors,
                     textColor: themeColors.TextColor,
                     isOldTestament: vIsOld,
-                    options: new ProcessingOptions { ShowStrongs = _viewModel.ShowStrongs },
+                    options: new ProcessingOptions
+                    {
+                        ShowStrongs = _viewModel.ShowStrongs,
+                        EnableWordClick = true,
+                        EnableStrongsClick = true,
+                        EnableTagClick = true,
+                    },
                     onTagPress: marker =>
                         OpenFootnoteCommentary(marker, vBook, vChapter, vVerse, vIsOld),
                     onWordPress: w =>
                         OnWordPressInVerse(w, vBook, vChapter, vVerse, vIsOld),
-                    onStrongsPress: (num) =>
+                    onStrongsPress: num =>
                         OnStrongsPressInVerse(num, vBook, vChapter, vVerse, vIsOld));
 
                 foreach (var inline in processed.Body) BodyText.Inlines.Add(inline);
@@ -505,7 +510,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     {
                         Foreground = new SolidColorBrush(themeColors.Primary),
                         FontWeight = FontWeights.Bold,
-                        TextDecorations = null,
+                        TextDecorations = new TextDecorationCollection(),
                         Cursor = Cursors.Hand,
                         ToolTip = "Open cross-references",
                         Tag = new VerseCommentaryTagInfo
@@ -526,7 +531,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 {
                     Foreground = new SolidColorBrush(themeColors.VerseNumber),
                     FontWeight = FontWeights.Bold,
-                    TextDecorations = null,
+                    TextDecorations = new TextDecorationCollection(),
                     Cursor = Cursors.Hand,
                     ToolTip = "Open verse commentary",
                     Tag = new VerseCommentaryTagInfo
@@ -544,7 +549,72 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        // ── Fixed: enumerates into plain ints so no int? leaks downstream ──
+        // ═══════════════════════════════════════════════════════════
+        //  Body click dispatcher — fires word / Strong's taps
+        // ═══════════════════════════════════════════════════════════
+        private void BodyText_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            // Hyperlinks already handle themselves and set e.Handled —
+            // don't try to treat them as word / Strong's runs.
+            if (e.Handled) return;
+            if (sender is not TextBlock tb) return;
+            if (_stack.Count == 0) return;
+
+            var page = _stack[^1];
+            if (page.Type != "verses") return;
+
+            var pt = e.GetPosition(tb);
+            var pos = tb.GetPositionFromPoint(pt, snapToText: true);
+            if (pos == null) return;
+
+            var run = pos.Parent as Run ?? FindRunAtPosition(tb, pos);
+            if (run == null) return;
+
+            if (run.Tag is not VerseAnnotation ann) return;
+
+            var passage = page.Passage;
+            int book = passage?.BookNumber is int b && b > 0 ? b : 1;
+            int chapter = passage?.Chapter is int c && c > 0 ? c : 1;
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[ModalBody click] tag='{ann.Tag}' value='{ann.Value}' " +
+                $"b={book} c={chapter} old={page.IsOldTestament}");
+
+            switch (ann.Tag)
+            {
+                case "word":
+                    // Modal has no word-highlight mode — always do a
+                    // dictionary lookup, matching Kotlin's behaviour.
+                    OnWordPressInVerse(ann.Value, book, chapter, 1, page.IsOldTestament);
+                    e.Handled = true;
+                    break;
+
+                case "strong":
+                    OnStrongsPressInVerse(ann.Value, book, chapter, 1, page.IsOldTestament);
+                    e.Handled = true;
+                    break;
+
+                    // "tag" (footnote) never reaches here — Hyperlink sets
+                    // Handled before bubbling up.
+            }
+        }
+
+        private static Run? FindRunAtPosition(TextBlock tb, TextPointer pos)
+        {
+            var offset = tb.ContentStart.GetOffsetToPosition(pos);
+            if (offset < 0) return null;
+
+            int cursor = 0;
+            foreach (var inline in tb.Inlines)
+            {
+                if (inline is not Run r) continue;
+                int len = r.Text?.Length ?? 0;
+                if (offset >= cursor && offset < cursor + len) return r;
+                cursor += len;
+            }
+            return null;
+        }
+
         private void LoadCrossRefCounts(int book, List<Verse> verses)
         {
             _crossRefCounts.Clear();
@@ -556,7 +626,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 .Distinct()
                 .ToList();
 
-            foreach (var chapter in chapters) // chapter is int here
+            foreach (var chapter in chapters)
             {
                 try
                 {
@@ -577,23 +647,31 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         {
             if (string.IsNullOrEmpty(content)) return;
 
-            var linkRegex = new Regex("<a\\s+href=\"([^\"]+)\"[^>]*>(.*?)</a>",
-                RegexOptions.IgnoreCase);
+            // Allows attributes before/after href, single or double quotes,
+            // and link text spanning newlines.
+            var linkRegex = new Regex(
+                "<a\\b[^>]*?\\bhref\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a>",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
             int cursor = 0;
             foreach (Match m in linkRegex.Matches(content))
             {
                 if (m.Index > cursor)
-                    BodyText.Inlines.Add(new Run(StripTags(content.Substring(cursor, m.Index - cursor))));
+                    BodyText.Inlines.Add(new Run(
+                        StripTags(content.Substring(cursor, m.Index - cursor))));
 
                 var href = m.Groups[1].Value;
                 var text = StripTags(m.Groups[2].Value);
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"[RenderInlineHtml] link href='{href}' text='{text}'");
 
                 var link = new Hyperlink(new Run(text))
                 {
                     Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor),
                     Tag = href,
                     TextDecorations = TextDecorations.Underline,
+                    Cursor = Cursors.Hand,
                 };
                 link.Click += Link_Click;
                 BodyText.Inlines.Add(link);
@@ -605,8 +683,13 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 BodyText.Inlines.Add(new Run(StripTags(content.Substring(cursor))));
         }
 
+        // <br> → newline BEFORE stripping tags, so link separators survive.
         private static string StripTags(string text)
-            => Regex.Replace(text, "<[^>]+>", "");
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            text = Regex.Replace(text, "<br\\s*/?>", "\n", RegexOptions.IgnoreCase);
+            return Regex.Replace(text, "<[^>]+>", "");
+        }
 
         // ═══════════════════════════════════════════════════════════
         //  Click handlers
@@ -617,10 +700,19 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             var href = link.Tag as string ?? "";
             var linkText = link.Inlines.OfType<Run>().FirstOrDefault()?.Text ?? "";
 
-            if (href.StartsWith("B:"))
+            System.Diagnostics.Debug.WriteLine(
+                $"[Link_Click] href='{href}' text='{linkText}'");
+
+            if (href.StartsWith("B:", StringComparison.OrdinalIgnoreCase))
+            {
                 NavigateToPassage(href, linkText);
-            else if (href.StartsWith("S:"))
+                return;
+            }
+            if (href.StartsWith("S:", StringComparison.OrdinalIgnoreCase))
+            {
                 HandleSeeLink(href, linkText);
+                return;
+            }
         }
 
         private void VerseCommentaryLink_Click(object sender, RoutedEventArgs e)
@@ -666,6 +758,8 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     return $"<a href=\"{href}\">{toBook} {r.ChapterTo}:{vr}</a>";
                 }));
 
+            html = ModalContentHelpers.SanitizeHtmlContent(html);
+
             _stack.Add(new ModalPage
             {
                 Title = $"References for {bookName} {tag.Chapter}:{tag.VerseNumber}",
@@ -687,7 +781,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             var passage = ModalContentHelpers.ParseVerseLink(href, linkText);
             if (passage == null) return;
 
-            // Defensive int extraction — works for int or int?
             int passageBook = passage.BookNumber is int pb && pb > 0 ? pb : 1;
             int passageChapter = passage.Chapter is int pc && pc > 0 ? pc : 1;
             int passageVerse = passage.Verse is int pv && pv > 0 ? pv : 1;
@@ -1070,7 +1163,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        // ── Cleaned up: drop current, rebuild fresh (no tangled stack surgery) ──
         private void SwitchToDictionary(string newDict)
         {
             if (_useSecondaryDictionary) _viewModel.SelectedSecondaryDictionary = newDict;
@@ -1116,7 +1208,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     VerseNumber = vers,
                     IsOldTestament = page.IsOldTestament,
                 };
-                // CrossRefLink_Click appends the new page and calls UpdateView()
                 CrossRefLink_Click(new Hyperlink { Tag = tag }, new RoutedEventArgs());
             }
         }

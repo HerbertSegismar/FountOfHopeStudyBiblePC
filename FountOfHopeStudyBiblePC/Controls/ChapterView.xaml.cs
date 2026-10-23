@@ -438,11 +438,111 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             if (isBookmarked) tb.Inlines.Add(new Run(" 🔖"));
             if (hasNote) tb.Inlines.Add(new Run(" 📝"));
-            if (_viewModel.IsStudyMode && refCount > 0)
-                tb.Inlines.Add(new Run($" [{refCount}]"));
 
-            // Apply word highlights — ALWAYS called so stale backgrounds from
-            // the VerseTextProcessor cache are cleared even when there are none.
+            if (_viewModel.IsStudyMode && refCount > 0)
+            {
+                tb.Inlines.Add(new Run(" "));
+
+                var refLink = new Hyperlink(new Run($"[{refCount}]"))
+                {
+                    Foreground = new SolidColorBrush(theme),
+                    FontWeight = FontWeights.Bold,
+                    // Must be an EMPTY collection, not null — Hyperlink re-adds the
+                    // default underline if you set null.
+                    TextDecorations = new TextDecorationCollection(),
+                    Cursor = Cursors.Hand,
+                    ToolTip = refCount == 1
+                        ? "View cross-reference"
+                        : $"View {refCount} cross-references",
+                };
+
+                // Capture values at build time so a rapid double-click can't mis-fire
+                // against a newer verse.
+                var capturedBook = _passage.BookNumber;
+                var capturedChapter = _passage.Chapter;
+                var capturedVerse = verse.VerseNumber;
+                var capturedPrimary = _isPrimary;
+                var capturedCallback = _onCrossRefClick;
+
+                refLink.Click += (s, e) =>
+                {
+                    // Stop the click bubbling up to VerseTextBlock_MouseLeftButtonUp —
+                    // otherwise the verse-level handler would also run and return early
+                    // with no visible effect, but we don't want it touching the event.
+                    e.Handled = true;
+
+                    App.Log($"[CrossRefBadge] clicked b={capturedBook} " +
+                            $"c={capturedChapter} v={capturedVerse} primary={capturedPrimary}");
+
+                    if (capturedCallback == null)
+                    {
+                        App.Log("[CrossRefBadge] _onCrossRefClick is NULL — " +
+                                "check ReaderScreen.RenderCurrentMode wiring");
+                        return;
+                    }
+
+                    capturedCallback(capturedBook, capturedChapter, capturedVerse, capturedPrimary);
+                };
+
+                // Widen the hit target — a single "[8]" is otherwise ~6px wide.
+                refLink.Inlines.Add(new Run("\u200B")
+                {
+                    Foreground = Brushes.Transparent,
+                    FontSize = _viewModel.FontSize,
+                });
+
+                tb.Inlines.Add(refLink);
+            }
+
+            // ── [C] — verse-commentary marker ─────────────────────────────────
+            if (_viewModel.IsStudyMode)
+            {
+                tb.Inlines.Add(new Run(" "));
+
+                var commLink = new Hyperlink(new Run("[C]"))
+                {
+                    Foreground = new SolidColorBrush(theme),
+                    FontWeight = FontWeights.Bold,
+                    // Empty collection (not null) — Hyperlink re-adds default underline
+                    // if you pass null.
+                    TextDecorations = new TextDecorationCollection(),
+                    Cursor = Cursors.Hand,
+                    ToolTip = "Open verse commentary",
+                };
+
+                // Capture at build time — safe against rapid re-renders.
+                var cBook = _passage.BookNumber;
+                var cChap = _passage.Chapter;
+                var cVerse = verse.VerseNumber;
+                var cCallback = _onVerseCommentaryClick;
+
+                commLink.Click += (s, e) =>
+                {
+                    e.Handled = true;   // don't let the verse-level click handler
+                                        // try to hit-test into the Hyperlink
+
+                    App.Log($"[CommentaryBadge] clicked b={cBook} c={cChap} v={cVerse}");
+
+                    if (cCallback == null)
+                    {
+                        App.Log("[CommentaryBadge] _onVerseCommentaryClick is NULL — " +
+                                "check ReaderScreen.RenderCurrentMode wiring");
+                        return;
+                    }
+
+                    cCallback(cBook, cChap, cVerse);
+                };
+
+                // Widen the hit target from ~6px to the full "[C]" + margin.
+                commLink.Inlines.Add(new Run("\u200B")
+                {
+                    Foreground = Brushes.Transparent,
+                    FontSize = _viewModel.FontSize,
+                });
+
+                tb.Inlines.Add(commLink);
+            }
+
             _groupedHighlights.TryGetValue(verse.VerseNumber, out var highlights);
             ApplyWordHighlights(tb, highlights ?? new List<SelectedWord>());
 
