@@ -683,12 +683,16 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 BodyText.Inlines.Add(new Run(StripTags(content.Substring(cursor))));
         }
 
-        // <br> → newline BEFORE stripping tags, so link separators survive.
         private static string StripTags(string text)
         {
             if (string.IsNullOrEmpty(text)) return text;
+
             text = Regex.Replace(text, "<br\\s*/?>", "\n", RegexOptions.IgnoreCase);
-            return Regex.Replace(text, "<[^>]+>", "");
+            text = Regex.Replace(text, "<[^>]+>", "");
+            text = Regex.Replace(text, "&(?:lArr|hArr|rArr);", "",
+                RegexOptions.IgnoreCase);
+
+            return text;
         }
 
         // ═══════════════════════════════════════════════════════════

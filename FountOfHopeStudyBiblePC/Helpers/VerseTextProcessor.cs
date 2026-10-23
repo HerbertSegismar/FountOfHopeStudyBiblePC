@@ -100,14 +100,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
                 options.ShowHeaders && headerInlines.Count > 0 ? headerInlines : null,
                 bodyInlines);
 
-            if (bodyInlines.Count == 0 && (result.Header == null || result.Header.Count == 0))
-            {
-                App.Log($"VerseTextProcessor: BLANK result");
-                App.Log($"  raw       : <{verseText}>");
-                App.Log($"  processed : <{processedText}>");
-                App.Log($"  showStrongs: {options.ShowStrongs}");
-            }
-
             CacheAdd(cacheKey, result);
             return result;
         }

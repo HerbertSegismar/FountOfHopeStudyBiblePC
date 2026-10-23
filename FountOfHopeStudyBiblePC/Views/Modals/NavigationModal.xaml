@@ -8,7 +8,7 @@
         Width="520" Height="820"
         MinWidth="380" MinHeight="520"
         Background="{DynamicResource CardBackground}"
-        WindowStyle="None"
+        WindowStyle="None" AllowsTransparency="True"
         ResizeMode="CanResize">
 
     <Window.Resources>

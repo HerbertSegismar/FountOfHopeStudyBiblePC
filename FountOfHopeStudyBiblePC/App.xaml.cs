@@ -68,21 +68,8 @@ namespace FountOfHopeStudyBiblePC
                     Log("FirstChanceException: " + ex.GetType().Name + " — " + ex.Message);
                 }
             };
-
-            // ═══════════════════════════════════════════════════════════
-            //  Theme infrastructure — MUST run before base.OnStartup(e)
-            //  because StartupUri (App.xaml) constructs MainWindow inside
-            //  base.OnStartup, and MainWindow's ctor builds views that
-            //  read {DynamicResource …} brushes.
-            //
-            //  The subscription is for the app's lifetime; App owns it,
-            //  so it never needs to be unsubscribed.
-            // ═══════════════════════════════════════════════════════════
             ThemeResources.Install();
             ThemeManager.Changed += ThemeResources.Refresh;
-            Log("=== theme infrastructure installed ===");
-
-            Log("=== calling base.OnStartup ===");
             base.OnStartup(e);
             Log("=== base.OnStartup returned ===");
         }
