@@ -386,24 +386,16 @@ namespace FountOfHopeStudyBiblePC
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Navigation modal
-        // ═══════════════════════════════════════════════════════════════
         private void OpenNavigationModal()
         {
-            App.Log("MainWindow: OpenNavigationModal — enter");
             try
             {
-                App.Log($"  PrimaryPassage = {_viewModel.PrimaryPassage.BookName} " +
-                        $"{_viewModel.PrimaryPassage.Chapter}:{_viewModel.PrimaryPassage.Verse}");
 
                 var modal = new NavigationModal(
                     viewModel: _viewModel,
                     databaseHelper: _databaseHelper,
                     onPassageSelected: passage =>
                     {
-                        App.Log($"MainWindow: NavigationModal picked " +
-                                $"{passage.BookName} {passage.Chapter}:{passage.Verse}");
                         _viewModel.PrimaryPassage = passage;
                         if (_viewModel.ScrollSync) _viewModel.SecondaryPassage = passage;
                         _viewModel.NavigateTo(new Screen.Reader(passage));
@@ -417,9 +409,7 @@ namespace FountOfHopeStudyBiblePC
                     Owner = this,
                 };
 
-                App.Log("MainWindow: NavigationModal created — calling ShowDialog");
-                modal.ShowDialog();
-                App.Log("MainWindow: NavigationModal closed cleanly");
+                modal.Show();
             }
             catch (Exception ex)
             {

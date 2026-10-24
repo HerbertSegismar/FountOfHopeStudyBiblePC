@@ -400,7 +400,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 onClick: () =>
                 {
                     var dlg = new AboutDialog { Owner = Window.GetWindow(this) };
-                    dlg.ShowDialog();
+                    dlg.Show();
                 },
                 trailing: new TextBlock { Text = "›", FontSize = 18, Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xB4, 0xC0)) }));
 

@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
@@ -28,12 +29,21 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private DatabaseHelper? _dictionaryDb;
         private DatabaseHelper? _secondaryDictionaryDb;
         private DatabaseHelper? _strongDb;
-        private DatabaseHelper? _commentaryDb;        // <version>com.sqlite3 (footnotes)
-        private DatabaseHelper? _verseCommentaryDb;   // <name>.commentaries.sqlite3
+        private DatabaseHelper? _commentaryDb;
+        private DatabaseHelper? _verseCommentaryDb;
         private DatabaseHelper? _crossRefDb;
 
-        // Cross-reference counts for the currently-displayed verse page
         private readonly Dictionary<int, int> _crossRefCounts = new();
+
+        private bool _isDismissing;
+        private bool _dismissArmed;
+
+        /// <summary>
+        /// If true, the dialog dismisses when the owner window is resized.
+        /// Default is false — the InteractiveModal is a long-form reader, so
+        /// staying pinned while the owner resizes feels natural.
+        /// </summary>
+        public bool CloseOnOwnerResize { get; set; } = false;
 
         public InteractiveModal(
             AppViewModel viewModel,
@@ -53,11 +63,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             int? verse = null)
         {
             InitializeComponent();
-            System.Diagnostics.Debug.WriteLine(">>> InteractiveModal v3 LOADED <<<");
 
-            // ── Word / Strong's runs carry VerseAnnotation tags. This
-            //    handler hit-tests each click and dispatches to the right
-            //    callback, mirroring ChapterView.VerseTextBlock_MouseLeftButtonUp. ──
             BodyText.MouseLeftButtonUp += BodyText_MouseLeftButtonUp;
 
             _viewModel = viewModel;
@@ -71,7 +77,121 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 initialContent, word, definition, strongNumber, strongDefinition,
                 bookNumber, chapter, verse);
             UpdateView();
+
+            Loaded += OnLoaded;
         }
+
+        // ═══════════════════════════════════════════════════════════
+        //  Scrim dismiss infrastructure (Compose Dialog equivalent)
+        // ═══════════════════════════════════════════════════════════
+        private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // Only arm dismissal when the press actually starts on the scrim.
+            // Anything inside the card (buttons, hyperlinks, text runs) keeps
+            // its own event handling untouched.
+            if (!ReferenceEquals(e.OriginalSource, Scrim))
+            {
+                _dismissArmed = false;
+                return;
+            }
+
+            _dismissArmed = true;
+            Scrim.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void Scrim_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            bool shouldDismiss = _dismissArmed;
+            _dismissArmed = false;
+
+            if (Scrim.IsMouseCaptured)
+                Scrim.ReleaseMouseCapture();
+
+            // If the press was on the scrim (captured), the up comes back to
+            // the scrim regardless of cursor position. If the press was
+            // anywhere inside the card, _dismissArmed is false and we leave
+            // the click alone.
+            if (shouldDismiss)
+                DismissWithFade();
+
+            e.Handled = true;
+        }
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+            {
+                DismissWithFade();
+                e.Handled = true;
+            }
+        }
+
+        private void DismissWithFade()
+        {
+            if (_isDismissing) return;
+            _isDismissing = true;
+
+            var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(120));
+            fade.Completed += (_, _) => Close();
+            BeginAnimation(OpacityProperty, fade);
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  Owner bounds tracking
+        // ═══════════════════════════════════════════════════════════
+        private void OnLoaded(object? sender, RoutedEventArgs e)
+        {
+            if (Owner is null) return;
+
+            Owner.LocationChanged += Owner_LocationChanged;
+            Owner.SizeChanged += Owner_SizeChanged;
+            Owner.StateChanged += Owner_StateChanged;
+            Owner.Closed += Owner_Closed;
+
+            SyncBoundsToOwner();
+        }
+
+        private void SyncBoundsToOwner()
+        {
+            if (Owner is null) return;
+            WindowStartupLocation = WindowStartupLocation.Manual;
+
+            if (Owner.WindowState == WindowState.Maximized)
+            {
+                WindowState = WindowState.Maximized;
+                return;
+            }
+            WindowState = WindowState.Normal;
+            Left = Owner.Left;
+            Top = Owner.Top;
+            Width = Owner.ActualWidth;
+            Height = Owner.ActualHeight;
+        }
+
+        private void Owner_LocationChanged(object? sender, EventArgs e)
+        {
+            if (Owner is null) return;
+            Left = Owner.Left;
+            Top = Owner.Top;
+        }
+
+        private void Owner_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (CloseOnOwnerResize) { DismissWithFade(); return; }
+            if (Owner is null) return;
+            Left = Owner.Left;
+            Top = Owner.Top;
+            Width = Owner.ActualWidth;
+            Height = Owner.ActualHeight;
+        }
+
+        private void Owner_StateChanged(object? sender, EventArgs e)
+        {
+            if (Owner?.WindowState == WindowState.Minimized) DismissWithFade();
+        }
+
+        private void Owner_Closed(object? sender, EventArgs e) => DismissWithFade();
 
         // ═══════════════════════════════════════════════════════════
         //  DB loading
@@ -502,7 +622,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
                 foreach (var inline in processed.Body) BodyText.Inlines.Add(inline);
 
-                // ── [n] cross-reference badge ──
                 if (_crossRefCounts.TryGetValue(vVerse, out var refCount) && refCount > 0)
                 {
                     BodyText.Inlines.Add(new Run(" "));
@@ -525,7 +644,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     BodyText.Inlines.Add(refLink);
                 }
 
-                // ── [C] verse-commentary marker ──
                 BodyText.Inlines.Add(new Run(" "));
                 var star = new Hyperlink(new Run("[C]"))
                 {
@@ -550,12 +668,10 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         }
 
         // ═══════════════════════════════════════════════════════════
-        //  Body click dispatcher — fires word / Strong's taps
+        //  Body click dispatcher (word / Strong's hit-testing)
         // ═══════════════════════════════════════════════════════════
         private void BodyText_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            // Hyperlinks already handle themselves and set e.Handled —
-            // don't try to treat them as word / Strong's runs.
             if (e.Handled) return;
             if (sender is not TextBlock tb) return;
             if (_stack.Count == 0) return;
@@ -583,8 +699,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             switch (ann.Tag)
             {
                 case "word":
-                    // Modal has no word-highlight mode — always do a
-                    // dictionary lookup, matching Kotlin's behaviour.
                     OnWordPressInVerse(ann.Value, book, chapter, 1, page.IsOldTestament);
                     e.Handled = true;
                     break;
@@ -593,9 +707,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     OnStrongsPressInVerse(ann.Value, book, chapter, 1, page.IsOldTestament);
                     e.Handled = true;
                     break;
-
-                    // "tag" (footnote) never reaches here — Hyperlink sets
-                    // Handled before bubbling up.
             }
         }
 
@@ -647,8 +758,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         {
             if (string.IsNullOrEmpty(content)) return;
 
-            // Allows attributes before/after href, single or double quotes,
-            // and link text spanning newlines.
             var linkRegex = new Regex(
                 "<a\\b[^>]*?\\bhref\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a>",
                 RegexOptions.IgnoreCase | RegexOptions.Singleline);
@@ -662,9 +771,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
                 var href = m.Groups[1].Value;
                 var text = StripTags(m.Groups[2].Value);
-
-                System.Diagnostics.Debug.WriteLine(
-                    $"[RenderInlineHtml] link href='{href}' text='{text}'");
 
                 var link = new Hyperlink(new Run(text))
                 {
@@ -703,9 +809,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             if (sender is not Hyperlink link) return;
             var href = link.Tag as string ?? "";
             var linkText = link.Inlines.OfType<Run>().FirstOrDefault()?.Text ?? "";
-
-            System.Diagnostics.Debug.WriteLine(
-                $"[Link_Click] href='{href}' text='{linkText}'");
 
             if (href.StartsWith("B:", StringComparison.OrdinalIgnoreCase))
             {
@@ -1121,7 +1224,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             var page = _stack[^1];
             if (page.Type != "verses" || page.Passage == null) return;
             _onNavigateToReader?.Invoke(page.Passage);
-            Close();
+            Close();   // navigation, not dismissal — skip the fade
         }
 
         private void NextDbButton_Click(object sender, RoutedEventArgs e)
@@ -1232,10 +1335,21 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
+        private void CloseButton_Click(object sender, RoutedEventArgs e) => DismissWithFade();
 
+        // ═══════════════════════════════════════════════════════════
+        //  Cleanup
+        // ═══════════════════════════════════════════════════════════
         protected override void OnClosed(EventArgs e)
         {
+            if (Owner is not null)
+            {
+                Owner.LocationChanged -= Owner_LocationChanged;
+                Owner.SizeChanged -= Owner_SizeChanged;
+                Owner.StateChanged -= Owner_StateChanged;
+                Owner.Closed -= Owner_Closed;
+            }
+
             base.OnClosed(e);
             _dictionaryDb?.Dispose();
             _secondaryDictionaryDb?.Dispose();

@@ -649,7 +649,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 Owner = Window.GetWindow(this),
             };
 
-            modal.ShowDialog();
+            modal.Show();
             _modalState = new ReaderModalState.None();
         }
 

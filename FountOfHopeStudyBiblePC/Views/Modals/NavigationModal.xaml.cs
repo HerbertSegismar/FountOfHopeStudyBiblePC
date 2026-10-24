@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
@@ -27,9 +28,18 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private int _maxVerse;
         private string? _pendingVerseDigit;
         private bool _initialApplied;
+        private bool _isDismissing;
+
+        /// <summary>
+        /// If true (default), the dialog dismisses when the owner is resized.
+        /// The card is fixed-size and centred, so letting the user resize the
+        /// owner mid-overlay looks jarring. Flip to false to keep the dialog
+        /// pinned while the owner resizes.
+        /// </summary>
+        public bool CloseOnOwnerResize { get; set; } = true;
 
         // ═══════════════════════════════════════════════════════════
-        //  Constructor — logging at every step
+        //  Constructor
         // ═══════════════════════════════════════════════════════════
         public NavigationModal(
             AppViewModel viewModel,
@@ -40,30 +50,152 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             int initialChapter = 1,
             int? initialVerse = 1)
         {
-            App.Log("NavigationModal: ctor enter");
-
-            // Fields FIRST, before InitializeComponent — so any XAML-parsing
-            // event that fires has non-null dependencies.
             _viewModel = viewModel;
             _db = databaseHelper;
             _onPassageSelected = onPassageSelected ?? (_ => { });
             _onDismiss = onDismiss ?? (() => { });
 
-            App.Log("NavigationModal: fields assigned");
 
             InitializeComponent();
-            App.Log("NavigationModal: InitializeComponent done");
-
             BuildBookGrids();
-            App.Log($"NavigationModal: book grids built — " +
-                    $"OT={OldTestamentPanel.Children.Count}, " +
-                    $"NT={NewTestamentPanel.Children.Count}");
 
             ApplyInitialSelection(initialBookNumber, initialChapter, initialVerse);
-            App.Log("NavigationModal: initial selection applied");
 
             UpdateUI();
-            App.Log("NavigationModal: ctor COMPLETE");
+
+            Loaded += OnLoaded;
+        }
+
+        private void OnLoaded(object? sender, RoutedEventArgs e)
+        {
+            if (Owner is null) return;
+
+            Owner.LocationChanged += Owner_LocationChanged;
+            Owner.SizeChanged += Owner_SizeChanged;
+            Owner.StateChanged += Owner_StateChanged;
+            Owner.Closed += Owner_Closed;
+
+            SyncBoundsToOwner();
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            if (Owner is not null)
+            {
+                Owner.LocationChanged -= Owner_LocationChanged;
+                Owner.SizeChanged -= Owner_SizeChanged;
+                Owner.StateChanged -= Owner_StateChanged;
+                Owner.Closed -= Owner_Closed;
+            }
+
+            base.OnClosed(e);
+            _onDismiss();
+        }
+
+        private void SyncBoundsToOwner()
+        {
+            if (Owner is null) return;
+            WindowStartupLocation = WindowStartupLocation.Manual;
+
+            if (Owner.WindowState == WindowState.Maximized)
+            {
+                WindowState = WindowState.Maximized;
+                return;
+            }
+            WindowState = WindowState.Normal;
+            Left = Owner.Left;
+            Top = Owner.Top;
+            Width = Owner.ActualWidth;
+            Height = Owner.ActualHeight;
+        }
+
+        private void Owner_LocationChanged(object? sender, EventArgs e)
+        {
+            if (Owner is null) return;
+            Left = Owner.Left;
+            Top = Owner.Top;
+        }
+
+        private void Owner_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (CloseOnOwnerResize) { DismissWithFade(); return; }
+            if (Owner is null) return;
+            Left = Owner.Left;
+            Top = Owner.Top;
+            Width = Owner.ActualWidth;
+            Height = Owner.ActualHeight;
+        }
+
+        private void Owner_StateChanged(object? sender, EventArgs e)
+        {
+            if (Owner?.WindowState == WindowState.Minimized) DismissWithFade();
+        }
+
+        private void Owner_Closed(object? sender, EventArgs e) => DismissWithFade();
+
+        // ═══════════════════════════════════════════════════════════
+        //  Compose-equivalent dismiss (scrim / card / escape / fade)
+        // ═══════════════════════════════════════════════════════════
+        private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // Click came from the card — let the card deal with it.
+            if (!ReferenceEquals(e.OriginalSource, Scrim))
+                return;
+
+            // Capture so the matching MouseUp is delivered back to us,
+            // even if the pointer drifts off the scrim. This prevents
+            // a stray WM_LBUTTONUP from reaching the owner window.
+            Scrim.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void Scrim_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            bool onScrim = ReferenceEquals(e.OriginalSource, Scrim);
+
+            Scrim.ReleaseMouseCapture();
+            e.Handled = true;
+
+            if (onScrim)
+                DismissWithFade();
+        }
+
+        private void Card_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // Capture on the card so press-drag-release started here never
+            // bubbles to the scrim and never dismisses the dialog.
+            ((UIElement)sender).CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void Card_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            ((UIElement)sender).ReleaseMouseCapture();
+            e.Handled = true;
+        }
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+            {
+                DismissWithFade();
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>
+        /// Fade out over 120 ms, then Close. Deferred so the MouseUp that
+        /// triggered dismissal finishes routing before the HWND dies.
+        /// OnClosed then fires _onDismiss() (once, idempotent).
+        /// </summary>
+        private void DismissWithFade()
+        {
+            if (_isDismissing) return;
+            _isDismissing = true;
+
+            var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(120));
+            fade.Completed += (_, _) => Close();
+            BeginAnimation(OpacityProperty, fade);
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -121,7 +253,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             var t = new ControlTemplate(typeof(Button));
 
             var border = new FrameworkElementFactory(typeof(Border));
-            border.Name = "B";                                       // ← ADD THIS LINE
+            border.Name = "B";
             border.SetValue(Border.CornerRadiusProperty, new CornerRadius(5));
             border.SetValue(Border.BackgroundProperty,
                 new System.Windows.Data.Binding(nameof(Button.Background))
@@ -140,7 +272,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         }
 
         // ═══════════════════════════════════════════════════════════
-        //  Colors — with try/catch so a bad hex doesn't crash
+        //  Colors
         // ═══════════════════════════════════════════════════════════
         private static string? GetScopeForBookNumber(int bookNumber)
         {
@@ -216,7 +348,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         }
 
         // ═══════════════════════════════════════════════════════════
-        //  Initial selection — logged
+        //  Initial selection
         // ═══════════════════════════════════════════════════════════
         private void ApplyInitialSelection(int? bookNumber, int chapter, int? verse)
         {
@@ -522,16 +654,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         // ═══════════════════════════════════════════════════════════
         //  Dismiss
         // ═══════════════════════════════════════════════════════════
-        private void BackButton_Click(object sender, RoutedEventArgs e)
-        {
-            _onDismiss();
-            Close();
-        }
-
-        protected override void OnClosed(EventArgs e)
-        {
-            base.OnClosed(e);
-            _onDismiss();
-        }
+        private void BackButton_Click(object sender, RoutedEventArgs e) => DismissWithFade();
     }
 }
