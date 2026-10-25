@@ -438,7 +438,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 databaseHelper: _db,
                 onSave: () => RefreshNotes());
             modal.Owner = Window.GetWindow(this);
-            modal.ShowDialog();
+            modal.Show();
 
             RefreshNotes();
         }

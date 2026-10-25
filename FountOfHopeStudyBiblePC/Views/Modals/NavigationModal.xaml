@@ -70,25 +70,27 @@
                 <Border Grid.Row="0" Height="48" Background="#FF7FB2FF">
                     <Grid Margin="8,0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0"
-                                Width="36" Height="36"
-                                Content="←"
-                                FontSize="20"
-                                Foreground="White"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                Click="BackButton_Click"/>
-                        <TextBlock Grid.Column="1"
-                                   Text="Select Passage"
-                                   FontSize="16"
-                                   FontWeight="Medium"
-                                   Foreground="White"
-                                   VerticalAlignment="Center"
-                                   Margin="8,0,0,0"/>
+
+                        <TextBlock Grid.Column="0"
+                           Text="Select Passage"
+                           FontSize="16"
+                           FontWeight="Medium"
+                           Foreground="White"
+                           VerticalAlignment="Center"
+                           Margin="8,0,0,0"/>
+
+                        <Button Grid.Column="1"
+                            Width="36" Height="36"
+                            Content="✕"
+                            FontSize="14"
+                            Foreground="White"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            Click="CloseButton_Click"/>
                     </Grid>
                 </Border>
 

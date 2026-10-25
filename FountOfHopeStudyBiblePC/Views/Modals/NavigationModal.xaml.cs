@@ -30,17 +30,8 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private bool _initialApplied;
         private bool _isDismissing;
 
-        /// <summary>
-        /// If true (default), the dialog dismisses when the owner is resized.
-        /// The card is fixed-size and centred, so letting the user resize the
-        /// owner mid-overlay looks jarring. Flip to false to keep the dialog
-        /// pinned while the owner resizes.
-        /// </summary>
         public bool CloseOnOwnerResize { get; set; } = true;
 
-        // ═══════════════════════════════════════════════════════════
-        //  Constructor
-        // ═══════════════════════════════════════════════════════════
         public NavigationModal(
             AppViewModel viewModel,
             DatabaseHelper? databaseHelper,
@@ -133,18 +124,11 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         private void Owner_Closed(object? sender, EventArgs e) => DismissWithFade();
 
-        // ═══════════════════════════════════════════════════════════
-        //  Compose-equivalent dismiss (scrim / card / escape / fade)
-        // ═══════════════════════════════════════════════════════════
         private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // Click came from the card — let the card deal with it.
             if (!ReferenceEquals(e.OriginalSource, Scrim))
                 return;
 
-            // Capture so the matching MouseUp is delivered back to us,
-            // even if the pointer drifts off the scrim. This prevents
-            // a stray WM_LBUTTONUP from reaching the owner window.
             Scrim.CaptureMouse();
             e.Handled = true;
         }
@@ -162,8 +146,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         private void Card_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // Capture on the card so press-drag-release started here never
-            // bubbles to the scrim and never dismisses the dialog.
             ((UIElement)sender).CaptureMouse();
             e.Handled = true;
         }
@@ -183,11 +165,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        /// <summary>
-        /// Fade out over 120 ms, then Close. Deferred so the MouseUp that
-        /// triggered dismissal finishes routing before the HWND dies.
-        /// OnClosed then fires _onDismiss() (once, idempotent).
-        /// </summary>
         private void DismissWithFade()
         {
             if (_isDismissing) return;
@@ -198,9 +175,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             BeginAnimation(OpacityProperty, fade);
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Book grid
-        // ═══════════════════════════════════════════════════════════
         private void BuildBookGrids()
         {
             OldTestamentPanel.Children.Clear();
@@ -271,9 +245,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             return t;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Colors
-        // ═══════════════════════════════════════════════════════════
         private static string? GetScopeForBookNumber(int bookNumber)
         {
             if (InRange(bookNumber, 10, 50)) return SearchScopes.Law;
@@ -311,7 +282,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
                 if (isDarkTheme) return baseColor;
 
-                // Light theme: lerp 15% white / 85% base
                 return Color.FromArgb(
                     (byte)(255 + (baseColor.A - 255) * 0.85),
                     (byte)(255 + (baseColor.R - 255) * 0.85),
@@ -326,9 +296,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Book selection
-        // ═══════════════════════════════════════════════════════════
         private void SelectBook(BookUi book)
         {
             _selectedBook = book;
@@ -347,9 +314,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             UpdateUI();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Initial selection
-        // ═══════════════════════════════════════════════════════════
         private void ApplyInitialSelection(int? bookNumber, int chapter, int? verse)
         {
             try
@@ -404,9 +368,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Numpad handlers
-        // ═══════════════════════════════════════════════════════════
         private void NumpadDigit_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedBook is null) return;
@@ -474,9 +435,9 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             _pendingVerseDigit = null;
         }
 
-        private async System.Threading.Tasks.Task DelayedConfirm()
+        private async Task DelayedConfirm()
         {
-            await System.Threading.Tasks.Task.Delay(300);
+            await Task.Delay(300);
             ConfirmSelection();
         }
 
@@ -525,9 +486,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             Close();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Input focus
-        // ═══════════════════════════════════════════════════════════
         private void ChapterInput_Click(object sender, MouseButtonEventArgs e)
         {
             _focusedInput = "chapter";
@@ -543,9 +501,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Validation
-        // ═══════════════════════════════════════════════════════════
         private bool IsChapterValid()
         {
             if (string.IsNullOrEmpty(_chapterInput) || _selectedBook is null) return false;
@@ -562,14 +517,10 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         private bool IsInputValid() => IsChapterValid() && IsVerseValid();
 
-        // ═══════════════════════════════════════════════════════════
-        //  UI refresh
-        // ═══════════════════════════════════════════════════════════
         private void UpdateUI()
         {
             try
             {
-                // Book header
                 if (_selectedBook != null)
                 {
                     BookHeaderCard.Visibility = Visibility.Visible;
@@ -584,7 +535,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     BookHeaderCard.Visibility = Visibility.Collapsed;
                 }
 
-                // Chapter
                 ChapterValue.Text = _chapterInput;
                 ChapterHint.Text = _selectedBook != null
                     ? $"1-{_selectedBook.TotalChapters}"
@@ -597,7 +547,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                         ? Color.FromRgb(0x7F, 0xB2, 0xFF)
                         : Colors.Transparent);
 
-                // Verse
                 VerseValue.Text = _verseInput;
                 VerseHint.Text = _focusedInput == "verse" && _maxVerse > 0
                     ? $"1-{_maxVerse}"
@@ -610,7 +559,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                         ? Color.FromRgb(0x7F, 0xB2, 0xFF)
                         : Colors.Transparent);
 
-                // Go-to button
                 var valid = IsInputValid();
                 GoToButton.IsEnabled = valid;
                 GoToButton.Opacity = valid ? 1.0 : 0.5;
@@ -651,9 +599,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Dismiss
-        // ═══════════════════════════════════════════════════════════
-        private void BackButton_Click(object sender, RoutedEventArgs e) => DismissWithFade();
+        private void CloseButton_Click(object sender, RoutedEventArgs e) => DismissWithFade();
     }
 }

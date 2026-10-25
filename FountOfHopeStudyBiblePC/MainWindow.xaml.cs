@@ -442,8 +442,7 @@ namespace FountOfHopeStudyBiblePC
                     Owner = this,
                 };
 
-                modal.ShowDialog();
-                App.Log("MainWindow: VersionModal closed");
+                modal.Show();
             }
             catch (Exception ex)
             {
@@ -473,7 +472,7 @@ namespace FountOfHopeStudyBiblePC
                     Owner = this,
                 };
 
-                modal.ShowDialog();
+                modal.Show();
                 App.Log("MainWindow: SecondaryVersionModal closed");
             }
             catch (Exception ex)
@@ -487,22 +486,19 @@ namespace FountOfHopeStudyBiblePC
         // ═══════════════════════════════════════════════════════════════
         private void OpenColorWheel(Color initial, Action<Color> onSelected, string title = "Color Picker")
         {
-            App.Log($"MainWindow: OpenColorWheel — '{title}', " +
-                    $"initial={ColorHelpers.ToHexString(initial)}");
             try
             {
                 var dialog = new Views.Modals.ColorWheelDialog(
                     initialColor: initial,
                     onColorSelected: c =>
                     {
-                        App.Log($"MainWindow: color picked = {ColorHelpers.ToHexString(c)}");
                         onSelected(c);
                     },
                     onDismiss: () => App.Log("MainWindow: ColorWheel dismissed"))
                 {
                     Owner = this,
                 };
-                dialog.ShowDialog();
+                dialog.Show();
             }
             catch (Exception ex)
             {
@@ -512,7 +508,6 @@ namespace FountOfHopeStudyBiblePC
 
         private void OpenColorThemeDialog()
         {
-            App.Log("MainWindow: OpenColorThemeDialog");
             try
             {
                 var dialog = new Views.Modals.ColorThemeDialog(
@@ -543,7 +538,7 @@ namespace FountOfHopeStudyBiblePC
                 {
                     Owner = this,
                 };
-                dialog.ShowDialog();
+                dialog.Show();
             }
             catch (Exception ex)
             {

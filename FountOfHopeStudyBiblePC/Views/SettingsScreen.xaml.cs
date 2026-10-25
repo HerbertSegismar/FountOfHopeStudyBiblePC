@@ -347,7 +347,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 {
                     Owner = Window.GetWindow(this)
                 };
-                dlg.ShowDialog();
+                dlg.Show();
             });
             content.Children.Add(btn);
             return BuildSectionBorder("Version Management",

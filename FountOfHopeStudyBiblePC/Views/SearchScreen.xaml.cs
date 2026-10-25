@@ -594,7 +594,7 @@ namespace FountOfHopeStudyBiblePC.Views
             {
                 Owner = Window.GetWindow(this),
             };
-            dialog.ShowDialog();
+            dialog.Show();
         }
 
         private void VersionChip_Click(object sender, RoutedEventArgs e)
@@ -608,7 +608,7 @@ namespace FountOfHopeStudyBiblePC.Views
             {
                 Owner = Window.GetWindow(this),
             };
-            modal.ShowDialog();
+            modal.Show();
         }
 
         private void VersionInfoBtn_Click(object sender, RoutedEventArgs e)

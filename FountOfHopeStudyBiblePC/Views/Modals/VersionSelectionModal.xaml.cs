@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.ViewModels;
@@ -22,7 +23,16 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         private string _searchQuery = "";
 
-        // Constructor — fields first, then InitializeComponent
+        // ── Scrim dismiss state ─────────────────────────────────────
+        private bool _isDismissing;
+        private bool _dismissArmed;
+
+        /// <summary>
+        /// If true, the dialog dismisses when the owner window is resized.
+        /// Default is true — the card is centred and fixed-size.
+        /// </summary>
+        public bool CloseOnOwnerResize { get; set; } = true;
+
         public VersionSelectionModal(
             AppViewModel viewModel,
             string currentVersionKey,
@@ -37,17 +47,129 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             _onDismiss = onDismiss ?? (() => { });
 
             InitializeComponent();
-
-            Loaded += (_, _) => SearchBox.Focus();
             BuildList();
+
+            Loaded += OnLoaded;
+            Loaded += (_, _) => SearchBox.Focus();
         }
+
+        // ═══════════════════════════════════════════════════════════
+        //  Scrim dismiss infrastructure
+        // ═══════════════════════════════════════════════════════════
+        private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // Only arm dismissal when the press starts on the scrim.
+            // SearchBox, ScrollViewer, and version rows all need their own
+            // mouse lifecycle untouched.
+            if (!ReferenceEquals(e.OriginalSource, Scrim))
+            {
+                _dismissArmed = false;
+                return;
+            }
+
+            _dismissArmed = true;
+            Scrim.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void Scrim_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            bool shouldDismiss = _dismissArmed;
+            _dismissArmed = false;
+
+            if (Scrim.IsMouseCaptured)
+                Scrim.ReleaseMouseCapture();
+
+            if (shouldDismiss)
+                DismissWithFade();
+
+            e.Handled = true;
+        }
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+            {
+                DismissWithFade();
+                e.Handled = true;
+            }
+        }
+
+        private void DismissWithFade()
+        {
+            if (_isDismissing) return;
+            _isDismissing = true;
+
+            var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(120));
+            fade.Completed += (_, _) => Close();
+            BeginAnimation(OpacityProperty, fade);
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  Owner bounds tracking
+        // ═══════════════════════════════════════════════════════════
+        private void OnLoaded(object? sender, RoutedEventArgs e)
+        {
+            if (Owner is not null)
+            {
+                Owner.LocationChanged += Owner_LocationChanged;
+                Owner.SizeChanged += Owner_SizeChanged;
+                Owner.StateChanged += Owner_StateChanged;
+                Owner.Closed += Owner_Closed;
+            }
+
+            SyncBoundsToOwner();
+
+            // Reveal after bounds are correct (avoids pre-layout flash).
+            Opacity = 1;
+        }
+
+        private void SyncBoundsToOwner()
+        {
+            if (Owner is null) return;
+            WindowStartupLocation = WindowStartupLocation.Manual;
+
+            if (Owner.WindowState == WindowState.Maximized)
+            {
+                WindowState = WindowState.Maximized;
+                return;
+            }
+            WindowState = WindowState.Normal;
+            Left = Owner.Left;
+            Top = Owner.Top;
+            Width = Owner.ActualWidth;
+            Height = Owner.ActualHeight;
+        }
+
+        private void Owner_LocationChanged(object? sender, EventArgs e)
+        {
+            if (Owner is null) return;
+            Left = Owner.Left;
+            Top = Owner.Top;
+        }
+
+        private void Owner_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (CloseOnOwnerResize) { DismissWithFade(); return; }
+            if (Owner is null) return;
+            Left = Owner.Left;
+            Top = Owner.Top;
+            Width = Owner.ActualWidth;
+            Height = Owner.ActualHeight;
+        }
+
+        private void Owner_StateChanged(object? sender, EventArgs e)
+        {
+            if (Owner?.WindowState == WindowState.Minimized) DismissWithFade();
+        }
+
+        private void Owner_Closed(object? sender, EventArgs e) => DismissWithFade();
 
         // ═══════════════════════════════════════════════════════════
         //  Build / filter the version list
         // ═══════════════════════════════════════════════════════════
         private void BuildList()
         {
-            // Build active version set (excluded from the disabled list)
             var activeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 _viewModel.CurrentDbName
@@ -55,16 +177,13 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             if (_viewModel.MultiVersion)
                 activeKeys.Add(_viewModel.SecondaryDbName);
 
-            // Effective disabled set = disabled − active
             var effectiveDisabled = new HashSet<string>(
                 _viewModel.DisabledVersions
                     .Where(k => !activeKeys.Contains(k)),
                 StringComparer.OrdinalIgnoreCase);
 
-            // Get the grouped versions
             var grouped = BibleVersionUtils.GetFilteredVersionsGroupedByLanguage(effectiveDisabled);
 
-            // Apply search filter
             var groups = new List<VersionGroup>();
             foreach (var kv in grouped)
             {
@@ -112,7 +231,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
             VersionList.ItemsSource = groups;
 
-            // Toggle empty state
             bool anyResults = groups.Count > 0;
             VersionScroller.Visibility = anyResults ? Visibility.Visible : Visibility.Collapsed;
             EmptyState.Visibility = anyResults ? Visibility.Collapsed : Visibility.Visible;
@@ -139,7 +257,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         }
 
         // ═══════════════════════════════════════════════════════════
-        //  Version click
+        //  Version click (confirm action → immediate close)
         // ═══════════════════════════════════════════════════════════
         private void VersionRow_Click(object sender, MouseButtonEventArgs e)
         {
@@ -147,30 +265,33 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
             App.Log($"VersionSelectionModal: picked {entry.Key} ({entry.ShortName})");
 
-            // Update the dictionary language for this Bible
             if (_isSecondary)
                 _viewModel.UpdateSecondaryDictionaryForBibleLanguage(entry.Key);
             else
                 _viewModel.UpdateDictionaryForBibleLanguage(entry.Key);
 
-            // Notify the caller
             _onVersionSelected(entry.Key);
 
-            // Close
+            // Confirm action → immediate Close. OnClosed fires _onDismiss once
+            // (the caller treats that as "dropdown closed", same as cancel).
             Close();
         }
 
         // ═══════════════════════════════════════════════════════════
-        //  Close
+        //  Dismiss
         // ═══════════════════════════════════════════════════════════
-        private void CloseButton_Click(object sender, RoutedEventArgs e)
-        {
-            _onDismiss();
-            Close();
-        }
+        private void CloseButton_Click(object sender, RoutedEventArgs e) => DismissWithFade();
 
         protected override void OnClosed(EventArgs e)
         {
+            if (Owner is not null)
+            {
+                Owner.LocationChanged -= Owner_LocationChanged;
+                Owner.SizeChanged -= Owner_SizeChanged;
+                Owner.StateChanged -= Owner_StateChanged;
+                Owner.Closed -= Owner_Closed;
+            }
+
             base.OnClosed(e);
             _onDismiss();
         }

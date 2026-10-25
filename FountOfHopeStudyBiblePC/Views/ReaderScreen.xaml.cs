@@ -721,11 +721,9 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             if (_selectedVerse == null || _selectedPassage == null)
             {
-                App.Log("ShowVerseOptionsModal: skipped — selectedVerse or selectedPassage is null");
                 return;
             }
 
-            App.Log($"ShowVerseOptionsModal: opening for verse {_selectedVerse.VerseNumber}");
 
             var cache = _selectedIsPrimary ? _primaryLoadedVerses : _secondaryLoadedVerses;
             var db = _selectedIsPrimary ? _databaseHelper : _secondaryDatabaseHelper;
@@ -747,9 +745,7 @@ namespace FountOfHopeStudyBiblePC.Views
             var owner = Window.GetWindow(this);
             if (owner != null) modal.Owner = owner;
 
-            App.Log("ShowVerseOptionsModal: calling ShowDialog");
-            modal.ShowDialog();
-            App.Log("ShowVerseOptionsModal: ShowDialog returned — refreshing chapter");
+            modal.Show();
 
             RenderCurrentMode();
         }
@@ -799,9 +795,9 @@ namespace FountOfHopeStudyBiblePC.Views
 
             App.Log($"Reader: OpenNotesModal with {verses.Count} verse(s)");
 
-            await System.Threading.Tasks.Task.Delay(120);
+            await Task.Delay(120);
 
-            var modal = new Views.Modals.NotesModal(
+            var modal = new NotesModal(
                 viewModel: _viewModel,
                 verses: verses,
                 passage: _selectedPassage ?? _primaryCurrent,
@@ -811,7 +807,7 @@ namespace FountOfHopeStudyBiblePC.Views
             var owner = Window.GetWindow(this);
             if (owner != null) modal.Owner = owner;
 
-            modal.ShowDialog();
+            modal.Show();
             App.Log("Reader: NotesModal closed — refreshing chapter");
 
             RenderCurrentMode();

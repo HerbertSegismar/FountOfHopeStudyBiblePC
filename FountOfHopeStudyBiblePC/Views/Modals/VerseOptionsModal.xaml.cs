@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
@@ -35,16 +36,26 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private bool _isHighlighted;
         private bool _suppressSliderEvents;
 
+        // ── Scrim dismiss state ─────────────────────────────────────
+        private bool _isDismissing;
+        private bool _dismissArmed;
+
+        /// <summary>
+        /// If true, the dialog dismisses when the owner window is resized.
+        /// Default is true — the card is centred and fixed-size.
+        /// </summary>
+        public bool CloseOnOwnerResize { get; set; } = true;
+
         public VerseOptionsModal(
-     AppViewModel viewModel,
-     PassageSelection passage,
-     Verse verse,
-     List<Verse> chapterVerses,
-     DatabaseHelper? databaseHelper,
-     Action onAddBookmark,
-     Action onAddHighlight,
-     Action<List<Verse>> onShare,
-     Action<List<Verse>> onAddNote)
+            AppViewModel viewModel,
+            PassageSelection passage,
+            Verse verse,
+            List<Verse> chapterVerses,
+            DatabaseHelper? databaseHelper,
+            Action onAddBookmark,
+            Action onAddHighlight,
+            Action<List<Verse>> onShare,
+            Action<List<Verse>> onAddNote)
         {
             // ── 1. Initialize fields FIRST, before InitializeComponent ──
             _viewModel = viewModel;
@@ -66,7 +77,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             // Suppress slider events while XAML loads
             _suppressSliderEvents = true;
 
-            // ── 2. Now parse the XAML. Slider events will fire but be suppressed ──
+            // ── 2. Now parse the XAML ──
             InitializeComponent();
 
             // ── 3. Real setup ──
@@ -74,7 +85,121 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             InitializeRangeSlider();
             _suppressSliderEvents = false;
             RefreshState();
+
+            Loaded += OnLoaded;
         }
+
+        // ═══════════════════════════════════════════════════════════
+        //  Scrim dismiss infrastructure
+        // ═══════════════════════════════════════════════════════════
+        private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // Only arm dismissal when the press starts on the scrim.
+            // Sliders, action-item Borders, buttons and the ScrollViewer
+            // all need their own mouse lifecycle untouched.
+            if (!ReferenceEquals(e.OriginalSource, Scrim))
+            {
+                _dismissArmed = false;
+                return;
+            }
+
+            _dismissArmed = true;
+            Scrim.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void Scrim_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            bool shouldDismiss = _dismissArmed;
+            _dismissArmed = false;
+
+            if (Scrim.IsMouseCaptured)
+                Scrim.ReleaseMouseCapture();
+
+            if (shouldDismiss)
+                DismissWithFade();
+
+            e.Handled = true;
+        }
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+            {
+                DismissWithFade();
+                e.Handled = true;
+            }
+        }
+
+        private void DismissWithFade()
+        {
+            if (_isDismissing) return;
+            _isDismissing = true;
+
+            var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(120));
+            fade.Completed += (_, _) => Close();
+            BeginAnimation(OpacityProperty, fade);
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        //  Owner bounds tracking
+        // ═══════════════════════════════════════════════════════════
+        private void OnLoaded(object? sender, RoutedEventArgs e)
+        {
+            if (Owner is not null)
+            {
+                Owner.LocationChanged += Owner_LocationChanged;
+                Owner.SizeChanged += Owner_SizeChanged;
+                Owner.StateChanged += Owner_StateChanged;
+                Owner.Closed += Owner_Closed;
+            }
+
+            SyncBoundsToOwner();
+
+            // Reveal after bounds are correct (avoids pre-layout flash).
+            Opacity = 1;
+        }
+
+        private void SyncBoundsToOwner()
+        {
+            if (Owner is null) return;
+            WindowStartupLocation = WindowStartupLocation.Manual;
+
+            if (Owner.WindowState == WindowState.Maximized)
+            {
+                WindowState = WindowState.Maximized;
+                return;
+            }
+            WindowState = WindowState.Normal;
+            Left = Owner.Left;
+            Top = Owner.Top;
+            Width = Owner.ActualWidth;
+            Height = Owner.ActualHeight;
+        }
+
+        private void Owner_LocationChanged(object? sender, EventArgs e)
+        {
+            if (Owner is null) return;
+            Left = Owner.Left;
+            Top = Owner.Top;
+        }
+
+        private void Owner_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (CloseOnOwnerResize) { DismissWithFade(); return; }
+            if (Owner is null) return;
+            Left = Owner.Left;
+            Top = Owner.Top;
+            Width = Owner.ActualWidth;
+            Height = Owner.ActualHeight;
+        }
+
+        private void Owner_StateChanged(object? sender, EventArgs e)
+        {
+            if (Owner?.WindowState == WindowState.Minimized) DismissWithFade();
+        }
+
+        private void Owner_Closed(object? sender, EventArgs e) => DismissWithFade();
 
         // ═══════════════════════════════════════════════════════════
         //  Setup
@@ -119,7 +244,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 .OrderBy(v => v.VerseNumber)
                 .ToList();
 
-            // Bookmark state — all current verses bookmarked?
             if (_db != null && currentVerses.Count > 0)
             {
                 _isBookmarked = currentVerses.All(v =>
@@ -140,22 +264,18 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 _isHighlighted = false;
             }
 
-            // Header text
             var rangeStr = minV == maxV ? $"{minV}" : $"{minV}-{maxV}";
             PassageHeaderText.Text = $"{_passage.BookName} {_passage.Chapter}:{rangeStr}";
 
-            // Verse count
             var count = maxV - minV + 1;
             SelectedCountText.Text = $"Selected {count} verse{(count == 1 ? "" : "s")}";
 
-            // Preview text
             var preview = currentVerses.Count > 0
                 ? string.Join("\n", currentVerses.Select(v =>
                     $"{v.VerseNumber} {SimpleVerseProcessor.StripXmlTags(v.Text)}"))
                 : SimpleVerseProcessor.StripXmlTags(_verse.Text);
             PreviewText.Text = preview;
 
-            // Bookmark button
             BookmarkIcon.Text = _isBookmarked ? "🔖" : "🔖";
             BookmarkTitle.Text = _isBookmarked ? "Bookmarked" : "Add Bookmark";
             BookmarkSubtitle.Text = _isBookmarked ? "Tap to remove" : "Save this verse for later";
@@ -164,7 +284,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 : new SolidColorBrush(Color.FromRgb(0x23, 0x2A, 0x33));
             BookmarkButton.Opacity = _isBookmarked ? 1.0 : 0.85;
 
-            // Highlight button
             HighlightIcon.Text = _isHighlighted ? "★" : "☆";
             HighlightTitle.Text = _isHighlighted ? "Highlighted" : "Add Highlight";
             HighlightSubtitle.Text = _isHighlighted ? "Tap to remove" : "Mark this verse as important";
@@ -173,13 +292,9 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 : new SolidColorBrush(Color.FromRgb(0x23, 0x2A, 0x33));
             HighlightButton.Opacity = _isHighlighted ? 1.0 : 0.85;
 
-            // Share button
             ShareTitle.Text = minV == maxV ? "Share Verse" : "Share Verses";
-
-            // Note button
             NoteTitle.Text = minV == maxV ? "Add Note" : "Add Notes";
 
-            // Slider button enablement
             StartDecButton.IsEnabled = _currentStart > 1;
             StartIncButton.IsEnabled = _currentStart < _currentEnd;
             EndDecButton.IsEnabled = _currentEnd > _currentStart;
@@ -258,7 +373,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         }
 
         // ═══════════════════════════════════════════════════════════
-        //  Action buttons
+        //  Action buttons (all confirm actions → immediate Close)
         // ═══════════════════════════════════════════════════════════
         private List<Verse> GetCurrentVerses()
         {
@@ -269,7 +384,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 .OrderBy(v => v.VerseNumber)
                 .ToList();
 
-            // Enrich with passage info for DB operations
             for (int i = 0; i < currentVerses.Count; i++)
                 currentVerses[i] = currentVerses[i] with
                 {
@@ -277,7 +391,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     Chapter = _passage.Chapter,
                 };
 
-            // Fallback: if no chapter verses cached, use single verse
             if (currentVerses.Count == 0)
             {
                 currentVerses.Add(_verse with
@@ -305,7 +418,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
 
             _onAddBookmark();
-            Close();
+            Close();   // confirm action → immediate
         }
 
         private void HighlightButton_Click(object sender, MouseButtonEventArgs e)
@@ -328,23 +441,39 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
 
             _onAddHighlight();
-            Close();
+            Close();   // confirm action → immediate
         }
 
         private void ShareButton_Click(object sender, MouseButtonEventArgs e)
         {
             var verses = GetCurrentVerses();
             _onShare(verses);
-            Close();
+            Close();   // hands off to caller → immediate
         }
 
         private void NoteButton_Click(object sender, MouseButtonEventArgs e)
         {
             var verses = GetCurrentVerses();
             _onAddNote(verses);
-            Close();
+            Close();   // hands off to caller → immediate
         }
 
-        private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
+        // ═══════════════════════════════════════════════════════════
+        //  Dismiss
+        // ═══════════════════════════════════════════════════════════
+        private void CloseButton_Click(object sender, RoutedEventArgs e) => DismissWithFade();
+
+        protected override void OnClosed(EventArgs e)
+        {
+            if (Owner is not null)
+            {
+                Owner.LocationChanged -= Owner_LocationChanged;
+                Owner.SizeChanged -= Owner_SizeChanged;
+                Owner.StateChanged -= Owner_StateChanged;
+                Owner.Closed -= Owner_Closed;
+            }
+
+            base.OnClosed(e);
+        }
     }
 }
