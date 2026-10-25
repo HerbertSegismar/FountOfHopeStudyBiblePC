@@ -1,12 +1,11 @@
 ﻿// Views/Modals/NavigationModal.xaml.cs
 using System;
-using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
@@ -20,6 +19,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private readonly DatabaseHelper? _db;
         private readonly Action<PassageSelection> _onPassageSelected;
         private readonly Action _onDismiss;
+        private readonly ModalOverlayController _overlay;
 
         private BookUi? _selectedBook;
         private string _chapterInput = "";
@@ -28,9 +28,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private int _maxVerse;
         private string? _pendingVerseDigit;
         private bool _initialApplied;
-        private bool _isDismissing;
-
-        public bool CloseOnOwnerResize { get; set; } = true;
 
         public NavigationModal(
             AppViewModel viewModel,
@@ -46,135 +43,40 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             _onPassageSelected = onPassageSelected ?? (_ => { });
             _onDismiss = onDismiss ?? (() => { });
 
-
             InitializeComponent();
+
+            _overlay = new ModalOverlayController(this) { CloseOnOwnerResize = true };
+
             BuildBookGrids();
-
             ApplyInitialSelection(initialBookNumber, initialChapter, initialVerse);
-
             UpdateUI();
-
-            Loaded += OnLoaded;
         }
 
-        private void OnLoaded(object? sender, RoutedEventArgs e)
-        {
-            if (Owner is null) return;
+        // ── Thin XAML stubs → ModalOverlayController ─────────────
+        private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+            => _overlay.HandleScrimMouseDown(sender, e);
 
-            Owner.LocationChanged += Owner_LocationChanged;
-            Owner.SizeChanged += Owner_SizeChanged;
-            Owner.StateChanged += Owner_StateChanged;
-            Owner.Closed += Owner_Closed;
+        private void Scrim_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+            => _overlay.HandleScrimMouseUp(sender, e);
 
-            SyncBoundsToOwner();
-        }
+        private void Card_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+            => _overlay.HandleCardMouseDown(sender, e);
+
+        private void Card_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+            => _overlay.HandleCardMouseUp(sender, e);
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+            => _overlay.HandleKeyDown(sender, e);
 
         protected override void OnClosed(EventArgs e)
         {
-            if (Owner is not null)
-            {
-                Owner.LocationChanged -= Owner_LocationChanged;
-                Owner.SizeChanged -= Owner_SizeChanged;
-                Owner.StateChanged -= Owner_StateChanged;
-                Owner.Closed -= Owner_Closed;
-            }
-
-            base.OnClosed(e);
+            base.OnClosed(e);   // raises Closed → controller detaches owner handlers
             _onDismiss();
         }
 
-        private void SyncBoundsToOwner()
-        {
-            if (Owner is null) return;
-            WindowStartupLocation = WindowStartupLocation.Manual;
-
-            if (Owner.WindowState == WindowState.Maximized)
-            {
-                WindowState = WindowState.Maximized;
-                return;
-            }
-            WindowState = WindowState.Normal;
-            Left = Owner.Left;
-            Top = Owner.Top;
-            Width = Owner.ActualWidth;
-            Height = Owner.ActualHeight;
-        }
-
-        private void Owner_LocationChanged(object? sender, EventArgs e)
-        {
-            if (Owner is null) return;
-            Left = Owner.Left;
-            Top = Owner.Top;
-        }
-
-        private void Owner_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            if (CloseOnOwnerResize) { DismissWithFade(); return; }
-            if (Owner is null) return;
-            Left = Owner.Left;
-            Top = Owner.Top;
-            Width = Owner.ActualWidth;
-            Height = Owner.ActualHeight;
-        }
-
-        private void Owner_StateChanged(object? sender, EventArgs e)
-        {
-            if (Owner?.WindowState == WindowState.Minimized) DismissWithFade();
-        }
-
-        private void Owner_Closed(object? sender, EventArgs e) => DismissWithFade();
-
-        private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            if (!ReferenceEquals(e.OriginalSource, Scrim))
-                return;
-
-            Scrim.CaptureMouse();
-            e.Handled = true;
-        }
-
-        private void Scrim_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            bool onScrim = ReferenceEquals(e.OriginalSource, Scrim);
-
-            Scrim.ReleaseMouseCapture();
-            e.Handled = true;
-
-            if (onScrim)
-                DismissWithFade();
-        }
-
-        private void Card_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            ((UIElement)sender).CaptureMouse();
-            e.Handled = true;
-        }
-
-        private void Card_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            ((UIElement)sender).ReleaseMouseCapture();
-            e.Handled = true;
-        }
-
-        private void Window_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Escape)
-            {
-                DismissWithFade();
-                e.Handled = true;
-            }
-        }
-
-        private void DismissWithFade()
-        {
-            if (_isDismissing) return;
-            _isDismissing = true;
-
-            var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(120));
-            fade.Completed += (_, _) => Close();
-            BeginAnimation(OpacityProperty, fade);
-        }
-
+        // ═══════════════════════════════════════════════════════════
+        //  Book grid
+        // ═══════════════════════════════════════════════════════════
         private void BuildBookGrids()
         {
             OldTestamentPanel.Children.Clear();
@@ -599,6 +501,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        private void CloseButton_Click(object sender, RoutedEventArgs e) => DismissWithFade();
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+            => _overlay.DismissWithFade();
     }
 }

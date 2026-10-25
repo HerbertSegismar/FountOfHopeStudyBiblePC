@@ -1,23 +1,29 @@
 ﻿// Controls/HomeAppBar.xaml.cs
-using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.ViewModels;
 using MahApps.Metro.IconPacks;
 using System;
-using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 
 namespace FountOfHopeStudyBiblePC.Controls
 {
     public partial class HomeAppBar : UserControl
     {
+        private const double IconButtonSize = 35;
+
         private readonly AppViewModel _viewModel;
         private Screen _currentScreen;
 
-        // Events the host (MainWindow) subscribes to
+        private Popup? _menuPopup;
+        private PackIconMaterial? _menuIcon;
+        private RotateTransform? _menuRotation;
+
         public event Action? BibleIconClicked;
         public event Action? ThemeToggled;
         public event Action? ColorLensClicked;
@@ -31,17 +37,21 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             InitializeComponent();
 
+            BackButton.Template = AppBarShared.BuildCircleButtonTemplate(IconButtonSize / 2);
+            BackIcon.Foreground = Brushes.White;
+
             PopulateContent();
 
-            // Re-render when theme changes.
-            // ── DarkTheme:       the theme toggle icon (sun ↔ moon) swaps.
-            // ── HeaderButtonsColor: the dropdown menu items pick up the
-            //    new color. (The app bar itself stays white — see below.)
             _viewModel.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(AppViewModel.DarkTheme) ||
                     e.PropertyName == nameof(AppViewModel.HeaderButtonsColor))
                     PopulateContent();
+            };
+
+            Unloaded += (_, _) =>
+            {
+                if (_menuPopup is { IsOpen: true }) _menuPopup.IsOpen = false;
             };
         }
 
@@ -59,252 +69,276 @@ namespace FountOfHopeStudyBiblePC.Controls
         // ═══════════════════════════════════════════════════════════
         private void PopulateContent()
         {
-            TitleText.Text = GetScreenTitle(_currentScreen);
+            if (_menuPopup is { IsOpen: true }) _menuPopup.IsOpen = false;
+            _menuPopup = null;
+            _menuIcon = null;
+            _menuRotation = null;
 
-            // App bar content sits on the primary-color gradient → always white.
+            TitleText.Text = AppBarShared.GetScreenTitle(_currentScreen);
             TitleText.Foreground = Brushes.White;
 
             ActionsPanel.Children.Clear();
 
             var isLandscape = SystemParameters.PrimaryScreenWidth > SystemParameters.PrimaryScreenHeight;
 
-            // Landscape: full icon row
             if (isLandscape)
             {
-                ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.Home, "Home",
-                    () => ScreenRequested?.Invoke(new Screen.Home())));
+                var navMargin = new Thickness(4, 0, 0, 0);
 
-                ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.BookOpenPageVariant, "Bible Navigation",
-                    () => BibleIconClicked?.Invoke()));
+                ActionsPanel.Children.Add(BuildIconButton(
+                    PackIconMaterialKind.Home, "Home", 0.65,
+                    () => ScreenRequested?.Invoke(new Screen.Home()), navMargin));
 
-                ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.Bookmark, "Bookmarks",
-                    () => ScreenRequested?.Invoke(new Screen.Bookmarks())));
+                ActionsPanel.Children.Add(BuildIconButton(
+                    PackIconMaterialKind.BookOpenPageVariant, "Bible Navigation", 0.65,
+                    () => BibleIconClicked?.Invoke(), navMargin));
 
-                ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.NoteText, "Notes",
-                    () => ScreenRequested?.Invoke(new Screen.Notes())));
+                ActionsPanel.Children.Add(BuildIconButton(
+                    PackIconMaterialKind.BookmarkMultiple, "Bookmarks", 0.55,
+                    () => ScreenRequested?.Invoke(new Screen.Bookmarks()), navMargin));
 
-                ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.Magnify, "Search",
-                    () => ScreenRequested?.Invoke(new Screen.Search())));
+                ActionsPanel.Children.Add(BuildIconButton(
+                    PackIconMaterialKind.NoteText, "Notes", 0.55,
+                    () => ScreenRequested?.Invoke(new Screen.Notes()), navMargin,
+                    rotateAngle: 90));
 
-                ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.Cog, "Settings",
-                    () => ScreenRequested?.Invoke(new Screen.Settings())));
+                ActionsPanel.Children.Add(BuildIconButton(
+                    PackIconMaterialKind.Magnify, "Search", 0.7,
+                    () => ScreenRequested?.Invoke(new Screen.Search()), navMargin));
+
+                ActionsPanel.Children.Add(BuildIconButton(
+                    PackIconMaterialKind.Cog, "Settings", 0.6,
+                    () => ScreenRequested?.Invoke(new Screen.Settings()), navMargin));
             }
             else
             {
-                // Portrait: only the Bible icon
-                ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.BookOpenPageVariant, "Bible Navigation",
-                    () => BibleIconClicked?.Invoke()));
+                ActionsPanel.Children.Add(BuildIconButton(
+                    PackIconMaterialKind.BookOpenPageVariant, "Bible Navigation", 0.65,
+                    () => BibleIconClicked?.Invoke(), new Thickness(4, 0, 0, 0)));
             }
 
-            // Always: theme, color lens, menu
             var themeKind = _viewModel.DarkTheme
-                ? PackIconMaterialKind.WhiteBalanceSunny
-                : PackIconMaterialKind.WeatherNight;
-            ActionsPanel.Children.Add(BuildIconButton(themeKind, "Toggle Theme",
-                () => ThemeToggled?.Invoke()));
+                ? PackIconMaterialKind.Brightness6
+                : PackIconMaterialKind.Brightness2;
+            ActionsPanel.Children.Add(BuildIconButton(
+                themeKind, "Toggle Theme", 0.6,
+                () => ThemeToggled?.Invoke(), new Thickness(4, 0, 0, 0),
+                rotateAngle: 180));
 
-            ActionsPanel.Children.Add(BuildIconButton(PackIconMaterialKind.Palette, "Color Scheme",
-                () => ColorLensClicked?.Invoke()));
+            ActionsPanel.Children.Add(BuildIconButton(
+                PackIconMaterialKind.Palette, "Color Scheme", 0.6,
+                () => ColorLensClicked?.Invoke(), new Thickness(4, 0, 0, 0),
+                rotateAngle: 180));
 
             ActionsPanel.Children.Add(BuildMenuButton());
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Button factories
-        // ═══════════════════════════════════════════════════════════
-        private Button BuildIconButton(PackIconMaterialKind kind, string tooltip, Action onClick)
+        private static Button BuildIconButton(
+            PackIconMaterialKind kind,
+            string tooltip,
+            double iconScale,
+            Action onClick,
+            Thickness? margin = null,
+            double? rotateAngle = null)
         {
-            var btn = new Button
-            {
-                Width = 36,
-                Height = 36,
-                Margin = new Thickness(4, 0, 0, 0),
-                Background = Brushes.Transparent,
-                BorderThickness = new Thickness(0),
-                Cursor = System.Windows.Input.Cursors.Hand,
-                ToolTip = tooltip,
-            };
-            btn.Template = BuildTransparentCircleTemplate();
+            var btn = AppBarShared.BuildIconButton(
+                kind, tooltip, IconButtonSize, IconButtonSize * iconScale,
+                onClick, margin);
 
-            var icon = new PackIconMaterial
+            if (rotateAngle is double angle && btn.Content is PackIconMaterial icon)
             {
-                Kind = kind,
-                Width = 18,
-                Height = 18,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                // App bar overlays the primary-color gradient — always white.
-                Foreground = Brushes.White,
-            };
-
-            btn.Content = icon;
-            btn.Click += (_, _) => onClick();
+                icon.RenderTransformOrigin = new Point(0.5, 0.5);
+                icon.RenderTransform = new RotateTransform(angle);
+            }
             return btn;
         }
 
+        // ═══════════════════════════════════════════════════════════
+        //  Menu button
+        // ═══════════════════════════════════════════════════════════
         private Button BuildMenuButton()
         {
             var btn = new Button
             {
-                Width = 36,
-                Height = 36,
+                Width = IconButtonSize,
+                Height = IconButtonSize,
                 Margin = new Thickness(4, 0, 0, 0),
                 Background = Brushes.Transparent,
                 BorderThickness = new Thickness(0),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 ToolTip = "Navigation",
             };
-            btn.Template = BuildTransparentCircleTemplate();
+            btn.Template = AppBarShared.BuildCircleButtonTemplate(IconButtonSize / 2);
 
-            var icon = new PackIconMaterial
+            _menuIcon = new PackIconMaterial
             {
                 Kind = PackIconMaterialKind.Menu,
-                Width = 20,
-                Height = 20,
+                Width = IconButtonSize * 0.65,
+                Height = IconButtonSize * 0.65,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
-                // App bar overlays the primary-color gradient — always white.
+                RenderTransformOrigin = new Point(0.5, 0.5),
                 Foreground = Brushes.White,
             };
-            btn.Content = icon;
+            _menuRotation = new RotateTransform(0);
+            _menuIcon.RenderTransform = _menuRotation;
+            btn.Content = _menuIcon;
 
-            var menu = BuildNavigationMenu();
+            _menuPopup = new Popup
+            {
+                // StaysOpen=true → we manage close manually. This is what
+                // prevents WPF's light-dismiss from closing the popup
+                // synchronously inside our own Click handler.
+                StaysOpen = true,
+                AllowsTransparency = true,
+                Placement = PlacementMode.Bottom,
+                Child = BuildHomeMenuContent(),
+            };
+
+            _menuPopup.Opened += (_, _) =>
+            {
+                if (_menuIcon is not null) _menuIcon.Kind = PackIconMaterialKind.Close;
+                AnimateMenuRotation(180);
+
+                var window = Window.GetWindow(this);
+                if (window is not null)
+                {
+                    window.PreviewMouseLeftButtonDown += OnWindowMouseDown;
+                    window.Deactivated += OnWindowDeactivated;
+                }
+            };
+            _menuPopup.Closed += (_, _) =>
+            {
+                if (_menuIcon is not null) _menuIcon.Kind = PackIconMaterialKind.Menu;
+                AnimateMenuRotation(0);
+
+                var window = Window.GetWindow(this);
+                if (window is not null)
+                {
+                    window.PreviewMouseLeftButtonDown -= OnWindowMouseDown;
+                    window.Deactivated -= OnWindowDeactivated;
+                }
+            };
+
             btn.Click += (_, _) =>
             {
-                menu.PlacementTarget = btn;
-                menu.Placement = PlacementMode.Bottom;
-                menu.IsOpen = true;
+                if (_menuPopup is null) return;
+
+                if (_menuPopup.IsOpen)
+                {
+                    _menuPopup.IsOpen = false;
+                }
+                else
+                {
+                    _menuPopup.Child = BuildHomeMenuContent();
+                    _menuPopup.PlacementTarget = btn;
+                    _menuPopup.Placement = PlacementMode.Bottom;
+                    _menuPopup.IsOpen = true;
+                }
             };
 
             return btn;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Dropdown menu — sits on the modal background, NOT the app
-        //  bar gradient, so its icons/text remain theme-aware.
-        // ═══════════════════════════════════════════════════════════
-        private ContextMenu BuildNavigationMenu()
+        private void OnWindowMouseDown(object sender, MouseButtonEventArgs e)
         {
-            var menu = new ContextMenu
+            if (_menuPopup is null || !_menuPopup.IsOpen) return;
+
+            // Click on hamburger → let button.Click toggle it (avoids
+            // double-handling; button.Click closes it cleanly).
+            if (_menuPopup.PlacementTarget is UIElement pt &&
+                (ReferenceEquals(e.OriginalSource, pt) ||
+                 IsDescendantOf(e.OriginalSource as DependencyObject, pt)))
+                return;
+
+            _menuPopup.IsOpen = false;
+        }
+
+        private void OnWindowDeactivated(object? sender, EventArgs e)
+        {
+            if (_menuPopup?.IsOpen == true) _menuPopup.IsOpen = false;
+        }
+
+        private static bool IsDescendantOf(DependencyObject? element, DependencyObject? ancestor)
+        {
+            while (element is not null)
             {
-                Background = new SolidColorBrush(_viewModel.DarkTheme
-                    ? _viewModel.DarkModalBackgroundColor
-                    : _viewModel.LightModalBackgroundColor),
+                if (ReferenceEquals(element, ancestor)) return true;
+                element = VisualTreeHelper.GetParent(element);
+            }
+            return false;
+        }
+
+        private void AnimateMenuRotation(double angle)
+        {
+            if (_menuRotation is null) return;
+            var anim = new DoubleAnimation
+            {
+                To = angle,
+                Duration = TimeSpan.FromMilliseconds(300),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut },
+            };
+            _menuRotation.BeginAnimation(RotateTransform.AngleProperty, anim);
+        }
+
+        private FrameworkElement BuildHomeMenuContent()
+        {
+            var bg = _viewModel.DarkTheme
+                ? _viewModel.DarkModalBackgroundColor
+                : _viewModel.LightModalBackgroundColor;
+
+            var container = new Border
+            {
+                Background = new SolidColorBrush(bg),
+                BorderBrush = AppBarShared.MenuBorderBrush(_viewModel.DarkTheme, 0x33),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(4),
+                MinWidth = 220,
+                MaxWidth = 340,
+                Effect = new DropShadowEffect
+                {
+                    BlurRadius = 14,
+                    ShadowDepth = 3,
+                    Direction = 270,
+                    Color = Colors.Black,
+                    Opacity = 0.4,
+                },
             };
 
-            var items = new List<(string title, Screen screen, PackIconMaterialKind icon)>
-            {
-                ("Home",      new Screen.Home(),                         PackIconMaterialKind.Home),
-                ("Reader",    new Screen.Reader(_viewModel.PrimaryPassage), PackIconMaterialKind.BookOpenPageVariant),
-                ("Bookmarks", new Screen.Bookmarks(),                    PackIconMaterialKind.Bookmark),
-                ("Notes",     new Screen.Notes(),                        PackIconMaterialKind.NoteText),
-                ("Search",    new Screen.Search(),                       PackIconMaterialKind.Magnify),
-                ("Settings",  new Screen.Settings(),                     PackIconMaterialKind.Cog),
-            };
+            var stack = new StackPanel { Margin = new Thickness(4) };
+            var fg = AppBarShared.MenuForegroundBrush(_viewModel.DarkTheme);
 
-            foreach (var (title, screen, iconKind) in items)
+            foreach (var (title, screen, iconKind) in
+                     AppBarShared.GetNavigationItems(_viewModel.PrimaryPassage))
             {
-                var isActive = ScreensMatch(_currentScreen, screen);
+                var isActive = AppBarShared.ScreensMatch(_currentScreen, screen);
+                var target = screen;
 
-                var menuIcon = new PackIconMaterial
+                var icon = new PackIconMaterial
                 {
                     Kind = iconKind,
                     Width = 16,
                     Height = 16,
-                    VerticalAlignment = VerticalAlignment.Center,
-                };
-                // Menu icon is drawn on the modal background, so keep the
-                // theme-derived color here (not white).
-                menuIcon.SetResourceReference(Control.ForegroundProperty, ThemeResources.Icon);
-
-                var mi = new MenuItem
-                {
-                    Header = title,
-                    Icon = menuIcon,
-                    FontWeight = isActive ? FontWeights.Bold : FontWeights.Normal,
-                    Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor),
-                    Background = isActive
-                                ? new SolidColorBrush(Color.FromArgb(0x33,
-                                      ThemeManager.PrimaryColor.R,
-                                      ThemeManager.PrimaryColor.G,
-                                      ThemeManager.PrimaryColor.B))
-                                : Brushes.Transparent,
+                    Foreground = fg,
                 };
 
-                mi.Click += (_, _) =>
-                {
-                    menu.IsOpen = false;
-                    ScreenRequested?.Invoke(screen);
-                };
-
-                menu.Items.Add(mi);
+                stack.Children.Add(AppBarShared.BuildMenuRow(
+                    label: title,
+                    icon: icon,
+                    onClick: () =>
+                    {
+                        if (_menuPopup is not null) _menuPopup.IsOpen = false;
+                        ScreenRequested?.Invoke(target);
+                    },
+                    foreground: fg,
+                    isActive: isActive,
+                    isDarkTheme: _viewModel.DarkTheme));
             }
 
-            return menu;
+            container.Child = stack;
+            return container;
         }
-
-        private static bool ScreensMatch(Screen a, Screen b)
-        {
-            return (a, b) switch
-            {
-                (Screen.Home, Screen.Home) => true,
-                (Screen.Reader, Screen.Reader) => true,
-                (Screen.Bookmarks, Screen.Bookmarks) => true,
-                (Screen.Notes, Screen.Notes) => true,
-                (Screen.Search, Screen.Search) => true,
-                (Screen.Settings, Screen.Settings) => true,
-                _ => false
-            };
-        }
-
-        private static ControlTemplate BuildTransparentCircleTemplate()
-        {
-            var template = new ControlTemplate(typeof(Button));
-            var border = new FrameworkElementFactory(typeof(Border));
-            border.Name = "B";
-            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(18));
-            border.SetValue(Border.BackgroundProperty, Brushes.Transparent);
-
-            var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
-            presenter.SetValue(HorizontalAlignmentProperty, HorizontalAlignment.Center);
-            presenter.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
-            border.AppendChild(presenter);
-
-            template.VisualTree = border;
-
-            var trigger = new Trigger
-            {
-                Property = IsMouseOverProperty,
-                Value = true,
-            };
-            trigger.Setters.Add(new Setter(
-                Border.BackgroundProperty,
-                new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)),
-                "B"));
-            template.Triggers.Add(trigger);
-
-            return template;
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        //  Helpers
-        // ═══════════════════════════════════════════════════════════
-        private static string GetScreenTitle(Screen screen) => screen switch
-        {
-            Screen.Home => "Home",
-            Screen.Reader => "Reader",
-            Screen.Bookmarks => "Bookmarks",
-            Screen.Notes => "Notes",
-            Screen.Search => "Search",
-            Screen.Settings => "Settings",
-            Screen.Quiz => "Quiz",
-            Screen.LearnHebrew => "Learn Hebrew",
-            Screen.LearnGreek => "Learn Greek",
-            Screen.Dictionary => "Dictionary",
-            Screen.Animator => "Animator",
-            Screen.Generations => "Generations",
-            _ => "Fount of Hope",
-        };
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
             => BackRequested?.Invoke();

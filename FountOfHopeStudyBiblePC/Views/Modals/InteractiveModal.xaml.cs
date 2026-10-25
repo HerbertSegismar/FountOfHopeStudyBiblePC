@@ -9,7 +9,6 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
@@ -22,6 +21,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private readonly AppViewModel _viewModel;
         private readonly DatabaseHelper? _bibleDb;
         private readonly Action<PassageSelection> _onNavigateToReader;
+        private readonly ModalOverlayController _overlay;
 
         private readonly List<ModalPage> _stack = new();
         private readonly bool _useSecondaryDictionary;
@@ -34,16 +34,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private DatabaseHelper? _crossRefDb;
 
         private readonly Dictionary<int, int> _crossRefCounts = new();
-
-        private bool _isDismissing;
-        private bool _dismissArmed;
-
-        /// <summary>
-        /// If true, the dialog dismisses when the owner window is resized.
-        /// Default is false — the InteractiveModal is a long-form reader, so
-        /// staying pinned while the owner resizes feels natural.
-        /// </summary>
-        public bool CloseOnOwnerResize { get; set; } = false;
 
         public InteractiveModal(
             AppViewModel viewModel,
@@ -66,6 +56,9 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
             BodyText.MouseLeftButtonUp += BodyText_MouseLeftButtonUp;
 
+            // Long-form reader: stay pinned while the owner resizes.
+            _overlay = new ModalOverlayController(this) { CloseOnOwnerResize = false };
+
             _viewModel = viewModel;
             _bibleDb = bibleDb;
             _onNavigateToReader = onNavigateToReader;
@@ -77,121 +70,17 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 initialContent, word, definition, strongNumber, strongDefinition,
                 bookNumber, chapter, verse);
             UpdateView();
-
-            Loaded += OnLoaded;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Scrim dismiss infrastructure (Compose Dialog equivalent)
-        // ═══════════════════════════════════════════════════════════
+        // ── Thin XAML stubs → ModalOverlayController ─────────────
         private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            // Only arm dismissal when the press actually starts on the scrim.
-            // Anything inside the card (buttons, hyperlinks, text runs) keeps
-            // its own event handling untouched.
-            if (!ReferenceEquals(e.OriginalSource, Scrim))
-            {
-                _dismissArmed = false;
-                return;
-            }
-
-            _dismissArmed = true;
-            Scrim.CaptureMouse();
-            e.Handled = true;
-        }
+            => _overlay.HandleScrimMouseDown(sender, e);
 
         private void Scrim_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            bool shouldDismiss = _dismissArmed;
-            _dismissArmed = false;
-
-            if (Scrim.IsMouseCaptured)
-                Scrim.ReleaseMouseCapture();
-
-            // If the press was on the scrim (captured), the up comes back to
-            // the scrim regardless of cursor position. If the press was
-            // anywhere inside the card, _dismissArmed is false and we leave
-            // the click alone.
-            if (shouldDismiss)
-                DismissWithFade();
-
-            e.Handled = true;
-        }
+            => _overlay.HandleScrimMouseUp(sender, e);
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Escape)
-            {
-                DismissWithFade();
-                e.Handled = true;
-            }
-        }
-
-        private void DismissWithFade()
-        {
-            if (_isDismissing) return;
-            _isDismissing = true;
-
-            var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(120));
-            fade.Completed += (_, _) => Close();
-            BeginAnimation(OpacityProperty, fade);
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        //  Owner bounds tracking
-        // ═══════════════════════════════════════════════════════════
-        private void OnLoaded(object? sender, RoutedEventArgs e)
-        {
-            if (Owner is null) return;
-
-            Owner.LocationChanged += Owner_LocationChanged;
-            Owner.SizeChanged += Owner_SizeChanged;
-            Owner.StateChanged += Owner_StateChanged;
-            Owner.Closed += Owner_Closed;
-
-            SyncBoundsToOwner();
-        }
-
-        private void SyncBoundsToOwner()
-        {
-            if (Owner is null) return;
-            WindowStartupLocation = WindowStartupLocation.Manual;
-
-            if (Owner.WindowState == WindowState.Maximized)
-            {
-                WindowState = WindowState.Maximized;
-                return;
-            }
-            WindowState = WindowState.Normal;
-            Left = Owner.Left;
-            Top = Owner.Top;
-            Width = Owner.ActualWidth;
-            Height = Owner.ActualHeight;
-        }
-
-        private void Owner_LocationChanged(object? sender, EventArgs e)
-        {
-            if (Owner is null) return;
-            Left = Owner.Left;
-            Top = Owner.Top;
-        }
-
-        private void Owner_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            if (CloseOnOwnerResize) { DismissWithFade(); return; }
-            if (Owner is null) return;
-            Left = Owner.Left;
-            Top = Owner.Top;
-            Width = Owner.ActualWidth;
-            Height = Owner.ActualHeight;
-        }
-
-        private void Owner_StateChanged(object? sender, EventArgs e)
-        {
-            if (Owner?.WindowState == WindowState.Minimized) DismissWithFade();
-        }
-
-        private void Owner_Closed(object? sender, EventArgs e) => DismissWithFade();
+            => _overlay.HandleKeyDown(sender, e);
 
         // ═══════════════════════════════════════════════════════════
         //  DB loading
@@ -667,9 +556,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Body click dispatcher (word / Strong's hit-testing)
-        // ═══════════════════════════════════════════════════════════
         private void BodyText_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             if (e.Handled) return;
@@ -801,9 +687,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             return text;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Click handlers
-        // ═══════════════════════════════════════════════════════════
         private void Link_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not Hyperlink link) return;
@@ -938,9 +821,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             UpdateView();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Word / Strong's taps inside verses
-        // ═══════════════════════════════════════════════════════════
         private void OnWordPressInVerse(string word, int book, int chapter, int verse, bool isOldTestament)
         {
             var trimmed = (word ?? "").Trim();
@@ -1013,9 +893,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             UpdateView();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Footnotes
-        // ═══════════════════════════════════════════════════════════
         private void OpenFootnoteCommentary(
             string marker, int book, int chapter, int verse, bool isOldTestament)
         {
@@ -1052,9 +929,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             UpdateView();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Edit-word dialog
-        // ═══════════════════════════════════════════════════════════
         private void TitleWordLink_Click(object sender, MouseButtonEventArgs e)
         {
             var page = _stack[^1];
@@ -1147,9 +1021,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             return dlg.ShowDialog() == true ? tb.Text.Trim() : null;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Misc handlers
-        // ═══════════════════════════════════════════════════════════
         private void DescriptionButton_Click(object sender, RoutedEventArgs e)
         {
             var page = _stack[^1];
@@ -1224,7 +1095,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             var page = _stack[^1];
             if (page.Type != "verses" || page.Passage == null) return;
             _onNavigateToReader?.Invoke(page.Passage);
-            Close();   // navigation, not dismissal — skip the fade
+            Close();
         }
 
         private void NextDbButton_Click(object sender, RoutedEventArgs e)
@@ -1335,22 +1206,13 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        private void CloseButton_Click(object sender, RoutedEventArgs e) => DismissWithFade();
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+            => _overlay.DismissWithFade();
 
-        // ═══════════════════════════════════════════════════════════
-        //  Cleanup
-        // ═══════════════════════════════════════════════════════════
         protected override void OnClosed(EventArgs e)
         {
-            if (Owner is not null)
-            {
-                Owner.LocationChanged -= Owner_LocationChanged;
-                Owner.SizeChanged -= Owner_SizeChanged;
-                Owner.StateChanged -= Owner_StateChanged;
-                Owner.Closed -= Owner_Closed;
-            }
-
             base.OnClosed(e);
+
             _dictionaryDb?.Dispose();
             _secondaryDictionaryDb?.Dispose();
             _strongDb?.Dispose();

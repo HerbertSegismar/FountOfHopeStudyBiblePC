@@ -2,12 +2,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
@@ -27,6 +25,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private readonly Action _onAddHighlight;
         private readonly Action<List<Verse>> _onShare;
         private readonly Action<List<Verse>> _onAddNote;
+        private readonly ModalOverlayController _overlay;
 
         // ── State ───────────────────────────────────────────────────
         private int _currentStart;
@@ -35,16 +34,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private bool _isBookmarked;
         private bool _isHighlighted;
         private bool _suppressSliderEvents;
-
-        // ── Scrim dismiss state ─────────────────────────────────────
-        private bool _isDismissing;
-        private bool _dismissArmed;
-
-        /// <summary>
-        /// If true, the dialog dismisses when the owner window is resized.
-        /// Default is true — the card is centred and fixed-size.
-        /// </summary>
-        public bool CloseOnOwnerResize { get; set; } = true;
 
         public VerseOptionsModal(
             AppViewModel viewModel,
@@ -80,126 +69,28 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             // ── 2. Now parse the XAML ──
             InitializeComponent();
 
+            _overlay = new ModalOverlayController(this)
+            {
+                CloseOnOwnerResize = true,
+                RevealOnLoad = true,
+            };
+
             // ── 3. Real setup ──
             ApplyTheme();
             InitializeRangeSlider();
             _suppressSliderEvents = false;
             RefreshState();
-
-            Loaded += OnLoaded;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Scrim dismiss infrastructure
-        // ═══════════════════════════════════════════════════════════
+        // ── Thin XAML stubs → ModalOverlayController ─────────────
         private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            // Only arm dismissal when the press starts on the scrim.
-            // Sliders, action-item Borders, buttons and the ScrollViewer
-            // all need their own mouse lifecycle untouched.
-            if (!ReferenceEquals(e.OriginalSource, Scrim))
-            {
-                _dismissArmed = false;
-                return;
-            }
-
-            _dismissArmed = true;
-            Scrim.CaptureMouse();
-            e.Handled = true;
-        }
+            => _overlay.HandleScrimMouseDown(sender, e);
 
         private void Scrim_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            bool shouldDismiss = _dismissArmed;
-            _dismissArmed = false;
-
-            if (Scrim.IsMouseCaptured)
-                Scrim.ReleaseMouseCapture();
-
-            if (shouldDismiss)
-                DismissWithFade();
-
-            e.Handled = true;
-        }
+            => _overlay.HandleScrimMouseUp(sender, e);
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Escape)
-            {
-                DismissWithFade();
-                e.Handled = true;
-            }
-        }
-
-        private void DismissWithFade()
-        {
-            if (_isDismissing) return;
-            _isDismissing = true;
-
-            var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(120));
-            fade.Completed += (_, _) => Close();
-            BeginAnimation(OpacityProperty, fade);
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        //  Owner bounds tracking
-        // ═══════════════════════════════════════════════════════════
-        private void OnLoaded(object? sender, RoutedEventArgs e)
-        {
-            if (Owner is not null)
-            {
-                Owner.LocationChanged += Owner_LocationChanged;
-                Owner.SizeChanged += Owner_SizeChanged;
-                Owner.StateChanged += Owner_StateChanged;
-                Owner.Closed += Owner_Closed;
-            }
-
-            SyncBoundsToOwner();
-
-            // Reveal after bounds are correct (avoids pre-layout flash).
-            Opacity = 1;
-        }
-
-        private void SyncBoundsToOwner()
-        {
-            if (Owner is null) return;
-            WindowStartupLocation = WindowStartupLocation.Manual;
-
-            if (Owner.WindowState == WindowState.Maximized)
-            {
-                WindowState = WindowState.Maximized;
-                return;
-            }
-            WindowState = WindowState.Normal;
-            Left = Owner.Left;
-            Top = Owner.Top;
-            Width = Owner.ActualWidth;
-            Height = Owner.ActualHeight;
-        }
-
-        private void Owner_LocationChanged(object? sender, EventArgs e)
-        {
-            if (Owner is null) return;
-            Left = Owner.Left;
-            Top = Owner.Top;
-        }
-
-        private void Owner_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            if (CloseOnOwnerResize) { DismissWithFade(); return; }
-            if (Owner is null) return;
-            Left = Owner.Left;
-            Top = Owner.Top;
-            Width = Owner.ActualWidth;
-            Height = Owner.ActualHeight;
-        }
-
-        private void Owner_StateChanged(object? sender, EventArgs e)
-        {
-            if (Owner?.WindowState == WindowState.Minimized) DismissWithFade();
-        }
-
-        private void Owner_Closed(object? sender, EventArgs e) => DismissWithFade();
+            => _overlay.HandleKeyDown(sender, e);
 
         // ═══════════════════════════════════════════════════════════
         //  Setup
@@ -461,19 +352,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         // ═══════════════════════════════════════════════════════════
         //  Dismiss
         // ═══════════════════════════════════════════════════════════
-        private void CloseButton_Click(object sender, RoutedEventArgs e) => DismissWithFade();
-
-        protected override void OnClosed(EventArgs e)
-        {
-            if (Owner is not null)
-            {
-                Owner.LocationChanged -= Owner_LocationChanged;
-                Owner.SizeChanged -= Owner_SizeChanged;
-                Owner.StateChanged -= Owner_StateChanged;
-                Owner.Closed -= Owner_Closed;
-            }
-
-            base.OnClosed(e);
-        }
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+            => _overlay.DismissWithFade();
     }
 }
