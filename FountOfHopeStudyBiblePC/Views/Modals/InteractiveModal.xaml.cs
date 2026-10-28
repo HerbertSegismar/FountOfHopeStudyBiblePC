@@ -1,8 +1,5 @@
-﻿// Views/Modals/InteractiveModal.xaml.cs
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
+﻿using System.IO;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -23,7 +20,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private readonly Action<PassageSelection> _onNavigateToReader;
         private readonly ModalOverlayController _overlay;
 
-        private readonly List<ModalPage> _stack = new();
+        private readonly List<ModalPage> _stack = [];
         private readonly bool _useSecondaryDictionary;
 
         private DatabaseHelper? _dictionaryDb;
@@ -33,7 +30,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private DatabaseHelper? _verseCommentaryDb;
         private DatabaseHelper? _crossRefDb;
 
-        private readonly Dictionary<int, int> _crossRefCounts = new();
+        private readonly Dictionary<int, int> _crossRefCounts = [];
 
         public InteractiveModal(
             AppViewModel viewModel,
@@ -56,7 +53,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
             BodyText.MouseLeftButtonUp += BodyText_MouseLeftButtonUp;
 
-            // Long-form reader: stay pinned while the owner resizes.
             _overlay = new ModalOverlayController(this) { CloseOnOwnerResize = false };
 
             _viewModel = viewModel;
@@ -72,7 +68,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             UpdateView();
         }
 
-        // ── Thin XAML stubs → ModalOverlayController ─────────────
         private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
             => _overlay.HandleScrimMouseDown(sender, e);
 
@@ -82,9 +77,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private void Window_KeyDown(object sender, KeyEventArgs e)
             => _overlay.HandleKeyDown(sender, e);
 
-        // ═══════════════════════════════════════════════════════════
-        //  DB loading
-        // ═══════════════════════════════════════════════════════════
         private void LoadAllHelpers()
         {
             _dictionaryDb?.Dispose();
@@ -334,7 +326,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 content = commentaries == null || commentaries.Count == 0
                     ? "No commentaries available for this verse."
                     : ModalContentHelpers.SanitizeHtmlContent(
-                        string.Join("\n\n──────────\n\n",
+                        string.Join("<br><br>──────────<br><br>",
                             commentaries.Select(c => c.Text)));
             }
 
@@ -360,7 +352,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             if (_stack.Count == 0) { Close(); return; }
             var page = _stack[^1];
 
-            // ── Title ──
             if (page.Type == "definition" && !string.IsNullOrWhiteSpace(page.Word))
             {
                 var selectedDict = _useSecondaryDictionary
@@ -392,7 +383,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 ? Visibility.Visible
                 : Visibility.Collapsed;
 
-            // ── Description + fast-forward ──
             if (!string.IsNullOrWhiteSpace(page.Description))
             {
                 DescriptionPanel.Visibility = Visibility.Visible;
@@ -408,7 +398,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 NextDbButton.Visibility = Visibility.Collapsed;
             }
 
-            // ── Body ──
             BodyText.Inlines.Clear();
             RenderBody(page);
 
@@ -534,7 +523,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 }
 
                 BodyText.Inlines.Add(new Run(" "));
-                var star = new Hyperlink(new Run("[C]"))
+                var star = new Hyperlink(new Run("*"))
                 {
                     Foreground = new SolidColorBrush(themeColors.VerseNumber),
                     FontWeight = FontWeights.Bold,
@@ -640,58 +629,248 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
+        // ═══════════════════════════════════════════════════════════
+        //  Inline HTML → WPF Inlines
+        //  Preserves <b>/<i>/<u>/<sup>/<sub>/<p>/<br>/<hr>/<h1-6>/
+        //  <ul>/<ol>/<li>/<blockquote>, decodes entities, handles
+        //  <a href> links with nested formatting.
+        //  Self-closing variants (<p/>, <h1/>, <blockquote/>) are
+        //  treated the same as their closing counterparts — some
+        //  commentary DBs use `<p/>` as a paragraph separator.
+        // ═══════════════════════════════════════════════════════════
         private void RenderInlineHtml(string content)
         {
             if (string.IsNullOrEmpty(content)) return;
 
-            var linkRegex = new Regex(
-                "<a\\b[^>]*?\\bhref\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a>",
-                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            int i = 0;
+            var buffer = new StringBuilder();
+            int bold = 0, italic = 0, underline = 0, sup = 0, sub = 0;
+            Hyperlink? link = null;
+            InlineCollection target = BodyText.Inlines;
+            bool inOrderedList = false;
+            int olCounter = 0;
 
-            int cursor = 0;
-            foreach (Match m in linkRegex.Matches(content))
+            void Flush()
             {
-                if (m.Index > cursor)
-                    BodyText.Inlines.Add(new Run(
-                        StripTags(content.Substring(cursor, m.Index - cursor))));
+                if (buffer.Length == 0) return;
+                var decoded = DecodeEntities(buffer.ToString());
+                buffer.Clear();
+                if (decoded.Length == 0) return;
 
-                var href = m.Groups[1].Value;
-                var text = StripTags(m.Groups[2].Value);
-
-                var link = new Hyperlink(new Run(text))
-                {
-                    Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor),
-                    Tag = href,
-                    TextDecorations = TextDecorations.Underline,
-                    Cursor = Cursors.Hand,
-                };
-                link.Click += Link_Click;
-                BodyText.Inlines.Add(link);
-
-                cursor = m.Index + m.Length;
+                var run = new Run(decoded);
+                if (bold > 0) run.FontWeight = FontWeights.Bold;
+                if (italic > 0) run.FontStyle = FontStyles.Italic;
+                if (underline > 0) run.TextDecorations = TextDecorations.Underline;
+                if (sup > 0) run.BaselineAlignment = BaselineAlignment.Superscript;
+                else if (sub > 0) run.BaselineAlignment = BaselineAlignment.Subscript;
+                target.Add(run);
             }
 
-            if (cursor < content.Length)
-                BodyText.Inlines.Add(new Run(StripTags(content.Substring(cursor))));
+            void EnsureTrailingLineBreaks(int count)
+            {
+                var last = target.Count > 0 ? target.LastInline : null;
+                while (last is LineBreak)
+                {
+                    target.Remove(last);
+                    last = target.Count > 0 ? target.LastInline : null;
+                }
+                for (int k = 0; k < count; k++)
+                    target.Add(new LineBreak());
+            }
+
+            void CloseLink()
+            {
+                if (link == null) return;
+                Flush();
+                if (link.Inlines.Count > 0)
+                    BodyText.Inlines.Add(link);
+                link = null;
+                target = BodyText.Inlines;
+            }
+
+            while (i < content.Length)
+            {
+                var c = content[i];
+
+                if (c == '<')
+                {
+                    var end = content.IndexOf('>', i);
+                    if (end == -1) { buffer.Append(content, i, content.Length - i); break; }
+
+                    var rawTag = content.Substring(i + 1, end - i - 1).Trim();
+                    Flush();
+
+                    var closing = rawTag.StartsWith("/");
+                    if (closing) rawTag = rawTag.Substring(1).TrimStart();
+                    var selfClosing = rawTag.EndsWith("/");
+                    if (selfClosing) rawTag = rawTag.Substring(0, rawTag.Length - 1).TrimEnd();
+                    var sp = rawTag.IndexOfAny(new[] { ' ', '\t', '\n', '\r' });
+                    var name = (sp >= 0 ? rawTag.Substring(0, sp) : rawTag).ToLowerInvariant();
+                    var attrs = sp >= 0 ? rawTag.Substring(sp) : "";
+
+                    switch (name)
+                    {
+                        case "a":
+                            if (closing || selfClosing)
+                            {
+                                CloseLink();
+                            }
+                            else
+                            {
+                                var m = Regex.Match(attrs,
+                                    "\\bhref\\s*=\\s*[\"']([^\"']+)[\"']",
+                                    RegexOptions.IgnoreCase);
+                                if (m.Success)
+                                {
+                                    link = new Hyperlink
+                                    {
+                                        Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor),
+                                        Tag = DecodeEntities(m.Groups[1].Value),
+                                        TextDecorations = TextDecorations.Underline,
+                                        Cursor = Cursors.Hand,
+                                    };
+                                    link.Click += Link_Click;
+                                    target = link.Inlines;
+                                }
+                            }
+                            break;
+
+                        case "br":
+                            target.Add(new LineBreak());
+                            break;
+
+                        case "p":
+                        case "div":
+                            if (closing || selfClosing) EnsureTrailingLineBreaks(2);
+                            break;
+
+                        case "h1":
+                        case "h2":
+                        case "h3":
+                        case "h4":
+                        case "h5":
+                        case "h6":
+                            if (closing || selfClosing)
+                            {
+                                bold = Math.Max(0, bold - 1);
+                                EnsureTrailingLineBreaks(2);
+                            }
+                            else
+                            {
+                                EnsureTrailingLineBreaks(1);
+                                bold++;
+                            }
+                            break;
+
+                        case "b":
+                        case "strong":
+                            if (closing) bold = Math.Max(0, bold - 1); else bold++;
+                            break;
+
+                        case "i":
+                        case "em":
+                            if (closing) italic = Math.Max(0, italic - 1); else italic++;
+                            break;
+
+                        case "u":
+                            if (closing) underline = Math.Max(0, underline - 1); else underline++;
+                            break;
+
+                        case "sup":
+                            if (closing) sup = Math.Max(0, sup - 1); else sup++;
+                            break;
+
+                        case "sub":
+                            if (closing) sub = Math.Max(0, sub - 1); else sub++;
+                            break;
+
+                        case "ol":
+                            if (closing) { inOrderedList = false; olCounter = 0; EnsureTrailingLineBreaks(2); }
+                            else { inOrderedList = true; olCounter = 0; EnsureTrailingLineBreaks(1); }
+                            break;
+
+                        case "ul":
+                            if (closing) EnsureTrailingLineBreaks(2);
+                            else EnsureTrailingLineBreaks(1);
+                            break;
+
+                        case "li":
+                            if (closing)
+                            {
+                                EnsureTrailingLineBreaks(1);
+                            }
+                            else
+                            {
+                                EnsureTrailingLineBreaks(1);
+                                if (inOrderedList) { olCounter++; target.Add(new Run($"{olCounter}. ")); }
+                                else target.Add(new Run("•  "));
+                            }
+                            break;
+
+                        case "hr":
+                            EnsureTrailingLineBreaks(1);
+                            target.Add(new Run("──────────────"));
+                            EnsureTrailingLineBreaks(1);
+                            break;
+
+                        case "blockquote":
+                            if (closing || selfClosing) EnsureTrailingLineBreaks(2);
+                            else EnsureTrailingLineBreaks(1);
+                            break;
+
+                            // <span>, <font>, <style>, unknown → silently ignored
+                    }
+
+                    i = end + 1;
+                }
+                else if (c == '&')
+                {
+                    var semi = content.IndexOf(';', i);
+                    if (semi != -1 && semi - i <= 12)
+                    {
+                        buffer.Append(content, i, semi - i + 1);
+                        i = semi + 1;
+                    }
+                    else
+                    {
+                        buffer.Append(c);
+                        i++;
+                    }
+                }
+                else
+                {
+                    buffer.Append(c);
+                    i++;
+                }
+            }
+
+            Flush();
+            CloseLink();
+
+            var lastInline = BodyText.Inlines.Count > 0 ? BodyText.Inlines.LastInline : null;
+            while (lastInline is LineBreak)
+            {
+                BodyText.Inlines.Remove(lastInline);
+                lastInline = BodyText.Inlines.Count > 0 ? BodyText.Inlines.LastInline : null;
+            }
         }
 
-        private static string StripTags(string text)
+        private static string DecodeEntities(string text)
         {
             if (string.IsNullOrEmpty(text)) return text;
-
-            text = Regex.Replace(text, "<br\\s*/?>", "\n", RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, "<[^>]+>", "");
-            text = Regex.Replace(text, "&(?:lArr|hArr|rArr);", "",
-                RegexOptions.IgnoreCase);
-
-            return text;
+            text = text
+                .Replace("&lArr;", "←").Replace("&rArr;", "→").Replace("&hArr;", "↔")
+                .Replace("&larr;", "←").Replace("&rarr;", "→").Replace("&harr;", "↔");
+            return System.Net.WebUtility.HtmlDecode(text);
         }
 
         private void Link_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not Hyperlink link) return;
             var href = link.Tag as string ?? "";
-            var linkText = link.Inlines.OfType<Run>().FirstOrDefault()?.Text ?? "";
+
+            var linkText = string.Concat(
+                link.Inlines.OfType<Run>().Select(r => r.Text ?? ""));
 
             if (href.StartsWith("B:", StringComparison.OrdinalIgnoreCase))
             {
@@ -873,7 +1052,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             if (preparedH.Length > 0 && preparedG.Length > 0)
             {
                 title = $"Strong's Definition for {hNum} and {gNum}";
-                content = $"{hNum}:\n{preparedH}\n\n{gNum}:\n{preparedG}";
+                content = $"{hNum}:<br>{preparedH}<br><br>{gNum}:<br>{preparedG}";
                 strongNum = $"{hNum},{gNum}";
             }
             else if (preparedH.Length > 0)
@@ -1201,7 +1380,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             if (_stack.Count > 1)
             {
                 _stack.RemoveAt(_stack.Count - 1);
-                _crossRefCounts.Clear();
                 UpdateView();
             }
         }

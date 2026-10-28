@@ -485,8 +485,8 @@ namespace FountOfHopeStudyBiblePC.Helpers
         }
 
         private static List<string> SplitIntoWords(string text, bool preserveWhitespace) =>
-            (preserveWhitespace ? WhitespaceBoundaryRegex() : WordBoundaryRegex())
-                .Split(text).Where(s => s.Length > 0).ToList();
+            [.. (preserveWhitespace ? WhitespaceBoundaryRegex() : WordBoundaryRegex())
+                .Split(text).Where(s => s.Length > 0)];
 
         private static bool IsWord(string text) => WordRegex().IsMatch(text);
         private static string EscapeRegex(string s) => EscapeRegexPattern().Replace(s, m => "\\" + m.Value);

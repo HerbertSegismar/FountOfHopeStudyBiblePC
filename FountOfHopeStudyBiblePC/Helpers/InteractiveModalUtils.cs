@@ -1,18 +1,15 @@
-﻿// Helpers/InteractiveModalUtils.cs
-using System.Collections.Generic;
-
-namespace FountOfHopeStudyBiblePC.Helpers
+﻿namespace FountOfHopeStudyBiblePC.Helpers
 {
     public static class InteractiveModalUtils
     {
         public static readonly Dictionary<string, List<string>> DictionariesByLanguage = new()
         {
-            ["English"] = new() { "atsbd", "cbtel", "isbe", "noah", "oxford", "topical", "tcr" },
-            ["Arabic"] = new() { "ardbt" },
-            ["Spanish"] = new() { "eunsa" },
-            ["Hebrew"] = new() { "gesenius" },
-            ["Russian"] = new() { "rbo", "Брокгауз", "ББС" },
-            ["Chinese"] = new() { "白云晓" }
+            ["English"] = ["atsbd", "cbtel", "isbe", "noah", "oxford", "topical", "tcr"],
+            ["Arabic"] = ["ardbt"],
+            ["Spanish"] = ["eunsa"],
+            ["Hebrew"] = ["gesenius"],
+            ["Russian"] = ["rbo", "Брокгауз", "ББС"],
+            ["Chinese"] = ["白云晓"]
         };
 
         public static readonly Dictionary<string, string> DictionaryDisplayNames = new()
@@ -51,7 +48,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
             ["tsk"] = "Treasury of Scripture Knowledge"
         };
 
-        public static readonly List<string> CrossReferenceDatabases = new() { "esv", "niv11", "obx" };
+        public static readonly List<string> CrossReferenceDatabases = ["esv", "niv11", "obx"];
 
         public static readonly Dictionary<string, string> CrossReferenceDatabaseDisplayNames = new()
         {
