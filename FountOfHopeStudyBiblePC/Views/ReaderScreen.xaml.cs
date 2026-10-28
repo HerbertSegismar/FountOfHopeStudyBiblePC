@@ -53,6 +53,16 @@ namespace FountOfHopeStudyBiblePC.Views
         private System.Windows.Threading.DispatcherTimer? _fadeTimer;
         private System.Windows.Threading.DispatcherTimer? _highlightTimer;
 
+        // ── Word drag-selection state ───────────────────────────────────
+        private const double WordDragThresholdPixels = 3.0;
+        private bool _isWordDragActive;
+        private bool _wordDragHasMoved;
+        private Point _wordDragStartPoint;
+        private TextBlock? _wordDragStartBlock;      // fallback only
+        private TextBlock? _wordDragEndBlock;        // fallback only
+        private IWordHighlightHost? _wordHighlightHost;
+        private readonly Dictionary<TextBlock, Brush?> _dragPreviewOriginals = new();
+
         // ── Modal state ─────────────────────────────────────────────────
         private ReaderModalState _modalState = new ReaderModalState.None();
         private List<Verse> _selectedVersesForNote = new();   // dead — kept for parity
@@ -123,6 +133,12 @@ namespace FountOfHopeStudyBiblePC.Views
                 _highlightTimer!.Stop();
             };
 
+            // ── Drag-to-highlight preview hooks ─────────────────────────
+            ReaderHost.PreviewMouseLeftButtonDown += ReaderHost_PreviewMouseLeftButtonDown;
+            ReaderHost.PreviewMouseMove += ReaderHost_PreviewMouseMove;
+            ReaderHost.PreviewMouseLeftButtonUp += ReaderHost_PreviewMouseLeftButtonUp;
+            ReaderHost.MouseLeave += ReaderHost_MouseLeave;
+
             Loaded += ReaderScreen_Loaded;
             Unloaded += ReaderScreen_Unloaded;
 
@@ -159,6 +175,12 @@ namespace FountOfHopeStudyBiblePC.Views
             _highlightTimer?.Stop();
 
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+
+            ReaderHost.PreviewMouseLeftButtonDown -= ReaderHost_PreviewMouseLeftButtonDown;
+            ReaderHost.PreviewMouseMove -= ReaderHost_PreviewMouseMove;
+            ReaderHost.PreviewMouseLeftButtonUp -= ReaderHost_PreviewMouseLeftButtonUp;
+            ReaderHost.MouseLeave -= ReaderHost_MouseLeave;
+            ClearDragPreview();
 
             _crossRefHelper?.Dispose();
             _primaryDictionaryDbHelper?.Dispose();
@@ -382,6 +404,279 @@ namespace FountOfHopeStudyBiblePC.Views
                 _isWordHighlightMode ? Visibility.Visible : Visibility.Collapsed;
             FullscreenFab.Visibility =
                 _isWordHighlightMode ? Visibility.Collapsed : Visibility.Visible;
+
+            // Drop any in-flight drag when leaving highlight mode.
+            if (!_isWordHighlightMode && _isWordDragActive)
+                AbortWordDrag();
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        //  Drag-to-highlight (preview pipeline over ReaderHost)
+        // ═══════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Routes mouse positions in the coordinate space expected by the
+        /// active drag path:
+        ///   • IWordHighlightHost → the reader control (it will translate
+        ///     to its internal pane itself).
+        ///   • fallback (visual-tree word scan) → ReaderHost.
+        /// </summary>
+        private Point GetHighlightHostPoint(MouseEventArgs e)
+            => _wordHighlightHost is UIElement el
+                ? e.GetPosition(el)
+                : e.GetPosition(ReaderHost);
+
+        private void ReaderHost_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!_isWordHighlightMode) return;
+            if (e.ChangedButton != MouseButton.Left) return;
+
+            var pos = GetHighlightHostPoint(e);
+
+            if (_wordHighlightHost != null)
+            {
+                if (!_wordHighlightHost.BeginWordDrag(pos))
+                    return;
+            }
+            else
+            {
+                var block = FindWordElementAt(e.OriginalSource as DependencyObject);
+                if (block == null) return;
+                _wordDragStartBlock = block;
+                _wordDragEndBlock = block;
+            }
+
+            _wordDragStartPoint = pos;
+            _isWordDragActive = true;
+            _wordDragHasMoved = false;
+
+            // Freeze the auto-off timers so a slow drag isn't cancelled mid-flight.
+            _fadeTimer?.Stop();
+            _highlightTimer?.Stop();
+        }
+
+        private void ReaderHost_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_isWordDragActive) return;
+
+            if (e.LeftButton != MouseButtonState.Pressed)
+            {
+                AbortWordDrag();
+                return;
+            }
+
+            var pos = GetHighlightHostPoint(e);
+
+            if (!_wordDragHasMoved &&
+                (Math.Abs(pos.X - _wordDragStartPoint.X) > WordDragThresholdPixels ||
+                 Math.Abs(pos.Y - _wordDragStartPoint.Y) > WordDragThresholdPixels))
+            {
+                _wordDragHasMoved = true;
+            }
+
+            if (_wordHighlightHost != null)
+            {
+                _wordHighlightHost.UpdateWordDrag(pos);
+            }
+            else
+            {
+                var block = FindWordElementAtPoint(e.GetPosition(ReaderHost));
+                if (block != null) _wordDragEndBlock = block;
+                UpdateDragPreview();
+            }
+        }
+
+        private void ReaderHost_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!_isWordDragActive) return;
+
+            var pos = GetHighlightHostPoint(e);
+
+            if (_wordHighlightHost != null)
+            {
+                _wordHighlightHost.UpdateWordDrag(pos);
+
+                if (_wordDragHasMoved)
+                {
+                    _wordHighlightHost.CommitWordDrag();
+                    e.Handled = true;   // suppress the child's per-word click handler
+                }
+                else
+                {
+                    // Single-click → let the normal word-click logic fire.
+                    _wordHighlightHost.CancelWordDrag();
+                }
+            }
+            else
+            {
+                var block = FindWordElementAt(e.OriginalSource as DependencyObject);
+                if (block != null) _wordDragEndBlock = block;
+
+                ClearDragPreview();
+
+                if (_wordDragHasMoved && _wordDragStartBlock != null && _wordDragEndBlock != null)
+                {
+                    ApplyWordHighlightRange(_wordDragStartBlock, _wordDragEndBlock);
+                    e.Handled = true;
+                }
+            }
+
+            EndWordDrag();
+        }
+
+        private void ReaderHost_MouseLeave(object sender, MouseEventArgs e)
+        {
+            // Only abort when the button is already up — otherwise keep tracking
+            // (the user may drag back inside ReaderHost).
+            if (_isWordDragActive && e.LeftButton != MouseButtonState.Pressed)
+                AbortWordDrag();
+        }
+
+        private void EndWordDrag()
+        {
+            _isWordDragActive = false;
+            _wordDragHasMoved = false;
+            _wordDragStartBlock = null;
+            _wordDragEndBlock = null;
+            ScheduleFade();
+
+            // Resume the highlight-mode auto-off once the drag finishes.
+            if (_isWordHighlightMode)
+            {
+                _highlightTimer?.Stop();
+                _highlightTimer?.Start();
+            }
+        }
+
+        private void AbortWordDrag()
+        {
+            if (_wordHighlightHost != null && _isWordDragActive)
+                _wordHighlightHost.CancelWordDrag();
+
+            ClearDragPreview();
+            EndWordDrag();
+        }
+
+        // ── Fallback: word-element detection & range application ───────
+        private static TextBlock? FindWordElementAt(DependencyObject? source)
+        {
+            var current = source;
+            while (current != null)
+            {
+                if (current is TextBlock tb)
+                    return IsWordElement(tb) ? tb : null;  // stop at a non-word TextBlock
+                current = VisualTreeHelper.GetParent(current);
+            }
+            return null;
+        }
+
+        private TextBlock? FindWordElementAtPoint(Point pointInReaderHost)
+        {
+            var hit = ReaderHost.InputHitTest(pointInReaderHost) as DependencyObject;
+            return FindWordElementAt(hit);
+        }
+
+        /// <summary>
+        /// A word element is a TextBlock whose (trimmed) text is a single, non-empty
+        /// token containing at least one letter. This excludes verse numbers, paragraph
+        /// containers, and whitespace-only blocks.
+        /// Children can opt a TextBlock out by setting <c>Tag = "noword"</c>.
+        /// </summary>
+        private static bool IsWordElement(TextBlock tb)
+        {
+            if (tb.Tag is string tag && tag == "noword") return false;
+
+            var text = tb.Text;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+
+            var trimmed = text.Trim();
+            bool hasLetter = false;
+            foreach (var ch in trimmed)
+            {
+                if (char.IsWhiteSpace(ch)) return false;   // multi-word → container
+                if (!hasLetter && char.IsLetter(ch)) hasLetter = true;
+            }
+            return hasLetter;
+        }
+
+        private IEnumerable<TextBlock> EnumerateWordElements()
+        {
+            foreach (var d in EnumerateVisualOrder(ReaderHost))
+                if (d is TextBlock tb && IsWordElement(tb))
+                    yield return tb;
+        }
+
+        private static IEnumerable<DependencyObject> EnumerateVisualOrder(DependencyObject root)
+        {
+            yield return root;
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                foreach (var d in EnumerateVisualOrder(child))
+                    yield return d;
+            }
+        }
+
+        private (int from, int to)? ComputeRangeIndices(TextBlock start, TextBlock end)
+        {
+            var words = EnumerateWordElements().ToList();
+            int a = words.IndexOf(start);
+            int b = words.IndexOf(end);
+            if (a < 0 || b < 0) return null;
+            return (Math.Min(a, b), Math.Max(a, b));
+        }
+
+        private void ApplyWordHighlightRange(TextBlock start, TextBlock end)
+        {
+            var range = ComputeRangeIndices(start, end);
+            if (range == null) return;
+
+            var words = EnumerateWordElements().ToList();
+            var brush = new SolidColorBrush(_viewModel.WordMarkerColor);
+
+            for (int i = range.Value.from; i <= range.Value.to; i++)
+                words[i].Background = brush;
+        }
+
+        // ── Fallback: translucent preview during drag ──────────────────
+        private void UpdateDragPreview()
+        {
+            if (_wordDragStartBlock == null || _wordDragEndBlock == null) return;
+            var range = ComputeRangeIndices(_wordDragStartBlock, _wordDragEndBlock);
+            if (range == null) return;
+
+            var words = EnumerateWordElements().ToList();
+            var inRange = new HashSet<TextBlock>(
+                words.Skip(range.Value.from).Take(range.Value.to - range.Value.from + 1));
+
+            // Restore words that left the range.
+            foreach (var word in _dragPreviewOriginals.Keys.ToList())
+            {
+                if (!inRange.Contains(word))
+                {
+                    word.Background = _dragPreviewOriginals[word];
+                    _dragPreviewOriginals.Remove(word);
+                }
+            }
+
+            // Add a translucent marker to newly-entered words.
+            var previewBrush = new SolidColorBrush(_viewModel.WordMarkerColor) { Opacity = 0.4 };
+            foreach (var word in inRange)
+            {
+                if (!_dragPreviewOriginals.ContainsKey(word))
+                {
+                    _dragPreviewOriginals[word] = word.Background;
+                    word.Background = previewBrush;
+                }
+            }
+        }
+
+        private void ClearDragPreview()
+        {
+            foreach (var kvp in _dragPreviewOriginals)
+                kvp.Key.Background = kvp.Value;
+            _dragPreviewOriginals.Clear();
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -489,6 +784,10 @@ namespace FountOfHopeStudyBiblePC.Views
                     onVerseCommentaryClick: OnVerseCommentaryClick,
                     onWordHighlightAction: ActivateWordHighlightMode);
             }
+
+            // Cache the optional drag-capable host so the preview pipeline
+            // knows whether to delegate or use the fallback.
+            _wordHighlightHost = ReaderHost.Content as IWordHighlightHost;
         }
 
         // ═══════════════════════════════════════════════════════════════

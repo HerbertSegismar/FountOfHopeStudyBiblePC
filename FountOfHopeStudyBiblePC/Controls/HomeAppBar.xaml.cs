@@ -1,8 +1,5 @@
-﻿// Controls/HomeAppBar.xaml.cs
-using FountOfHopeStudyBiblePC.Models;
-using FountOfHopeStudyBiblePC.ViewModels;
+﻿using FountOfHopeStudyBiblePC.ViewModels;
 using MahApps.Metro.IconPacks;
-using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -38,7 +35,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             InitializeComponent();
 
             BackButton.Template = AppBarShared.BuildCircleButtonTemplate(IconButtonSize / 2);
-            BackIcon.Foreground = Brushes.White;
+            BackIcon.Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor);
 
             PopulateContent();
 
@@ -64,9 +61,6 @@ namespace FountOfHopeStudyBiblePC.Controls
         public void SetBackVisible(bool visible)
             => BackButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
 
-        // ═══════════════════════════════════════════════════════════
-        //  Content
-        // ═══════════════════════════════════════════════════════════
         private void PopulateContent()
         {
             if (_menuPopup is { IsOpen: true }) _menuPopup.IsOpen = false;
@@ -74,8 +68,8 @@ namespace FountOfHopeStudyBiblePC.Controls
             _menuIcon = null;
             _menuRotation = null;
 
-            TitleText.Text = AppBarShared.GetScreenTitle(_currentScreen);
-            TitleText.Foreground = Brushes.White;
+            var chrome = new SolidColorBrush(_viewModel.HeaderButtonsColor);
+            TitleText.Foreground = chrome;
 
             ActionsPanel.Children.Clear();
 
@@ -133,7 +127,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             ActionsPanel.Children.Add(BuildMenuButton());
         }
 
-        private static Button BuildIconButton(
+        private Button BuildIconButton(
             PackIconMaterialKind kind,
             string tooltip,
             double iconScale,
@@ -141,9 +135,10 @@ namespace FountOfHopeStudyBiblePC.Controls
             Thickness? margin = null,
             double? rotateAngle = null)
         {
+            var fg = new SolidColorBrush(_viewModel.HeaderButtonsColor);
             var btn = AppBarShared.BuildIconButton(
                 kind, tooltip, IconButtonSize, IconButtonSize * iconScale,
-                onClick, margin);
+                onClick, margin, fg);
 
             if (rotateAngle is double angle && btn.Content is PackIconMaterial icon)
             {
@@ -153,11 +148,10 @@ namespace FountOfHopeStudyBiblePC.Controls
             return btn;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Menu button
-        // ═══════════════════════════════════════════════════════════
         private Button BuildMenuButton()
         {
+            var chrome = new SolidColorBrush(_viewModel.HeaderButtonsColor);
+
             var btn = new Button
             {
                 Width = IconButtonSize,
@@ -165,10 +159,10 @@ namespace FountOfHopeStudyBiblePC.Controls
                 Margin = new Thickness(4, 0, 0, 0),
                 Background = Brushes.Transparent,
                 BorderThickness = new Thickness(0),
-                Cursor = System.Windows.Input.Cursors.Hand,
+                Cursor = Cursors.Hand,
                 ToolTip = "Navigation",
+                Template = AppBarShared.BuildCircleButtonTemplate(IconButtonSize / 2)
             };
-            btn.Template = AppBarShared.BuildCircleButtonTemplate(IconButtonSize / 2);
 
             _menuIcon = new PackIconMaterial
             {
@@ -178,7 +172,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 RenderTransformOrigin = new Point(0.5, 0.5),
-                Foreground = Brushes.White,
+                Foreground = chrome,
             };
             _menuRotation = new RotateTransform(0);
             _menuIcon.RenderTransform = _menuRotation;
@@ -186,9 +180,6 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             _menuPopup = new Popup
             {
-                // StaysOpen=true → we manage close manually. This is what
-                // prevents WPF's light-dismiss from closing the popup
-                // synchronously inside our own Click handler.
                 StaysOpen = true,
                 AllowsTransparency = true,
                 Placement = PlacementMode.Bottom,
@@ -197,7 +188,7 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             _menuPopup.Opened += (_, _) =>
             {
-                if (_menuIcon is not null) _menuIcon.Kind = PackIconMaterialKind.Close;
+                _menuIcon?.Kind = PackIconMaterialKind.Close;
                 AnimateMenuRotation(180);
 
                 var window = Window.GetWindow(this);
@@ -209,7 +200,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             };
             _menuPopup.Closed += (_, _) =>
             {
-                if (_menuIcon is not null) _menuIcon.Kind = PackIconMaterialKind.Menu;
+                _menuIcon?.Kind = PackIconMaterialKind.Menu;
                 AnimateMenuRotation(0);
 
                 var window = Window.GetWindow(this);
@@ -244,8 +235,6 @@ namespace FountOfHopeStudyBiblePC.Controls
         {
             if (_menuPopup is null || !_menuPopup.IsOpen) return;
 
-            // Click on hamburger → let button.Click toggle it (avoids
-            // double-handling; button.Click closes it cleanly).
             if (_menuPopup.PlacementTarget is UIElement pt &&
                 (ReferenceEquals(e.OriginalSource, pt) ||
                  IsDescendantOf(e.OriginalSource as DependencyObject, pt)))
@@ -281,7 +270,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             _menuRotation.BeginAnimation(RotateTransform.AngleProperty, anim);
         }
 
-        private FrameworkElement BuildHomeMenuContent()
+        private Border BuildHomeMenuContent()
         {
             var bg = _viewModel.DarkTheme
                 ? _viewModel.DarkModalBackgroundColor
@@ -328,7 +317,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                     icon: icon,
                     onClick: () =>
                     {
-                        if (_menuPopup is not null) _menuPopup.IsOpen = false;
+                        _menuPopup?.IsOpen = false;
                         ScreenRequested?.Invoke(target);
                     },
                     foreground: fg,

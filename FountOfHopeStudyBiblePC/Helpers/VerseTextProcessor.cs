@@ -1,8 +1,4 @@
-﻿// Helpers/VerseTextProcessor.cs
-using FountOfHopeStudyBiblePC.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿using FountOfHopeStudyBiblePC.Models;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -12,38 +8,50 @@ using System.Windows.Media;
 
 namespace FountOfHopeStudyBiblePC.Helpers
 {
-    public class VerseTextProcessor
+    public partial class VerseTextProcessor
     {
         private const int CacheSize = 200;
 
-        private static readonly Regex AttributeRegex =
-            new("(\\w+)=\"([^\"]*)\"", RegexOptions.Compiled);
-        private static readonly Regex EscapeRegexPattern =
-            new(@"[.*+?^${}()|\[\]\\]", RegexOptions.Compiled);
-        private static readonly Regex WordRegex =
-            new(@"^[\p{L}\p{M}'-]+$", RegexOptions.Compiled);
+        [GeneratedRegex("(\\w+)=\"([^\"]*)\"")]
+        private static partial Regex AttributeRegex();
 
-        private static readonly Regex BareStrongsRegex =
-            new(@"<S[^>]*>[HG]?\d+</S>", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex SelfClosingStrongsRegex =
-            new(@"<S[^>]*/>", RegexOptions.Compiled);
-        private static readonly Regex StrongsTagOnlyRegex =
-            new(@"</?S[^>]*>", RegexOptions.Compiled);
+        [GeneratedRegex(@"[.*+?^${}()|\[\]\\]")]
+        private static partial Regex EscapeRegexPattern();
+
+        [GeneratedRegex(@"^[\p{L}\p{M}'-]+$")]
+        private static partial Regex WordRegex();
+
+        [GeneratedRegex(@"<S[^>]*>.*?</S>", RegexOptions.Singleline)]
+        private static partial Regex StrongsWithContentRegex();
+
+        [GeneratedRegex(@"<S[^>]*/>")]
+        private static partial Regex SelfClosingStrongsRegex();
+
+        [GeneratedRegex(@"\s+")]
+        private static partial Regex WhitespaceRegex();
+
+        [GeneratedRegex(@"^\d+$")]
+        private static partial Regex DigitsRegex();
+
+        [GeneratedRegex(@"^[GH]\d+$", RegexOptions.IgnoreCase)]
+        private static partial Regex StrongsNumberRegex();
+
+        [GeneratedRegex(@"(?<=\S)(?=\s)|(?<=\s)(?=\S)")]
+        private static partial Regex WhitespaceBoundaryRegex();
+
+        [GeneratedRegex(@"(?<=\w)(?=\W)|(?<=\W)(?=\w)|\s+")]
+        private static partial Regex WordBoundaryRegex();
 
         private readonly LinkedList<string> _cacheOrder = new();
-        private readonly Dictionary<string, ProcessedVerse> _cache = new();
+        private readonly Dictionary<string, List<InlineSpec>> _cache = [];
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Public entry point  — signature matches Kotlin exactly.
-        //  Callbacks come in as PARAMETERS, not through options.
-        // ═══════════════════════════════════════════════════════════════
         public ProcessedVerse ProcessVerse(
             string? verseText,
             double baseFontSize,
             ThemeColors themeColors,
-            Color textColor,
             bool isOldTestament,
             ProcessingOptions options,
+            Color? textColor = null,
             string? highlight = null,
             bool isHighlighted = false,
             HashSet<string>? wordHighlights = null,
@@ -52,56 +60,44 @@ namespace FountOfHopeStudyBiblePC.Helpers
             Action<string>? onStrongsPress = null)
         {
             if (string.IsNullOrWhiteSpace(verseText))
-                return new ProcessedVerse(null, new List<Inline>());
+                return new ProcessedVerse(null, []);
 
             var processedText = verseText;
             if (!options.ShowStrongs)
             {
-                processedText = BareStrongsRegex.Replace(processedText, "");
-                processedText = SelfClosingStrongsRegex.Replace(processedText, "");
-                processedText = StrongsTagOnlyRegex.Replace(processedText, "");
-                processedText = Regex.Replace(processedText, "\\s+", " ");
+                processedText = StrongsWithContentRegex().Replace(processedText, "");
+                processedText = SelfClosingStrongsRegex().Replace(processedText, "");
+                processedText = WhitespaceRegex().Replace(processedText, " ");
             }
 
-            // ── Cache key matches Kotlin's enable* pattern ─────────
-            var cacheKey = BuildCacheKey(
-                verseText, baseFontSize, textColor, isOldTestament,
+            var tagCb = options.EnableTagClick ? onTagPress : null;
+            var wordCb = options.EnableWordClick ? onWordPress : null;
+            var strongsCb = options.EnableStrongsClick ? onStrongsPress : null;
+
+            var cacheKey = BuildCacheKey(verseText, baseFontSize, textColor, isOldTestament,
                 highlight, isHighlighted, options, themeColors, wordHighlights,
-                enableTagClick: options.EnableTagClick && onTagPress != null,
-                enableStrongsClick: options.EnableStrongsClick && onStrongsPress != null,
-                enableWordClick: options.EnableWordClick && onWordPress != null);
+                tagCb != null, strongsCb != null, wordCb != null);
 
             if (_cache.TryGetValue(cacheKey, out var cached))
-                return cached;
-
-            var nodes = ParseXmlTags(processedText);
-            var tree = BuildTree(nodes);
-
-            var context = new TraversalContext
             {
-                TextColor = textColor,
-                IsTextContainer = false,
-                IsHeader = false,
-                CurrentTag = null,
+                if (_cacheOrder.Remove(cacheKey)) _cacheOrder.AddLast(cacheKey);
+                return new ProcessedVerse(null, BuildInlines(cached, tagCb));
+            }
+
+            var ctx = new TraversalContext
+            {
+                TextColor = textColor ?? themeColors.TextColor,
                 BaseFontSize = baseFontSize,
-                FontSizeMultiplier = 1f,
                 IsOldTestament = isOldTestament,
             };
 
-            var headerInlines = new List<Inline>();
-            var bodyInlines = new List<Inline>();
-
-            // ── Pass the actual parameters down (Kotlin does the same) ──
-            TraverseChildren(tree, headerInlines, bodyInlines, context,
-                highlight, themeColors, onTagPress, onWordPress, onStrongsPress,
+            var body = new List<InlineSpec>();
+            TraverseChildren(BuildTree(ParseXmlTags(processedText)), body, ctx,
+                highlight, themeColors, tagCb, wordCb, strongsCb,
                 isHighlighted, options, wordHighlights);
 
-            var result = new ProcessedVerse(
-                options.ShowHeaders && headerInlines.Count > 0 ? headerInlines : null,
-                bodyInlines);
-
-            CacheAdd(cacheKey, result);
-            return result;
+            CacheAdd(cacheKey, body);
+            return new ProcessedVerse(null, BuildInlines(body, tagCb));
         }
 
         public void ClearCache()
@@ -110,12 +106,46 @@ namespace FountOfHopeStudyBiblePC.Helpers
             _cacheOrder.Clear();
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Cache (LRU)
-        // ═══════════════════════════════════════════════════════════════
-        private void CacheAdd(string key, ProcessedVerse value)
+        private static List<Inline> BuildInlines(List<InlineSpec> specs, Action<string>? onTagPress)
         {
-            if (_cache.ContainsKey(key)) _cache.Remove(key);
+            var list = new List<Inline>(specs.Count);
+            foreach (var s in specs)
+            {
+                var run = new Run(s.Text)
+                {
+                    Foreground = new SolidColorBrush(s.Foreground),
+                    FontSize = s.FontSize,
+                    BaselineAlignment = s.Baseline,
+                };
+                if (s.Background is { } bg) run.Background = new SolidColorBrush(bg);
+                if (s.AnnotationKind != null)
+                    run.Tag = new VerseAnnotation(s.AnnotationKind, s.AnnotationValue ?? "");
+
+                if (s.MakeHyperlink && onTagPress != null && s.AnnotationValue != null)
+                {
+                    var cb = onTagPress;
+                    var val = s.AnnotationValue;
+                    var link = new Hyperlink(run) { TextDecorations = null, Cursor = Cursors.Hand };
+                    if (s.AppendZeroWidthSpace)
+                        link.Inlines.Add(new Run("\u200B") { Foreground = Brushes.Transparent, FontSize = s.FontSize });
+                    link.Click += (_, _) => cb(val);
+                    list.Add(link);
+                }
+                else
+                {
+                    list.Add(run);
+                }
+            }
+            return list;
+        }
+
+        private void CacheAdd(string key, List<InlineSpec> value)
+        {
+            if (_cache.ContainsKey(key))
+            {
+                _cache.Remove(key);
+                _cacheOrder.Remove(key);
+            }
             else if (_cache.Count >= CacheSize && _cacheOrder.Count > 0)
             {
                 var oldest = _cacheOrder.First!.Value;
@@ -127,34 +157,38 @@ namespace FountOfHopeStudyBiblePC.Helpers
         }
 
         private static string BuildCacheKey(
-            string verseText, double baseFontSize, Color textColor,
-            bool isOldTestament, string? highlight, bool isHighlighted,
-            ProcessingOptions options, ThemeColors themeColors,
-            HashSet<string>? wordHighlights,
-            bool enableTagClick, bool enableStrongsClick, bool enableWordClick)
+            string verseText, double baseFontSize, Color? textColor, bool isOldTestament,
+            string? highlight, bool isHighlighted, ProcessingOptions options,
+            ThemeColors themeColors, HashSet<string>? wordHighlights,
+            bool enableTagClick, bool enableStrongsClick, bool enableWordClick) =>
+            new StringBuilder()
+                .Append(verseText.GetHashCode())
+                .Append('|').Append(baseFontSize)
+                .Append('|').Append(textColor?.GetHashCode() ?? 0)
+                .Append('|').Append(isOldTestament)
+                .Append('|').Append(highlight ?? "")
+                .Append('|').Append(isHighlighted)
+                .Append("|ss=").Append(options.ShowStrongs)
+                .Append("|sf=").Append(options.ShowFootnotesInline)
+                .Append("|pw=").Append(options.PreserveWhitespace)
+                .Append('|').Append(themeColors.GetHashCode())
+                .Append('|').Append(StableSetHash(wordHighlights))
+                .Append("|tag=").Append(enableTagClick)
+                .Append("|str=").Append(enableStrongsClick)
+                .Append("|wrd=").Append(enableWordClick)
+                .ToString();
+
+        private static int StableSetHash(HashSet<string>? set)
         {
-            var sb = new StringBuilder();
-            sb.Append(verseText.GetHashCode())
-              .Append('|').Append(baseFontSize)
-              .Append('|').Append(textColor.GetHashCode())
-              .Append('|').Append(isOldTestament)
-              .Append('|').Append(highlight ?? "")
-              .Append('|').Append(isHighlighted)
-              .Append("|ss=").Append(options.ShowStrongs)
-              .Append("|sh=").Append(options.ShowHeaders)
-              .Append("|sf=").Append(options.ShowFootnotesInline)
-              .Append("|pw=").Append(options.PreserveWhitespace)
-              .Append('|').Append(themeColors.GetHashCode())
-              .Append('|').Append(wordHighlights?.Count ?? 0)
-              .Append("|tag=").Append(enableTagClick)
-              .Append("|str=").Append(enableStrongsClick)
-              .Append("|wrd=").Append(enableWordClick);
-            return sb.ToString();
+            if (set == null) return 0;
+            unchecked
+            {
+                int h = 0;
+                foreach (var s in set) h ^= s?.GetHashCode() ?? 0;
+                return h;
+            }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  XML parsing
-        // ═══════════════════════════════════════════════════════════════
         private static List<ParsedNode> ParseXmlTags(string text)
         {
             var nodes = new List<ParsedNode>();
@@ -176,28 +210,25 @@ namespace FountOfHopeStudyBiblePC.Helpers
                     var tagEnd = text.IndexOf('>', i);
                     if (tagEnd == -1)
                     {
-                        buffer.Append(text.Substring(i));
+                        buffer.Append(text[i..]);
                         break;
                     }
                     var fullTag = text.Substring(i, tagEnd - i + 1);
 
                     if (fullTag.StartsWith("</"))
                     {
-                        var name = fullTag.Substring(2, fullTag.Length - 3).Trim()
-                            .Split(' ')[0];
+                        var name = fullTag[2..^1].Trim().Split(' ')[0];
                         if (stack.Count > 0 && stack[^1] == name) stack.RemoveAt(stack.Count - 1);
                         nodes.Add(new ParsedNode.ClosingTag(name));
                     }
                     else if (fullTag.EndsWith("/>"))
                     {
-                        var name = fullTag.Substring(1, fullTag.Length - 3).Trim()
-                            .Split(' ')[0];
+                        var name = fullTag[1..^2].Trim().Split(' ')[0];
                         nodes.Add(new ParsedNode.SelfClosingTag(name, fullTag));
                     }
                     else
                     {
-                        var name = fullTag.Substring(1, fullTag.Length - 2).Trim()
-                            .Split(' ')[0];
+                        var name = fullTag[1..^1].Trim().Split(' ')[0];
                         stack.Add(name);
                         nodes.Add(new ParsedNode.OpeningTag(name, fullTag));
                     }
@@ -220,7 +251,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
             var root = new List<TreeNode>();
             var stack = new Stack<List<TreeNode>>();
             var current = root;
-            var elementStack = new List<TreeNode.ElementNode>();
 
             foreach (var node in nodes)
             {
@@ -230,18 +260,13 @@ namespace FountOfHopeStudyBiblePC.Helpers
                         current.Add(new TreeNode.TextNode(t.Content));
                         break;
                     case ParsedNode.OpeningTag o:
-                        var el = new TreeNode.ElementNode(o.Tag, o.FullTag, new List<TreeNode>());
+                        var el = new TreeNode.ElementNode(o.Tag, o.FullTag, []);
                         current.Add(el);
                         stack.Push(current);
-                        elementStack.Add(el);
                         current = el.Children;
                         break;
                     case ParsedNode.ClosingTag:
-                        if (stack.Count > 0)
-                        {
-                            if (elementStack.Count > 0) elementStack.RemoveAt(elementStack.Count - 1);
-                            current = stack.Pop();
-                        }
+                        if (stack.Count > 0) current = stack.Pop();
                         break;
                     case ParsedNode.SelfClosingTag sc:
                         current.Add(new TreeNode.SelfClosingNode(sc.Tag, sc.FullTag));
@@ -251,288 +276,191 @@ namespace FountOfHopeStudyBiblePC.Helpers
             return root;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Tree traversal → inlines
-        // ═══════════════════════════════════════════════════════════════
         private void TraverseChildren(
-            List<TreeNode> children,
-            List<Inline> headerOut, List<Inline> bodyOut,
-            TraversalContext context,
+            List<TreeNode> children, List<InlineSpec> outList, TraversalContext ctx,
             string? highlight, ThemeColors themeColors,
-            Action<string>? onTagPress, Action<string>? onWordPress, Action<string>? onStrongsPress,
+            Action<string>? onTag, Action<string>? onWord, Action<string>? onStrongs,
             bool isHighlighted, ProcessingOptions options, HashSet<string>? wordHighlights)
         {
             for (int i = 0; i < children.Count; i++)
             {
-                if (i > 0)
-                {
-                    var target = context.IsHeader ? headerOut : bodyOut;
-                    target.Add(new Run(" "));
-                }
-                TraverseNode(children[i], headerOut, bodyOut, context,
-                    highlight, themeColors, onTagPress, onWordPress, onStrongsPress,
-                    isHighlighted, options, wordHighlights);
+                if (i > 0) outList.Add(Spec(" ", ctx));
+                TraverseNode(children[i], outList, ctx, highlight, themeColors,
+                    onTag, onWord, onStrongs, isHighlighted, options, wordHighlights);
             }
         }
 
         private void TraverseNode(
-            TreeNode node,
-            List<Inline> headerOut, List<Inline> bodyOut,
-            TraversalContext context,
+            TreeNode node, List<InlineSpec> outList, TraversalContext ctx,
             string? highlight, ThemeColors themeColors,
-            Action<string>? onTagPress, Action<string>? onWordPress, Action<string>? onStrongsPress,
+            Action<string>? onTag, Action<string>? onWord, Action<string>? onStrongs,
             bool isHighlighted, ProcessingOptions options, HashSet<string>? wordHighlights)
         {
             switch (node)
             {
                 case TreeNode.TextNode t:
-                    var target = context.IsHeader ? headerOut : bodyOut;
-                    ProcessTextNode(t, target, context, highlight, themeColors,
-                        onWordPress, onStrongsPress, onTagPress, options, wordHighlights);
+                    ProcessTextNode(t, outList, ctx, highlight, themeColors, onWord, onStrongs, onTag, options, wordHighlights);
                     break;
-
                 case TreeNode.SelfClosingNode sc:
-                    if (!options.ShowFootnotesInline) return;
-                    var target2 = context.IsHeader ? headerOut : bodyOut;
-                    ProcessSelfClosingTag(sc, target2, context, themeColors);
+                    if (options.ShowFootnotesInline) ProcessSelfClosingTag(sc, outList, ctx, themeColors);
                     break;
-
                 case TreeNode.ElementNode el:
                     if (el.Tag == "n") return;
-
-                    var newContext = el.Tag switch
+                    var next = el.Tag switch
                     {
-                        "J" => context with
-                        {
-                            IsTextContainer = true,
-                            TextColor = isHighlighted ? context.TextColor : themeColors.WordsOfJesus,
-                            CurrentTag = el.Tag,
-                        },
-                        "t" => context with { IsTextContainer = true, CurrentTag = el.Tag },
-                        "S" => context with
-                        {
-                            IsTextContainer = true,
-                            TextColor = themeColors.TagColor,
-                            FontSizeMultiplier = 0.7f,
-                            BaselineShiftPx = 0.2f,
-                            CurrentTag = el.Tag,
-                        },
-                        "f" => context with
-                        {
-                            IsTextContainer = true,
-                            TextColor = themeColors.TagColor,
-                            FontSizeMultiplier = 1.0f,
-                            BaselineShiftPx = 0f,
-                            CurrentTag = el.Tag,
-                        },
-                        _ => context with { CurrentTag = el.Tag },
+                        "J" => ctx with { TextColor = isHighlighted ? ctx.TextColor : themeColors.WordsOfJesus, CurrentTag = el.Tag },
+                        "t" => ctx with { CurrentTag = el.Tag },
+                        "S" => ctx with { TextColor = themeColors.TagColor, FontSizeMultiplier = 0.7f, BaselineShiftPx = 0.2f, CurrentTag = el.Tag },
+                        "f" => ctx with { TextColor = themeColors.TagColor, FontSizeMultiplier = 1.0f, BaselineShiftPx = 0f, CurrentTag = el.Tag },
+                        _ => ctx with { CurrentTag = el.Tag },
                     };
-                    TraverseChildren(el.Children, headerOut, bodyOut, newContext,
-                        highlight, themeColors, onTagPress, onWordPress, onStrongsPress,
-                        isHighlighted, options, wordHighlights);
+                    TraverseChildren(el.Children, outList, next, highlight, themeColors,
+                        onTag, onWord, onStrongs, isHighlighted, options, wordHighlights);
                     break;
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Text node processing
-        // ═══════════════════════════════════════════════════════════════
         private void ProcessTextNode(
-            TreeNode.TextNode node, List<Inline> target,
-            TraversalContext context,
+            TreeNode.TextNode node, List<InlineSpec> outList, TraversalContext ctx,
             string? highlight, ThemeColors themeColors,
-            Action<string>? onWordPress, Action<string>? onStrongsPress, Action<string>? onTagPress,
+            Action<string>? onWord, Action<string>? onStrongs, Action<string>? onTag,
             ProcessingOptions options, HashSet<string>? wordHighlights)
         {
-            var effectiveMultiplier =
-                context.CurrentTag == "f" && IsEncircled(node.Content)
-                    ? 1.25f
-                    : context.FontSizeMultiplier;
-
-            var textContext = context with { FontSizeMultiplier = effectiveMultiplier };
+            var multiplier = ctx.CurrentTag == "f" && IsEncircled(node.Content) ? 1.25f : ctx.FontSizeMultiplier;
+            var tctx = ctx with { FontSizeMultiplier = multiplier };
             var rawText = options.PreserveWhitespace ? node.Content : node.Content.Trim();
             if (rawText.Length == 0) return;
 
-            switch (context.CurrentTag)
+            switch (ctx.CurrentTag)
             {
                 case "S":
                     if (!options.ShowStrongs) return;
-                    if (options.EnableStrongsClick && onStrongsPress != null
-                        && IsValidStrongsNumber(rawText))
-                    {
-                        var prefixed = FormatStrongsNumber(rawText, context.IsOldTestament);
-                        var run = MakeRun(rawText, textContext, themeColors);
-                        run.Tag = new VerseAnnotation("strong", prefixed);
-                        run.FontSize = textContext.BaseFontSize * textContext.FontSizeMultiplier;
-                        target.Add(run);
-                    }
-                    else ProcessNormalText(rawText, target, textContext, highlight, themeColors,
-                        onWordPress, options, wordHighlights);
+                    if (onStrongs != null && IsValidStrongsNumber(rawText))
+                        outList.Add(Spec(rawText, tctx, kind: "strong",
+                            val: FormatStrongsNumber(rawText, ctx.IsOldTestament)));
+                    else
+                        ProcessNormalText(rawText, outList, tctx, highlight, themeColors, onWord, options, wordHighlights);
                     break;
-
-                // ══ <f>…</f>: matches Kotlin's three sub-cases ══
                 case "f":
-                    if (options.EnableTagClick && onTagPress != null)
-                    {
-                        var marker = rawText.Trim();
-                        var innerRun = MakeRun(rawText, textContext, themeColors);
-                        innerRun.FontSize = textContext.BaseFontSize * textContext.FontSizeMultiplier;
-
-                        // Mirrors Kotlin's `builder.pushStringAnnotation("tag", trimmed)`
-                        innerRun.Tag = new VerseAnnotation("tag", marker);
-
-                        var link = new Hyperlink(innerRun)
-                        {
-                            TextDecorations = null,
-                            Cursor = Cursors.Hand,
-                        };
-
-                        // Encircled marker (① ② ③ …) — add a trailing
-                        // zero-width space inside the link so the clickable
-                        // area isn't a single narrow character.
-                        if (IsEncircled(node.Content) && marker.Length > 0)
-                        {
-                            link.Inlines.Add(new Run("\u200B")
-                            {
-                                Foreground = Brushes.Transparent,
-                                FontSize = textContext.BaseFontSize * textContext.FontSizeMultiplier,
-                            });
-                        }
-
-                        var capturedCallback = onTagPress;
-                        var capturedMarker = marker;
-                        link.Click += (_, _) =>
-                        {
-                            System.Diagnostics.Debug.WriteLine(
-                                $"[VerseTextProcessor] OnTagPress fired: '{capturedMarker}'");
-                            capturedCallback.Invoke(capturedMarker);
-                        };
-
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[VerseTextProcessor] <f> marker wired: '{marker}' " +
-                            $"encircled={IsEncircled(node.Content)}");
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[VerseTextProcessor] <f> wired: '{marker}' codepoints=[{string.Join(" ", marker.Select(c => $"U+{(int)c:X4}"))}]");
-                        target.Add(link);
-                    }
+                    if (onTag != null && rawText.Trim().Length > 0)
+                        outList.Add(Spec(rawText, tctx, kind: "tag",
+                            val: rawText.Trim(), link: true, zw: IsEncircled(node.Content)));
                     else
-                    {
-                        // No callback → render as plain text (Kotlin does the same).
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[VerseTextProcessor] <f> marker '{rawText}' " +
-                            $"NOT clickable (onTagPress null or EnableTagClick false)");
-                        ProcessNormalText(rawText, target, textContext, highlight, themeColors,
-                            onWordPress, options, wordHighlights);
-                    }
+                        ProcessNormalText(rawText, outList, tctx, highlight, themeColors, onWord, options, wordHighlights);
                     break;
-
                 default:
-                    ProcessNormalText(rawText, target, textContext, highlight, themeColors,
-                        onWordPress, options, wordHighlights);
+                    ProcessNormalText(rawText, outList, tctx, highlight, themeColors, onWord, options, wordHighlights);
                     break;
             }
         }
 
-        private static Run MakeRun(string text, TraversalContext ctx, ThemeColors themeColors)
-        {
-            return new Run(text)
-            {
-                Foreground = new SolidColorBrush(ctx.TextColor),
-                FontSize = ctx.BaseFontSize * ctx.FontSizeMultiplier,
-                BaselineAlignment = ctx.BaselineShiftPx > 0
-                    ? BaselineAlignment.Superscript
-                    : BaselineAlignment.Baseline,
-            };
-        }
-
-        // ═══════════════════════════════════════════════════════════════
-        //  Normal text
-        // ═══════════════════════════════════════════════════════════════
         private void ProcessNormalText(
-            string text, List<Inline> target, TraversalContext context,
+            string text, List<InlineSpec> outList, TraversalContext ctx,
             string? highlight, ThemeColors themeColors,
-            Action<string>? onWordPress, ProcessingOptions options,
-            HashSet<string>? wordHighlights)
+            Action<string>? onWord, ProcessingOptions options, HashSet<string>? wordHighlights)
         {
-            if (options.EnableWordClick && onWordPress != null)
+            if (onWord == null)
             {
-                var words = SplitIntoWords(text, options.PreserveWhitespace);
-                bool addSpaceAfterPunct = false;
-
-                foreach (var word in words)
-                {
-                    if (addSpaceAfterPunct && word.Length > 0 && char.IsLetter(word[0]))
-                        target.Add(new Run(" "));
-
-                    if (IsWord(word))
-                    {
-                        Color? bg = null;
-                        if (highlight != null && word.Contains(highlight, StringComparison.OrdinalIgnoreCase))
-                            bg = themeColors.SearchHighlightBg;
-                        else if (wordHighlights != null &&
-                                 wordHighlights.Contains(word.ToLowerInvariant()))
-                            bg = themeColors.WordHighlightBg;
-
-                        var run = new Run(word)
-                        {
-                            Foreground = new SolidColorBrush(context.TextColor),
-                            FontSize = context.BaseFontSize * context.FontSizeMultiplier,
-                            Tag = new VerseAnnotation("word", word.ToLowerInvariant()),
-                        };
-                        if (bg.HasValue)
-                            run.Background = new SolidColorBrush(bg.Value);
-                        target.Add(run);
-                    }
-                    else
-                    {
-                        target.Add(new Run(word)
-                        {
-                            Foreground = new SolidColorBrush(context.TextColor),
-                            FontSize = context.BaseFontSize * context.FontSizeMultiplier,
-                        });
-                    }
-
-                    var trimmed = word.Trim();
-                    addSpaceAfterPunct = trimmed is "." or "," or ":" or ";" or "?" or "!";
-                }
+                ProcessTextWithoutWordClick(text, outList, ctx, highlight, themeColors, wordHighlights);
+                return;
             }
-            else
+
+            var words = SplitIntoWords(text, options.PreserveWhitespace);
+            bool addSpace = false;
+            foreach (var word in words)
             {
-                target.Add(new Run(text)
+                if (addSpace && word.Length > 0 && char.IsLetter(word[0]))
+                    outList.Add(Spec(" ", ctx));
+
+                if (IsWord(word))
                 {
-                    Foreground = new SolidColorBrush(context.TextColor),
-                    FontSize = context.BaseFontSize * context.FontSizeMultiplier,
-                });
+                    Color? bg = null;
+                    if (highlight != null && word.Contains(highlight, StringComparison.OrdinalIgnoreCase))
+                        bg = themeColors.SearchHighlightBg;
+                    else if (wordHighlights != null && wordHighlights.Contains(word.ToLowerInvariant()))
+                        bg = themeColors.WordHighlightBg;
+                    outList.Add(Spec(word, ctx, bg: bg, kind: "word", val: word.ToLowerInvariant()));
+                }
+                else
+                {
+                    outList.Add(Spec(word, ctx));
+                }
+
+                var trimmed = word.Trim();
+                addSpace = trimmed is "." or "," or ":" or ";" or "?" or "!";
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Self-closing tag
-        // ═══════════════════════════════════════════════════════════════
+        private void ProcessTextWithoutWordClick(
+            string text, List<InlineSpec> outList, TraversalContext ctx,
+            string? highlight, ThemeColors themeColors, HashSet<string>? wordHighlights)
+        {
+            if (highlight == null || !text.Contains(highlight, StringComparison.OrdinalIgnoreCase))
+            {
+                AppendWithWordHighlights(text, outList, ctx, wordHighlights, themeColors);
+                return;
+            }
+
+            Regex regex;
+            try { regex = new Regex(EscapeRegex(highlight), RegexOptions.IgnoreCase); }
+            catch { return; }
+
+            int last = 0;
+            foreach (Match m in regex.Matches(text))
+            {
+                if (m.Index > last)
+                    AppendWithWordHighlights(text[last..m.Index], outList, ctx, wordHighlights, themeColors);
+                outList.Add(Spec(m.Value, ctx, bg: themeColors.SearchHighlightBg));
+                last = m.Index + m.Length;
+            }
+            if (last < text.Length)
+                AppendWithWordHighlights(text[last..], outList, ctx, wordHighlights, themeColors);
+        }
+
+        private void AppendWithWordHighlights(
+            string text, List<InlineSpec> outList, TraversalContext ctx,
+            HashSet<string>? wordHighlights, ThemeColors themeColors)
+        {
+            if (wordHighlights == null)
+            {
+                outList.Add(Spec(text, ctx));
+                return;
+            }
+            foreach (var word in SplitIntoWords(text, false))
+            {
+                Color? bg = IsWord(word) && wordHighlights.Contains(word.ToLowerInvariant())
+                    ? themeColors.WordHighlightBg : null;
+                outList.Add(Spec(word, ctx, bg: bg));
+
+                var trimmed = word.Trim();
+                bool isPunct = trimmed is "." or "," or ":" or ";" or "?" or "!";
+                if (!isPunct && trimmed != word) outList.Add(Spec(" ", ctx));
+            }
+        }
+
         private static void ProcessSelfClosingTag(
-            TreeNode.SelfClosingNode node, List<Inline> target,
-            TraversalContext context, ThemeColors themeColors)
+            TreeNode.SelfClosingNode node, List<InlineSpec> outList,
+            TraversalContext ctx, ThemeColors themeColors)
         {
             var content = ExtractContentFromTag(node.FullTag).Trim();
             if (content.Length == 0) return;
-
-            target.Add(new Run(content)
-            {
-                Foreground = new SolidColorBrush(themeColors.TagColor),
-                Background = new SolidColorBrush(themeColors.TagBg),
-                FontSize = context.BaseFontSize * 0.8,
-            });
+            outList.Add(new InlineSpec(content, themeColors.TagColor, themeColors.TagBg,
+                ctx.BaseFontSize * 0.8, BaselineAlignment.Baseline, null, null, false, false));
         }
+
+        private static InlineSpec Spec(string text, TraversalContext ctx, Color? bg = null,
+            string? kind = null, string? val = null, bool link = false, bool zw = false) =>
+            new(text, ctx.TextColor, bg,
+                ctx.BaseFontSize * ctx.FontSizeMultiplier,
+                ctx.BaselineShiftPx > 0 ? BaselineAlignment.Superscript : BaselineAlignment.Baseline,
+                kind, val, link, zw);
 
         private static string ExtractContentFromTag(string tag)
         {
-            var m = AttributeRegex.Match(tag);
+            var m = AttributeRegex().Match(tag);
             return m.Success ? m.Groups[2].Value : "";
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Helpers
-        // ═══════════════════════════════════════════════════════════════
         private static bool IsEncircled(string text)
         {
             var t = text.Trim();
@@ -545,43 +473,39 @@ namespace FountOfHopeStudyBiblePC.Helpers
         {
             var t = text.Trim();
             if (t.Length == 0) return false;
-            if (Regex.IsMatch(t, @"^\d+$")) return true;
-            if (Regex.IsMatch(t, @"^[GH]\d+$", RegexOptions.IgnoreCase)) return true;
-            return false;
+            return DigitsRegex().IsMatch(t) || StrongsNumberRegex().IsMatch(t);
         }
 
         private static string FormatStrongsNumber(string text, bool isOldTestament)
         {
             var t = text.Trim();
-            if (Regex.IsMatch(t, @"^[GH]\d+$", RegexOptions.IgnoreCase))
-                return t.ToUpperInvariant();
+            if (StrongsNumberRegex().IsMatch(t)) return t.ToUpperInvariant();
             if (t.Length > 0 && char.IsLetter(t[0])) return t;
             return (isOldTestament ? "H" : "G") + t;
         }
 
-        private static List<string> SplitIntoWords(string text, bool preserveWhitespace)
-        {
-            if (preserveWhitespace)
-                return Regex.Split(text, @"(?<=\S)(?=\s)|(?<=\s)(?=\S)")
-                    .Where(s => s.Length > 0).ToList();
+        private static List<string> SplitIntoWords(string text, bool preserveWhitespace) =>
+            (preserveWhitespace ? WhitespaceBoundaryRegex() : WordBoundaryRegex())
+                .Split(text).Where(s => s.Length > 0).ToList();
 
-            return Regex.Split(text, @"(?<=\w)(?=\W)|(?<=\W)(?=\w)|\s+")
-                .Where(s => s.Length > 0).ToList();
-        }
-
-        private static bool IsWord(string text) => WordRegex.IsMatch(text);
-        private static string EscapeRegex(string s) =>
-            EscapeRegexPattern.Replace(s, m => "\\" + m.Value);
+        private static bool IsWord(string text) => WordRegex().IsMatch(text);
+        private static string EscapeRegex(string s) => EscapeRegexPattern().Replace(s, m => "\\" + m.Value);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    //  Supporting types
-    // ═══════════════════════════════════════════════════════════════════
+    public sealed record InlineSpec(
+        string Text,
+        Color Foreground,
+        Color? Background,
+        double FontSize,
+        BaselineAlignment Baseline,
+        string? AnnotationKind,
+        string? AnnotationValue,
+        bool MakeHyperlink,
+        bool AppendZeroWidthSpace);
+
     public record TraversalContext
     {
         public Color TextColor { get; init; }
-        public bool IsTextContainer { get; init; }
-        public bool IsHeader { get; init; }
         public string? CurrentTag { get; init; }
         public double BaseFontSize { get; init; } = 16;
         public float FontSizeMultiplier { get; init; } = 1f;

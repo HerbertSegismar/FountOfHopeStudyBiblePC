@@ -1,20 +1,16 @@
-﻿// Controls/IndependentMultiVersionReader.xaml.cs
-using System;
-using System.Collections.Generic;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
-using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
 using FountOfHopeStudyBiblePC.ViewModels;
+using FountOfHopeStudyBiblePC.Views;
 
 namespace FountOfHopeStudyBiblePC.Controls
 {
-    public partial class IndependentMultiVersionReader : UserControl
+    public partial class IndependentMultiVersionReader : UserControl, IWordHighlightHost
     {
-        // ── Dependencies ────────────────────────────────────────────
         private readonly PassageSelection _primaryCurrent;
         private readonly PassageSelection _secondaryCurrent;
         private readonly int? _targetVerse;
@@ -42,9 +38,8 @@ namespace FountOfHopeStudyBiblePC.Controls
         private ChapterView? _primaryView;
         private ChapterView? _secondaryView;
 
-        // ═══════════════════════════════════════════════════════════
-        //  Constructor
-        // ═══════════════════════════════════════════════════════════
+        private ChapterView? _activePane;
+
         public IndependentMultiVersionReader(
             PassageSelection primaryCurrent,
             PassageSelection secondaryCurrent,
@@ -101,7 +96,6 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             BuildLayout();
 
-            // Rebuild when layout toggles
             _viewModel.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(AppViewModel.MultiViewLayout))
@@ -110,9 +104,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             };
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Preload
-        // ═══════════════════════════════════════════════════════════
         private void Preload(
             PassageSelection passage,
             Dictionary<(int book, int chapter), List<VerseContent>> cache,
@@ -125,7 +116,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             if (db != null)
             {
                 var verses = db.GetVerses(passage.BookNumber, passage.Chapter)
-                             ?? new List<Verse>();
+                             ?? [];
                 var subheadings = _subheadingsDbHelper?.GetSubheadings(
                                       passage.BookNumber, passage.Chapter)
                                   ?? new List<Subheading>();
@@ -154,9 +145,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             cache[key] = content;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Layout
-        // ═══════════════════════════════════════════════════════════
         private void BuildLayout()
         {
             RootGrid.Children.Clear();
@@ -169,8 +157,8 @@ namespace FountOfHopeStudyBiblePC.Controls
             _primaryLoadedVerses.TryGetValue(pk, out var primaryContent);
             _secondaryLoadedVerses.TryGetValue(sk, out var secondaryContent);
 
-            primaryContent ??= new List<VerseContent>();
-            secondaryContent ??= new List<VerseContent>();
+            primaryContent ??= [];
+            secondaryContent ??= [];
 
             var dividerBrush = new SolidColorBrush(
                 Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
@@ -255,6 +243,51 @@ namespace FountOfHopeStudyBiblePC.Controls
                 RootGrid.Children.Add(divider);
                 RootGrid.Children.Add(_secondaryView);
             }
+        }
+
+        public bool BeginWordDrag(Point positionInHost)
+        {
+            var pane = FindPaneAt(positionInHost);
+            if (pane == null) return false;
+
+            var local = this.TranslatePoint(positionInHost, pane);
+            if (!pane.BeginWordDrag(local)) return false;
+
+            _activePane = pane;
+            return true;
+        }
+
+        public void UpdateWordDrag(Point positionInHost)
+        {
+            if (_activePane == null) return;
+            var local = this.TranslatePoint(positionInHost, _activePane);
+            _activePane.UpdateWordDrag(local);
+        }
+
+        public void CommitWordDrag()
+        {
+            _activePane?.CommitWordDrag();
+            _activePane = null;
+        }
+
+        public void CancelWordDrag()
+        {
+            _activePane?.CancelWordDrag();
+            _activePane = null;
+        }
+
+        private ChapterView? FindPaneAt(Point positionInHost)
+        {
+            if (InputHitTest(positionInHost) is not DependencyObject hit) return null;
+
+            var current = hit;
+            while (current != null)
+            {
+                if (ReferenceEquals(current, _primaryView)) return _primaryView;
+                if (ReferenceEquals(current, _secondaryView)) return _secondaryView;
+                current = VisualTreeHelper.GetParent(current);
+            }
+            return null;
         }
     }
 }

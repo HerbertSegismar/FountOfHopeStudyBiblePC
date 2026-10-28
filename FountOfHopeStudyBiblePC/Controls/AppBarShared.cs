@@ -1,42 +1,29 @@
-﻿// Controls/AppBarShared.cs
-using System;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
-using FountOfHopeStudyBiblePC.ViewModels;
 using MahApps.Metro.IconPacks;
 
 namespace FountOfHopeStudyBiblePC.Controls
 {
     internal static class AppBarShared
     {
-        // ═══════════════════════════════════════════════════════════
-        //  Theme-aware brushes for dropdown menus
-        //  (NOT to be confused with HeaderButtonsColor, which is
-        //   designed for the app-bar chrome on the primary gradient
-        //   and is always light — see comments in Home/ReaderAppBar.)
-        // ═══════════════════════════════════════════════════════════
-
-        /// <summary>Foreground for text/icons inside a dropdown popup.</summary>
         public static Brush MenuForegroundBrush(bool darkTheme)
             => new SolidColorBrush(darkTheme ? Colors.White : Colors.Black);
 
-        /// <summary>Hairline border for dropdown popup shells / swatches.</summary>
         public static Brush MenuBorderBrush(bool darkTheme, byte alpha = 0x33)
             => new SolidColorBrush(darkTheme
                 ? Color.FromArgb(alpha, 0xFF, 0xFF, 0xFF)
                 : Color.FromArgb(alpha, 0x00, 0x00, 0x00));
 
-        // ═══════════════════════════════════════════════════════════
-        //  Templates
-        // ═══════════════════════════════════════════════════════════
         public static ControlTemplate BuildCircleButtonTemplate(double radius)
         {
             var template = new ControlTemplate(typeof(Button));
-            var border = new FrameworkElementFactory(typeof(Border));
-            border.Name = "B";
+            var border = new FrameworkElementFactory(typeof(Border))
+            {
+                Name = "B"
+            };
             border.SetValue(Border.CornerRadiusProperty, new CornerRadius(radius));
             border.SetValue(Border.BackgroundProperty, Brushes.Transparent);
 
@@ -60,8 +47,10 @@ namespace FountOfHopeStudyBiblePC.Controls
         public static ControlTemplate BuildRoundedRectTemplate(double radius, Color bg)
         {
             var template = new ControlTemplate(typeof(Button));
-            var border = new FrameworkElementFactory(typeof(Border));
-            border.Name = "B";
+            var border = new FrameworkElementFactory(typeof(Border))
+            {
+                Name = "B"
+            };
             border.SetValue(Border.CornerRadiusProperty, new CornerRadius(radius));
             border.SetValue(Border.BackgroundProperty, new SolidColorBrush(bg));
 
@@ -76,17 +65,15 @@ namespace FountOfHopeStudyBiblePC.Controls
             return template;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Icon button factory (app-bar chrome, always white icon)
-        // ═══════════════════════════════════════════════════════════
         public static Button BuildIconButton(
             PackIconMaterialKind kind,
             string tooltip,
             double buttonSize,
             double iconSize,
             Action onClick,
-            Thickness? margin = null)
-        {
+            Thickness? margin = null,
+            Brush? foreground = null)
+                {
             var btn = new Button
             {
                 Width = buttonSize,
@@ -96,26 +83,23 @@ namespace FountOfHopeStudyBiblePC.Controls
                 BorderThickness = new Thickness(0),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 ToolTip = tooltip,
+                Template = BuildCircleButtonTemplate(buttonSize / 2)
             };
-            btn.Template = BuildCircleButtonTemplate(buttonSize / 2);
 
             var icon = new PackIconMaterial
-            {
-                Kind = kind,
-                Width = iconSize,
-                Height = iconSize,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = Brushes.White,     // app bar overlays primary gradient
-            };
-            btn.Content = icon;
-            btn.Click += (_, _) => onClick();
-            return btn;
+                    {
+                        Kind = kind,
+                        Width = iconSize,
+                        Height = iconSize,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Foreground = foreground ?? Brushes.White,
+                    };
+                    btn.Content = icon;
+                    btn.Click += (_, _) => onClick();
+                    return btn;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Dropdown menu row — theme-aware (popup content, NOT chrome)
-        // ═══════════════════════════════════════════════════════════
         public static Border BuildMenuRow(
             string label,
             FrameworkElement? icon,
@@ -193,20 +177,17 @@ namespace FountOfHopeStudyBiblePC.Controls
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
 
-        // ═══════════════════════════════════════════════════════════
-        //  Navigation metadata (shared between menus)
-        // ═══════════════════════════════════════════════════════════
         public static (string title, Screen screen, PackIconMaterialKind icon)[]
             GetNavigationItems(PassageSelection primaryPassage)
-            => new (string title, Screen screen, PackIconMaterialKind icon)[]
-        {
+            =>
+        [
             ("Home",      new Screen.Home(),                    PackIconMaterialKind.Home),
             ("Reader",    new Screen.Reader(primaryPassage),    PackIconMaterialKind.BookOpenPageVariant),
             ("Bookmarks", new Screen.Bookmarks(),               PackIconMaterialKind.Bookmark),
             ("Notes",     new Screen.Notes(),                   PackIconMaterialKind.NoteText),
             ("Search",    new Screen.Search(),                  PackIconMaterialKind.Magnify),
             ("Settings",  new Screen.Settings(),                PackIconMaterialKind.Cog),
-        };
+        ];
 
         public static bool ScreensMatch(Screen a, Screen b) => (a, b) switch
         {

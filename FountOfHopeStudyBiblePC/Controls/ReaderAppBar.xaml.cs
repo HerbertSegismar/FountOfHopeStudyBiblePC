@@ -1,7 +1,4 @@
-﻿// Controls/ReaderAppBar.xaml.cs
-using System;
-using System.Linq;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -20,7 +17,6 @@ namespace FountOfHopeStudyBiblePC.Controls
         private const double IconButtonSize = 35;
         private const double LandscapeHeight = 40;
         private const double PortraitHeight = 80;
-
         private readonly AppViewModel _viewModel;
         private PassageSelection? _currentPassage;
         private string _currentVersionAbbr = "Bible";
@@ -33,13 +29,11 @@ namespace FountOfHopeStudyBiblePC.Controls
 
         private PackIconMaterial? _themeIcon;
 
-        // Menu popup state
         private PackIconMaterial? _menuIcon;
         private RotateTransform? _menuRotation;
         private Popup? _menuPopup;
         private TextBox? _fontSizeBox;
 
-        // Layout popup state
         private PackIconMaterial? _layoutIcon;
         private RotateTransform? _layoutRotation;
         private Popup? _layoutPopup;
@@ -108,8 +102,10 @@ namespace FountOfHopeStudyBiblePC.Controls
                     ApplyGradientBackground();
                     break;
                 case nameof(AppViewModel.HeaderButtonsColor):
+                    BackIcon.Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor);
                     UpdateTitleForegrounds();
                     ApplyTitleButtonStyles();
+                    BuildActions();
                     break;
                 case nameof(AppViewModel.MultiVersion):
                 case nameof(AppViewModel.MultiViewLayout):
@@ -160,9 +156,10 @@ namespace FountOfHopeStudyBiblePC.Controls
 
         private void UpdateTitleForegrounds()
         {
-            BookText.Foreground = Brushes.White;
-            ChapterText.Foreground = Brushes.White;
-            VersionText.Foreground = Brushes.White;
+            var fg = new SolidColorBrush(_viewModel.HeaderButtonsColor);
+            BookText.Foreground = fg;
+            ChapterText.Foreground = fg;
+            VersionText.Foreground = fg;
         }
 
         private void UpdateTitleVisibility()
@@ -183,9 +180,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             ApplyGradientBackground();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Actions panel
-        // ═══════════════════════════════════════════════════════════
         private void BuildActions()
         {
             if (_menuPopup is { IsOpen: true }) _menuPopup.IsOpen = false;
@@ -262,14 +256,15 @@ namespace FountOfHopeStudyBiblePC.Controls
             ActionsPanel.Children.Add(BuildMenuButton());
         }
 
-        private static Button BuildIconButton(
-            PackIconMaterialKind kind, string tooltip, double iconScale, Action onClick)
-            => AppBarShared.BuildIconButton(
-                kind, tooltip, IconButtonSize, IconButtonSize * iconScale, onClick);
+        private Button BuildIconButton(
+             PackIconMaterialKind kind, string tooltip, double iconScale, Action onClick)
+                {
+                    var fg = new SolidColorBrush(_viewModel.HeaderButtonsColor);
+                    return AppBarShared.BuildIconButton(
+                        kind, tooltip, IconButtonSize, IconButtonSize * iconScale,
+                        onClick, null, fg);
+                }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Layout button (WindowsLayoutDropdown port)
-        // ═══════════════════════════════════════════════════════════
         private Button BuildLayoutButton()
         {
             var btn = new Button
@@ -278,10 +273,10 @@ namespace FountOfHopeStudyBiblePC.Controls
                 Height = IconButtonSize,
                 Background = Brushes.Transparent,
                 BorderThickness = new Thickness(0),
-                Cursor = System.Windows.Input.Cursors.Hand,
+                Cursor = Cursors.Hand,
                 ToolTip = _viewModel.MultiVersion ? "Close MultiView" : "MultiView",
+                Template = AppBarShared.BuildCircleButtonTemplate(IconButtonSize / 2)
             };
-            btn.Template = AppBarShared.BuildCircleButtonTemplate(IconButtonSize / 2);
 
             _layoutIcon = new PackIconMaterial
             {
@@ -291,7 +286,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 RenderTransformOrigin = new Point(0.5, 0.5),
-                Foreground = Brushes.White,
+                Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor),
             };
             _layoutRotation = new RotateTransform(0);
             _layoutIcon.RenderTransform = _layoutRotation;
@@ -299,7 +294,7 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             _layoutPopup = new Popup
             {
-                StaysOpen = true,           // explicit close via window clicks
+                StaysOpen = true,     
                 AllowsTransparency = true,
                 Placement = PlacementMode.Bottom,
                 Child = BuildLayoutMenuContent(),
@@ -307,7 +302,7 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             _layoutPopup.Opened += (_, _) =>
             {
-                if (_layoutIcon is not null) _layoutIcon.Kind = PackIconMaterialKind.Close;
+                _layoutIcon?.Kind = PackIconMaterialKind.Close;
                 AnimateLayoutRotation(180);
 
                 var window = Window.GetWindow(this);
@@ -319,7 +314,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             };
             _layoutPopup.Closed += (_, _) =>
             {
-                if (_layoutIcon is not null) _layoutIcon.Kind = PackIconMaterialKind.ViewGrid;
+                _layoutIcon?.Kind = PackIconMaterialKind.ViewGrid;
                 AnimateLayoutRotation(0);
 
                 var window = Window.GetWindow(this);
@@ -354,7 +349,6 @@ namespace FountOfHopeStudyBiblePC.Controls
         {
             if (_layoutPopup is null || !_layoutPopup.IsOpen) return;
 
-            // Click on the layout button → let button.Click toggle it.
             if (_layoutPopup.PlacementTarget is UIElement pt &&
                 (ReferenceEquals(e.OriginalSource, pt) ||
                  IsDescendantOf(e.OriginalSource as DependencyObject, pt)))
@@ -409,7 +403,6 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             var stack = new StackPanel { Margin = new Thickness(4) };
 
-            // ── Header: "Parallel View" / "Single View" ──────────
             stack.Children.Add(new Border
             {
                 Height = 25,
@@ -425,7 +418,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             });
             stack.Children.Add(AppBarShared.BuildSeparator());
 
-            // ── Layout option rows ───────────────────────────────
             var layouts = new (string Title, PackIconMaterialKind Icon, double Rotate)[]
             {
                 ("Single",     PackIconMaterialKind.Numeric1,   0),
@@ -478,14 +470,13 @@ namespace FountOfHopeStudyBiblePC.Controls
                                 _viewModel.MultiViewLayout = "vertical";
                                 break;
                         }
-                        if (_layoutPopup is not null) _layoutPopup.IsOpen = false;
+                        _layoutPopup?.IsOpen = false;
                     },
                     foreground: fg,
                     isActive: isActive,
                     isDarkTheme: _viewModel.DarkTheme));
             }
 
-            // ── Square Aspect Ratio (only in parallel mode) ──────
             if (_viewModel.MultiVersion)
             {
                 stack.Children.Add(AppBarShared.BuildSeparator());
@@ -511,7 +502,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                     IsChecked = _viewModel.SquareAspectViews,
                     VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(0, 0, 8, 0),
-                    // Kotlin: onCheckedChange = null → the row handles the click.
                     IsHitTestVisible = false,
                 };
                 Grid.SetColumn(check, 1);
@@ -520,7 +510,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                 var row = new Border
                 {
                     CornerRadius = new CornerRadius(4),
-                    Cursor = System.Windows.Input.Cursors.Hand,
+                    Cursor = Cursors.Hand,
                     Child = rowGrid,
                 };
 
@@ -536,18 +526,12 @@ namespace FountOfHopeStudyBiblePC.Controls
                 };
 
                 stack.Children.Add(row);
-                // Note: RotatingPhoneGraphics preview omitted — separate
-                // visual composable, not required for the layout selector
-                // behavior. Add later if you want the preview.
             }
 
             container.Child = stack;
             return container;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Menu button (unchanged from prior fix)
-        // ═══════════════════════════════════════════════════════════
         private Button BuildMenuButton()
         {
             var btn = new Button
@@ -556,10 +540,10 @@ namespace FountOfHopeStudyBiblePC.Controls
                 Height = IconButtonSize,
                 Background = Brushes.Transparent,
                 BorderThickness = new Thickness(0),
-                Cursor = System.Windows.Input.Cursors.Hand,
+                Cursor = Cursors.Hand,
                 ToolTip = "Menu",
+                Template = AppBarShared.BuildCircleButtonTemplate(IconButtonSize / 2)
             };
-            btn.Template = AppBarShared.BuildCircleButtonTemplate(IconButtonSize / 2);
 
             _menuIcon = new PackIconMaterial
             {
@@ -569,7 +553,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 RenderTransformOrigin = new Point(0.5, 0.5),
-                Foreground = Brushes.White,
+                Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor),
             };
             _menuRotation = new RotateTransform(0);
             _menuIcon.RenderTransform = _menuRotation;
@@ -580,7 +564,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                 StaysOpen = true,
                 AllowsTransparency = true,
                 Placement = PlacementMode.Bottom,
-                Child = BuildReaderMenuContent(),
+                Child = BuildReaderMenuContent,
             };
 
             _menuPopup.Opened += (_, __) =>
@@ -621,7 +605,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                 }
                 else
                 {
-                    _menuPopup.Child = BuildReaderMenuContent();
+                    _menuPopup.Child = BuildReaderMenuContent;
                     _menuPopup.PlacementTarget = btn;
                     _menuPopup.Placement = PlacementMode.Bottom;
                     _menuPopup.IsOpen = true;
@@ -686,75 +670,75 @@ namespace FountOfHopeStudyBiblePC.Controls
                 : PackIconMaterialKind.Brightness2;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Menu content
-        // ═══════════════════════════════════════════════════════════
-        private FrameworkElement BuildReaderMenuContent()
+        private FrameworkElement BuildReaderMenuContent
         {
-            var isLandscape = IsLandscape;
-            var bg = _viewModel.DarkTheme
-                ? _viewModel.DarkModalBackgroundColor
-                : _viewModel.LightModalBackgroundColor;
-
-            var container = new Border
+            get
             {
-                Background = new SolidColorBrush(bg),
-                BorderBrush = AppBarShared.MenuBorderBrush(_viewModel.DarkTheme, 0x33),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(4),
-                MinWidth = 220,
-                MaxWidth = isLandscape ? 900 : 340,
-                Effect = new DropShadowEffect
+                var isLandscape = IsLandscape;
+                var bg = _viewModel.DarkTheme
+                    ? _viewModel.DarkModalBackgroundColor
+                    : _viewModel.LightModalBackgroundColor;
+
+                var container = new Border
                 {
-                    BlurRadius = 14,
-                    ShadowDepth = 3,
-                    Direction = 270,
-                    Color = Colors.Black,
-                    Opacity = 0.4,
-                },
-            };
-
-            if (isLandscape)
-            {
-                var grid = new Grid();
-                grid.ColumnDefinitions.Add(new ColumnDefinition
-                { Width = new GridLength(1, GridUnitType.Star) });
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                grid.ColumnDefinitions.Add(new ColumnDefinition
-                { Width = new GridLength(1, GridUnitType.Star) });
-
-                var leftColumn = new StackPanel { Margin = new Thickness(4) };
-                BuildCommonScreenItems(leftColumn);
-                if (_viewModel.BgImageIndex != 0)
-                    leftColumn.Children.Add(BuildBackgroundTextureItem());
-                Grid.SetColumn(leftColumn, 0);
-                grid.Children.Add(leftColumn);
-
-                var divider = new Border
-                {
-                    Width = 1,
-                    Background = new SolidColorBrush(Color.FromArgb(0x33, 0x80, 0x80, 0x80)),
-                    Margin = new Thickness(4, 6, 4, 6),
+                    Background = new SolidColorBrush(bg),
+                    BorderBrush = AppBarShared.MenuBorderBrush(_viewModel.DarkTheme, 0x33),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(6),
+                    Padding = new Thickness(4),
+                    MinWidth = 220,
+                    MaxWidth = isLandscape ? 900 : 340,
+                    Effect = new DropShadowEffect
+                    {
+                        BlurRadius = 14,
+                        ShadowDepth = 3,
+                        Direction = 270,
+                        Color = Colors.Black,
+                        Opacity = 0.4,
+                    },
                 };
-                Grid.SetColumn(divider, 1);
-                grid.Children.Add(divider);
 
-                var rightColumn = new StackPanel { Margin = new Thickness(4) };
-                BuildExtraReaderControls(rightColumn);
-                Grid.SetColumn(rightColumn, 2);
-                grid.Children.Add(rightColumn);
+                if (isLandscape)
+                {
+                    var grid = new Grid();
+                    grid.ColumnDefinitions.Add(new ColumnDefinition
+                    { Width = new GridLength(1, GridUnitType.Star) });
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    grid.ColumnDefinitions.Add(new ColumnDefinition
+                    { Width = new GridLength(1, GridUnitType.Star) });
 
-                container.Child = grid;
+                    var leftColumn = new StackPanel { Margin = new Thickness(4) };
+                    BuildCommonScreenItems(leftColumn);
+                    if (_viewModel.BgImageIndex != 0)
+                        leftColumn.Children.Add(BuildBackgroundTextureItem());
+                    Grid.SetColumn(leftColumn, 0);
+                    grid.Children.Add(leftColumn);
+
+                    var divider = new Border
+                    {
+                        Width = 1,
+                        Background = new SolidColorBrush(Color.FromArgb(0x33, 0x80, 0x80, 0x80)),
+                        Margin = new Thickness(4, 6, 4, 6),
+                    };
+                    Grid.SetColumn(divider, 1);
+                    grid.Children.Add(divider);
+
+                    var rightColumn = new StackPanel { Margin = new Thickness(4) };
+                    BuildExtraReaderControls(rightColumn);
+                    Grid.SetColumn(rightColumn, 2);
+                    grid.Children.Add(rightColumn);
+
+                    container.Child = grid;
+                }
+                else
+                {
+                    var stack = new StackPanel { Margin = new Thickness(4) };
+                    BuildCommonItems(stack);
+                    container.Child = stack;
+                }
+
+                return container;
             }
-            else
-            {
-                var stack = new StackPanel { Margin = new Thickness(4) };
-                BuildCommonItems(stack);
-                container.Child = stack;
-            }
-
-            return container;
         }
 
         private void BuildCommonScreenItems(Panel host)
@@ -780,7 +764,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                     icon: icon,
                     onClick: () =>
                     {
-                        if (_menuPopup is not null) _menuPopup.IsOpen = false;
+                        _menuPopup?.IsOpen = false;
                         ScreenRequested?.Invoke(target);
                     },
                     foreground: fg,
@@ -885,7 +869,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             };
             return AppBarShared.BuildMenuRow("Background Texture", icon, () =>
             {
-                if (_menuPopup is not null) _menuPopup.IsOpen = false;
+                _menuPopup?.IsOpen = false;
                 _viewModel.ShowBgModal = true;
             }, fg, isDarkTheme: _viewModel.DarkTheme);
         }
@@ -909,8 +893,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             return AppBarShared.BuildMenuRow(label, icon, () =>
             {
                 _viewModel.IsDictionaryMode = !_viewModel.IsDictionaryMode;
-                if (_menuPopup is not null)
-                    _menuPopup.Child = BuildReaderMenuContent();
+                _menuPopup?.Child = BuildReaderMenuContent;
             }, fg, isDarkTheme: _viewModel.DarkTheme);
         }
 
@@ -929,7 +912,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             };
             return AppBarShared.BuildMenuRow(label, swatch, () =>
             {
-                if (_menuPopup is not null) _menuPopup.IsOpen = false;
+                _menuPopup?.IsOpen = false;
                 onClick();
             }, fg, isDarkTheme: _viewModel.DarkTheme);
         }
@@ -969,9 +952,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             };
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Font-size row — editable TextBox + A- / A+ buttons
-        // ═══════════════════════════════════════════════════════════
         private Border BuildFontSizeItem()
         {
             var fg = AppBarShared.MenuForegroundBrush(_viewModel.DarkTheme);
@@ -1085,9 +1065,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             return btn;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Header button handlers
-        // ═══════════════════════════════════════════════════════════
         private void BackButton_Click(object sender, RoutedEventArgs e)
             => BackRequested?.Invoke();
 
@@ -1096,7 +1073,6 @@ namespace FountOfHopeStudyBiblePC.Controls
 
         private void VersionButton_Click(object sender, RoutedEventArgs e)
         {
-            App.Log("ReaderAppBar: VersionButton clicked");
             _viewModel.ShowPrimaryVersionDropdown = true;
         }
     }

@@ -1,5 +1,4 @@
-﻿// Controls/HomeHeader.xaml.cs
-using System.Windows.Controls;
+﻿using System.Windows.Controls;
 
 namespace FountOfHopeStudyBiblePC.Controls
 {

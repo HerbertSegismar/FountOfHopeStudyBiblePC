@@ -1,18 +1,14 @@
-﻿// Controls/SingleVersionReader.xaml.cs
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
 using FountOfHopeStudyBiblePC.ViewModels;
+using FountOfHopeStudyBiblePC.Views;
 
 namespace FountOfHopeStudyBiblePC.Controls
 {
-    public partial class SingleVersionReader : UserControl
+    public partial class SingleVersionReader : UserControl, IWordHighlightHost
     {
         private readonly PassageSelection _primaryCurrent;
         private readonly int? _targetVerse;
@@ -80,10 +76,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             RenderChapter();
         }
 
-        /// <summary>
-        /// Loads verses + subheadings for a chapter into the shared cache.
-        /// Mirrors the Kotlin top-level `preloadChapter`.
-        /// </summary>
         private void PreloadChapter(PassageSelection passage)
         {
             var key = (passage.BookNumber, passage.Chapter);
@@ -98,13 +90,12 @@ namespace FountOfHopeStudyBiblePC.Controls
             }
 
             var verses = _databaseHelper.GetVerses(passage.BookNumber, passage.Chapter)
-                         ?? new List<Verse>();
+                         ?? [];
 
             var subheadings = _subheadingsDbHelper?.GetSubheadings(
                                   passage.BookNumber, passage.Chapter)
-                              ?? new List<Subheading>();
+                              ?? [];
 
-            // Group subheadings by verse, then merge with verses in order
             var subByVerse = subheadings
                 .GroupBy(s => s.Verse)
                 .ToDictionary(g => g.Key, g => g.ToList());
@@ -117,7 +108,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                         content.Add(new VerseContent.SubheadingVal(s));
                 }
 
-                // enrich with book/chapter for click handling
                 var enriched = v with
                 {
                     BookName = passage.BookName,
@@ -135,7 +125,6 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             if (!_primaryLoadedVerses.TryGetValue(key, out var content) || content.Count == 0)
             {
-                // No data — show a diagnostic message instead of blank
                 ChapterHost.Content = BuildEmptyMessage();
                 return;
             }
@@ -167,7 +156,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             ChapterHost.Content = chapterView;
         }
 
-        private UIElement BuildEmptyMessage()
+        private TextBlock BuildEmptyMessage()
         {
             var dbPath = _databaseHelper == null
                 ? "(no database helper)"
@@ -186,6 +175,30 @@ namespace FountOfHopeStudyBiblePC.Controls
                 VerticalAlignment = VerticalAlignment.Center,
                 Foreground = new SolidColorBrush(Colors.Gray),
             };
+        }
+
+        public bool BeginWordDrag(Point positionInHost)
+        {
+            if (ChapterHost.Content is not ChapterView cv) return false;
+            var local = TranslatePoint(positionInHost, cv);
+            return cv.BeginWordDrag(local);
+        }
+
+        public void UpdateWordDrag(Point positionInHost)
+        {
+            if (ChapterHost.Content is not ChapterView cv) return;
+            var local = TranslatePoint(positionInHost, cv);
+            cv.UpdateWordDrag(local);
+        }
+
+        public void CommitWordDrag()
+        {
+            if (ChapterHost.Content is ChapterView cv) cv.CommitWordDrag();
+        }
+
+        public void CancelWordDrag()
+        {
+            if (ChapterHost.Content is ChapterView cv) cv.CancelWordDrag();
         }
     }
 }

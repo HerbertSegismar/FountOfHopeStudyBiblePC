@@ -1,25 +1,14 @@
-﻿// Controls/FountRain.cs
-// WPF port of the Compose `FountRain` composable.
-using System;
-using System.Collections.Generic;
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
-using FountOfHopeStudyBiblePC.Helpers; // ThemeManager
+using FountOfHopeStudyBiblePC.Helpers; 
 
 namespace FountOfHopeStudyBiblePC.Controls
 {
-    /// <summary>
-    /// Matrix-style "digital rain" of characters with randomly fading
-    /// Jesus-attribute overlays, shown inside a rounded Card.
-    /// Colors come from <see cref="ThemeManager"/> so the rain matches the
-    /// rest of the app.
-    /// </summary>
     public class FountRain : UserControl
     {
-        // ---------- Constants (mirror the Kotlin version) ----------
         private const int TRAIL_LENGTH = 15;
         private const double MATRIX_HEIGHT = 612;
         private const double FONT_SIZE = 12;
@@ -84,10 +73,9 @@ namespace FountOfHopeStudyBiblePC.Controls
             "God With Us", "The Great High Priest", "Prayer-answering God"
         };
 
-        // ---------- Nested types ----------
         private sealed class RainDrop
         {
-            public string[] Trail = Array.Empty<string>();
+            public string[] Trail = [];
             public double X;
             public double HeadY;
             public double ElapsedMs;
@@ -106,10 +94,9 @@ namespace FountOfHopeStudyBiblePC.Controls
             public const double FadeInMs = 500;
             public const double HoldMs = 2000;
             public const double FadeOutMs = 1500;
-            public double TotalMs => FadeInMs + HoldMs + FadeOutMs;
+            public static double TotalMs => FadeInMs + HoldMs + FadeOutMs;
         }
 
-        // ---------- Dependency properties ----------
         public static readonly DependencyProperty MatrixColorProperty =
             DependencyProperty.Register(nameof(MatrixColor), typeof(Color),
                 typeof(FountRain),
@@ -166,12 +153,11 @@ namespace FountOfHopeStudyBiblePC.Controls
             set => SetValue(IsDarkThemeProperty, value);
         }
 
-        // ---------- State ----------
-        private readonly List<RainDrop> _drops = new();
+        private readonly List<RainDrop> _drops = [];
         private readonly Random _rng = new();
         private readonly DispatcherTimer _timer;
         private DateTime _lastTickUtc = DateTime.UtcNow;
-        private double _fontSizeDip = FONT_SIZE;
+        private readonly double _fontSizeDip = FONT_SIZE;
 
         private AttributeOverlay? _overlay;
         private double _overlayWaitMs;
@@ -181,7 +167,7 @@ namespace FountOfHopeStudyBiblePC.Controls
         private readonly RainElement _rain;
 
         private readonly Dictionary<(char c, double size, FontFamily fam), FormattedText> _glyphCache
-            = new();
+            = [];
 
         public FountRain()
         {
@@ -231,11 +217,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             Unloaded += (_, __) => _timer.Stop();
         }
 
-        /// <summary>
-        /// Call this from the host whenever <see cref="ThemeManager"/> changes
-        /// (PrimaryColor, DarkTheme, IsCustomColor) so the rain and card scrim
-        /// pick up the new palette without a full rebuild.
-        /// </summary>
         public void RefreshFromTheme()
         {
             MatrixColor = ThemeManager.PrimaryColor;
@@ -255,16 +236,12 @@ namespace FountOfHopeStudyBiblePC.Controls
 
         private void UpdateCardBackground()
         {
-            // ── Solid black on dark theme — maximum contrast for the
-            //    primary-colored rain. Light theme keeps the original
-            //    10%-primary scrim from the Kotlin port.
             var primary = ThemeManager.PrimaryColor;
             _cardBorder.Background = new SolidColorBrush(IsDarkTheme
                 ? Colors.Black
                 : Color.FromArgb(0x1A, primary.R, primary.G, primary.B));
         }
 
-        // ---------- RainDrop build / update ----------
         private void RebuildDrops()
         {
             _drops.Clear();
@@ -347,7 +324,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             _rain.InvalidateVisual();
         }
 
-        // ---------- Overlay (Jesus attributes) ----------
         private void UpdateOverlay(double dtMs)
         {
             if (_overlay == null)
@@ -358,7 +334,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             }
 
             _overlay.ElapsedMs += dtMs;
-            if (_overlay.ElapsedMs >= _overlay.TotalMs)
+            if (_overlay.ElapsedMs >= AttributeOverlay.TotalMs)
             {
                 _overlay = null;
                 _overlayWaitMs = 0;
@@ -388,7 +364,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             };
         }
 
-        // ---------- Rendering ----------
         private sealed class RainElement : FrameworkElement
         {
             private readonly FountRain _owner;
@@ -493,7 +468,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                 FlowDirection.LeftToRight,
                 typeface,
                 size,
-                Brushes.White, // placeholder — replaced per draw via SetForegroundBrush
+                Brushes.White, 
                 VisualTreeHelper.GetDpi(this).PixelsPerDip);
 
             _glyphCache[key] = ft;

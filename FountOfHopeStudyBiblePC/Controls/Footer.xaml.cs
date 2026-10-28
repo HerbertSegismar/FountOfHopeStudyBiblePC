@@ -1,6 +1,4 @@
-﻿// Controls/Footer.xaml.cs
-using System;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows.Controls;
 using System.Windows.Navigation;
 
@@ -18,7 +16,6 @@ namespace FountOfHopeStudyBiblePC.Controls
         {
             try
             {
-                // Open the URI in the default browser or mail client
                 Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri)
                 {
                     UseShellExecute = true
@@ -26,8 +23,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             }
             catch (Exception)
             {
-                // Optionally log or show a message
-                // MessageBox.Show($"Unable to open link: {ex.Message}");
             }
             e.Handled = true;
         }

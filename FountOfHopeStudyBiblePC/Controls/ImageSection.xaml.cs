@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using System.Threading.Tasks;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -16,14 +12,10 @@ using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
 using FountOfHopeStudyBiblePC.ViewModels;
 
-// No `using System.IO;` — `Path` collides with System.Windows.Shapes.Path.
-// All IO is fully qualified where used.
-
 namespace FountOfHopeStudyBiblePC.Controls
 {
     public partial class ImageSection : UserControl
     {
-        // ── Public surface ──────────────────────────────────────────────
         public AppViewModel? ViewModel { get; set; }
         public DatabaseHelper? DatabaseHelper { get; set; }
 
@@ -41,49 +33,48 @@ namespace FountOfHopeStudyBiblePC.Controls
                 new PropertyMetadata(false, (d, _) =>
                     ((ImageSection)d).RefreshFallbackTheme()));
 
-        // ── Data ────────────────────────────────────────────────────────
         private static readonly InspirationalVerseRef[] InspirationalRefs =
         {
-            new InspirationalVerseRef(230, 46, 10),
-            new InspirationalVerseRef(570, 4, 13),
-            new InspirationalVerseRef(230, 23, 1),
-            new InspirationalVerseRef(300, 29, 11),
-            new InspirationalVerseRef(240, 3, 5),
-            new InspirationalVerseRef(160, 8, 10),
-            new InspirationalVerseRef(670, 5, 7),
-            new InspirationalVerseRef(60, 1, 9),
-            new InspirationalVerseRef(520, 8, 28),
-            new InspirationalVerseRef(570, 4, 7),
-            new InspirationalVerseRef(470, 5, 16),
-            new InspirationalVerseRef(470, 19, 26),
-            new InspirationalVerseRef(230, 46, 1),
-            new InspirationalVerseRef(230, 27, 1),
-            new InspirationalVerseRef(570, 4, 6),
-            new InspirationalVerseRef(290, 40, 31),
-            new InspirationalVerseRef(230, 34, 18),
-            new InspirationalVerseRef(500, 3, 16),
-            new InspirationalVerseRef(540, 5, 17),
-            new InspirationalVerseRef(520, 8, 28),
-            new InspirationalVerseRef(550, 5, 22, 23),
-            new InspirationalVerseRef(230, 119, 105),
-            new InspirationalVerseRef(20, 14, 14),
-            new InspirationalVerseRef(470, 11, 28),
-            new InspirationalVerseRef(470, 6, 33),
-            new InspirationalVerseRef(500, 16, 33),
-            new InspirationalVerseRef(530, 13, 13),
-            new InspirationalVerseRef(470, 18, 20),
-            new InspirationalVerseRef(230, 28, 7),
-            new InspirationalVerseRef(670, 2, 9),
-            new InspirationalVerseRef(590, 5, 16, 18),
-            new InspirationalVerseRef(290, 41, 10),
-            new InspirationalVerseRef(470, 19, 26),
-            new InspirationalVerseRef(240, 18, 10),
-            new InspirationalVerseRef(290, 40, 29),
-            new InspirationalVerseRef(600, 3, 3),
-            new InspirationalVerseRef(230, 34, 8),
-            new InspirationalVerseRef(520, 5, 1),
-            new InspirationalVerseRef(570, 4, 19),
-            new InspirationalVerseRef(620, 1, 7),
+            new(230, 46, 10),
+            new(570, 4, 13),
+            new(230, 23, 1),
+            new(300, 29, 11),
+            new(240, 3, 5),
+            new(160, 8, 10),
+            new(670, 5, 7),
+            new(60, 1, 9),
+            new(520, 8, 28),
+            new(570, 4, 7),
+            new(470, 5, 16),
+            new(470, 19, 26),
+            new(230, 46, 1),
+            new(230, 27, 1),
+            new(570, 4, 6),
+            new(290, 40, 31),
+            new(230, 34, 18),
+            new(500, 3, 16),
+            new(540, 5, 17),
+            new(520, 8, 28),
+            new(550, 5, 22, 23),
+            new(230, 119, 105),
+            new(20, 14, 14),
+            new(470, 11, 28),
+            new(470, 6, 33),
+            new(500, 16, 33),
+            new(530, 13, 13),
+            new(470, 18, 20),
+            new(230, 28, 7),
+            new(670, 2, 9),
+            new(590, 5, 16, 18),
+            new(290, 41, 10),
+            new(470, 19, 26),
+            new(240, 18, 10),
+            new(290, 40, 29),
+            new(600, 3, 3),
+            new(230, 34, 8),
+            new(520, 5, 1),
+            new(570, 4, 19),
+            new(620, 1, 7),
         };
 
         private static readonly string[] InspirationalTexts =
@@ -130,7 +121,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             "For the Spirit God gave us does not make us timid, but gives us power, love and self-discipline. - 2 Timothy 1:7",
         };
 
-        // ── State ────────────────────────────────────────────────────────
         private readonly Random _rng = new();
         private InspirationalVerseRef? _selectedRef;
         private string _quoteText = string.Empty;
@@ -158,7 +148,6 @@ namespace FountOfHopeStudyBiblePC.Controls
 
         private void OnUnloaded(object sender, RoutedEventArgs e) => StopEffects();
 
-        // ── Loading ─────────────────────────────────────────────────────
         private async Task LoadRandomAsync()
         {
             int gen = ++_loadGeneration;
@@ -166,7 +155,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             {
                 string? path = null;
                 try { path = ImageAssets.PickHeroImage(); }
-                catch (Exception ex) { App.Log($"ImageSection: PickHeroImage threw {ex.Message}"); }
+                catch (Exception) { }
 
                 if (string.IsNullOrEmpty(path)) { ShowFallback("No image available."); return; }
 
@@ -181,7 +170,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                     bmp.EndInit();
                     bmp.Freeze();
                 }
-                catch (Exception ex) { App.Log($"ImageSection: BitmapImage load threw {ex.Message}"); }
+                catch (Exception) { }
 
                 if (gen != _loadGeneration) return;
                 if (bmp is null) { ShowFallback("Image failed to load."); return; }
@@ -196,8 +185,8 @@ namespace FountOfHopeStudyBiblePC.Controls
 
                 string fileName = System.IO.Path.GetFileName(path) ?? "";
                 EffectType effect =
-                    fileName.Contains("w", StringComparison.OrdinalIgnoreCase) ? EffectType.Snow :
-                    fileName.Contains("o", StringComparison.OrdinalIgnoreCase) ? EffectType.Orbs :
+                    fileName.Contains('w', StringComparison.OrdinalIgnoreCase) ? EffectType.Snow :
+                    fileName.Contains('o', StringComparison.OrdinalIgnoreCase) ? EffectType.Orbs :
                                                                                  EffectType.Meteors;
                 ApplyEffect(effect);
 
@@ -205,9 +194,8 @@ namespace FountOfHopeStudyBiblePC.Controls
                 if (gen != _loadGeneration) return;
                 UpdateOverlay();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                App.Log($"ImageSection.LoadRandomAsync EXCEPTION: {ex.Message}");
                 if (gen == _loadGeneration) ShowFallback("Something went wrong.");
             }
         }
@@ -225,9 +213,9 @@ namespace FountOfHopeStudyBiblePC.Controls
                 if (verses is { Count: > 0 })
                 {
                     List<Verse> selected = refItem.EndVerse is int end
-                        ? verses.Where(v => v.VerseNumber >= refItem.Verse &&
-                                            v.VerseNumber <= end).ToList()
-                        : verses.Where(v => v.VerseNumber == refItem.Verse).ToList();
+                        ? [.. verses.Where(v => v.VerseNumber >= refItem.Verse &&
+                                            v.VerseNumber <= end)]
+                        : [.. verses.Where(v => v.VerseNumber == refItem.Verse)];
 
                     if (selected.Count > 0)
                     {
@@ -268,10 +256,10 @@ namespace FountOfHopeStudyBiblePC.Controls
                 foreach (var name in new[] { "GetVersesAsync", "GetChapterVersesAsync",
                                              "GetVerses",      "GetChapterVerses" })
                 {
-                    var m = type.GetMethod(name, new[] { typeof(int), typeof(int) });
+                    var m = type.GetMethod(name, [typeof(int), typeof(int)]);
                     if (m is null) continue;
 
-                    var ret = m.Invoke(db, new object[] { bookNumber, chapter });
+                    var ret = m.Invoke(db, [bookNumber, chapter]);
                     if (ret is null) return null;
 
                     if (ret is Task task)
@@ -279,17 +267,16 @@ namespace FountOfHopeStudyBiblePC.Controls
                         await task.ConfigureAwait(false);
                         var resultProp = task.GetType().GetProperty("Result");
                         var value = resultProp?.GetValue(task);
-                        if (value is IEnumerable<Verse> async) return async.ToList();
+                        if (value is IEnumerable<Verse> async) return [.. async];
                         return null;
                     }
-                    if (ret is IEnumerable<Verse> sync) return sync.ToList();
+                    if (ret is IEnumerable<Verse> sync) return [.. sync];
                 }
             }
-            catch (Exception ex) { App.Log($"ImageSection.TryGetVersesAsync: {ex.Message}"); }
+            catch (Exception) { }
             return null;
         }
 
-        // ── Overlay / fallback ──────────────────────────────────────────
         private void UpdateOverlay()
         {
             if (string.IsNullOrEmpty(_quoteText)) { OverlayPanel.Visibility = Visibility.Collapsed; return; }
@@ -342,7 +329,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                 : new SolidColorBrush(Color.FromArgb(0x8C, 0, 0, 0));
         }
 
-        // ── Click ───────────────────────────────────────────────────────
         private void OnCardClick(object sender, MouseButtonEventArgs e)
         {
             if (_selectedRef is not null)
@@ -359,7 +345,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             ContinueReadingRequested?.Invoke();
         }
 
-        // ── Share / download ────────────────────────────────────────────
         private async void OnShareClick(object sender, RoutedEventArgs e)
         {
             e.Handled = true;
@@ -378,7 +363,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                     "Inspiration copied to clipboard.",
                     "Share", MessageBoxButton.OK, MessageBoxImage.Information);
             }
-            catch (Exception ex) { App.Log($"ImageSection.OnShareClick: {ex.Message}"); }
+            catch (Exception) { }
             finally { ShareButton.IsEnabled = DownloadButton.IsEnabled = true; }
         }
 
@@ -394,12 +379,12 @@ namespace FountOfHopeStudyBiblePC.Controls
                 var downloads = System.IO.Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     "Downloads");
-                System.IO.Directory.CreateDirectory(downloads);
+                Directory.CreateDirectory(downloads);
 
                 var fileName = $"inspiration_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}.png";
                 var fullPath = System.IO.Path.Combine(downloads, fileName);
 
-                using (var fs = System.IO.File.Create(fullPath))
+                using (var fs = File.Create(fullPath))
                 {
                     var encoder = new PngBitmapEncoder();
                     encoder.Frames.Add(BitmapFrame.Create(bitmap));
@@ -412,7 +397,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             }
             catch (Exception ex)
             {
-                App.Log($"ImageSection.OnDownloadClick: {ex.Message}");
                 MessageBox.Show(Window.GetWindow(this),
                     $"Failed to save image:\n{ex.Message}",
                     "Download", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -438,15 +422,14 @@ namespace FountOfHopeStudyBiblePC.Controls
             return rtb;
         }
 
-        // ── Effects scaffolding ─────────────────────────────────────────
         private enum EffectType { None, Snow, Meteors, Orbs }
 
         private EffectType _currentEffect = EffectType.None;
         private DateTime _lastFrameTime = DateTime.MinValue;
 
-        private readonly List<MeteorState> _meteors = new();
-        private readonly List<SnowflakeState> _snowflakes = new();
-        private readonly List<OrbState> _orbs = new();
+        private readonly List<MeteorState> _meteors = [];
+        private readonly List<SnowflakeState> _snowflakes = [];
+        private readonly List<OrbState> _orbs = [];
 
         private void ApplyEffect(EffectType type)
         {
@@ -499,8 +482,8 @@ namespace FountOfHopeStudyBiblePC.Controls
             public double Duration;
             public double Delay;
             public double BaseOpacity;
-            public double HeadOffsetX;   // ← new
-            public double HeadOffsetY;   // ← new
+            public double HeadOffsetX; 
+            public double HeadOffsetY; 
         }
 
         private void StartMeteors(int count)
@@ -555,13 +538,12 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             double containerW = trailLength + glowRadius;
             double containerH = glowRadius * 2;
-            double headX = containerW - glowRadius;   // == trailLength
-            double centerY = containerH / 2;            // == glowRadius
+            double headX = containerW - glowRadius; 
+            double centerY = containerH / 2;        
 
             s.HeadOffsetX = headX;
             s.HeadOffsetY = centerY;
 
-            // ── Container: Canvas (children positioned explicitly) ──────────────
             var container = new Canvas
             {
                 Width = containerW,
@@ -573,19 +555,18 @@ namespace FountOfHopeStudyBiblePC.Controls
                 RenderTransform = new RotateTransform(rotationDeg),
             };
 
-            // ── Trail: Polygon with Stretch=None and explicit Canvas position ───
             var trail = new Polygon
             {
-                Points = new PointCollection
-        {
+                Points =
+        [
             new Point(headX, centerY - coreRadius * 0.8),
             new Point(0,     centerY),
             new Point(headX, centerY + coreRadius * 0.8),
-        },
+        ],
                 Fill = new LinearGradientBrush
                 {
-                    StartPoint = new Point(1, 0.5),  // head side
-                    EndPoint = new Point(0, 0.5),  // tail side
+                    StartPoint = new Point(1, 0.5),
+                    EndPoint = new Point(0, 0.5),  
                     GradientStops =
             {
                 new GradientStop(Color.FromArgb(204, color.R, color.G, color.B), 0),
@@ -600,7 +581,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             Canvas.SetTop(trail, 0);
             container.Children.Add(trail);
 
-            // ── Glow (centered on head) ─────────────────────────────────────────
             var glow = new Ellipse
             {
                 Width = glowRadius * 2,
@@ -618,7 +598,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             Canvas.SetTop(glow, centerY - glowRadius);
             container.Children.Add(glow);
 
-            // ── Core (small white dot at head) ──────────────────────────────────
             var core = new Ellipse
             {
                 Width = coreRadius * 2,
@@ -654,7 +633,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                 double currentY = s.StartY + (s.EndY - s.StartY) * s.Progress;
                 if (double.IsNaN(currentX) || double.IsNaN(currentY)) continue;
 
-                // Head lands exactly at (currentX, currentY) — offset removed.
                 Canvas.SetLeft(s.Element, currentX - s.HeadOffsetX);
                 Canvas.SetTop(s.Element, currentY - s.HeadOffsetY);
 
@@ -761,15 +739,11 @@ namespace FountOfHopeStudyBiblePC.Controls
                 s.Progress += dt * 1000 / s.DurationMs;
                 if (s.Progress >= 1) s.Progress -= 1;
 
-                // Wobble oscillates -1 → 1 with mirror (like Kotlin AutoReverse)
                 s.WobbleProgress += dt * 1000 / s.WobbleDurationMs * s.WobbleDir;
                 if (s.WobbleProgress >= 1) { s.WobbleProgress = 1; s.WobbleDir = -1; }
                 if (s.WobbleProgress <= -1) { s.WobbleProgress = -1; s.WobbleDir = 1; }
 
-                // Sine-wave easing to match Kotlin SineWaveEasing
-                double wobble = Math.Sin((s.WobbleProgress + 1) * 0.5 * Math.PI * 0.5);
-                // Remap: Kotlin wobble is -1..1 linear eased by sine(frac*PI/2), where frac goes 0→1→0
-                // Simpler: use raw wobble -1..1 through sine shaping
+                _ = Math.Sin((s.WobbleProgress + 1) * 0.5 * Math.PI * 0.5);
                 double wobbleSine = Math.Sin((s.WobbleProgress * 0.5 + 0.5) * Math.PI * 0.5) * 2 - 1;
 
                 double x = s.LeftPercent * w + wobbleSine * s.WobbleMaxPx;
@@ -777,13 +751,10 @@ namespace FountOfHopeStudyBiblePC.Controls
 
                 Canvas.SetLeft(s.Element, x);
                 Canvas.SetTop(s.Element, y);
-                if (s.Rotate is not null) s.Rotate.Angle = s.Progress * s.RotationSpeed;
+                s.Rotate?.Angle = s.Progress * s.RotationSpeed;
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  ORBS  — faithful port of Kotlin FloatingOrbsBackground()
-        // ═══════════════════════════════════════════════════════════════
         private sealed class OrbState
         {
             public Ellipse Element = null!;
@@ -794,7 +765,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             public double PulsePhase, PulseSpeed;
             public double ShapePhase, ShapeSpeed;
             public double Alpha, TargetMaxAlpha, AlphaSpeed;
-            public int State;   // 0 idle, 1 fade-in, 2 hold, 3 fade-out
+            public int State; 
             public double HoldTimer;
         }
 
@@ -973,13 +944,8 @@ namespace FountOfHopeStudyBiblePC.Controls
         }
     }
 
-    public sealed class InspirationalVerseRef
+    public sealed class InspirationalVerseRef(int b, int c, int v, int? end = null)
     {
-        public int BookNumber { get; }
-        public int Chapter { get; }
-        public int Verse { get; }
-        public int? EndVerse { get; }
-        public InspirationalVerseRef(int b, int c, int v, int? end = null)
-        { BookNumber = b; Chapter = c; Verse = v; EndVerse = end; }
+        public int BookNumber { get; } = b; public int Chapter { get; } = c; public int Verse { get; } = v; public int? EndVerse { get; } = end;
     }
 }

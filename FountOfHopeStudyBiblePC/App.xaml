@@ -6,7 +6,6 @@
     <Application.Resources>
         <ResourceDictionary>
 
-            <!-- ══ DYNAMIC THEME BRUSHES (updated by MainWindow.ApplyTheme) ══ -->
             <SolidColorBrush x:Key="AppBackground"     Color="#FF101418"/>
             <SolidColorBrush x:Key="CardBackground"    Color="#FF1C2128"/>
             <SolidColorBrush x:Key="CardBackgroundAlt" Color="#FF232A33"/>
@@ -14,22 +13,10 @@
             <SolidColorBrush x:Key="OnSurfaceVariant"  Color="#FFAAB4C0"/>
             <SolidColorBrush x:Key="DividerBrush"      Color="#22FFFFFF"/>
             <SolidColorBrush x:Key="HoverOverlayBrush" Color="#33FFFFFF"/>
-
-            <!-- ══ DYNAMIC PRIMARY (updated by MainWindow.ApplyTheme) ══ -->
             <Color x:Key="AppPrimaryColor">#FF7FB2FF</Color>
             <SolidColorBrush x:Key="AppPrimaryBrush" Color="{DynamicResource AppPrimaryColor}"/>
             <SolidColorBrush x:Key="AccentBrush"     Color="{DynamicResource AppPrimaryColor}"/>
 
-            <!-- ═══════════════════════════════════════════════════════════
-                 MODERN SCROLLBAR — Material 3 style, applied app-wide
-                 ─ Thumb: 8px wide, rounded pill, 60% opacity idle
-                 ─ Track: invisible (transparent) with no arrow buttons
-                 ─ Page-click still works: invisible repeat buttons
-                 ─ Theme-aware via DynamicResource OnSurfaceVariant
-
-                 Declared BEFORE ModernScrollBar because ModernScrollBar
-                 references ModernScrollBarThumb via StaticResource.
-                 ═══════════════════════════════════════════════════════════ -->
             <Style x:Key="ModernScrollBarThumb" TargetType="Thumb">
                 <Setter Property="OverridesDefaultStyle" Value="True"/>
                 <Setter Property="IsTabStop" Value="False"/>
@@ -96,11 +83,8 @@
                 </Style.Triggers>
             </Style>
 
-            <!-- Implicit style — applies to every ScrollBar in the app that
-                 doesn't explicitly override the style itself. -->
             <Style TargetType="ScrollBar" BasedOn="{StaticResource ModernScrollBar}"/>
 
-            <!-- ══ Quick-action tile style ══ -->
             <Style x:Key="QuickActionButtonStyle" TargetType="Button">
                 <Setter Property="Width" Value="112"/>
                 <Setter Property="Height" Value="132"/>
@@ -156,7 +140,6 @@
                 </Setter>
             </Style>
 
-            <!-- ══ Icon button ══ -->
             <Style x:Key="IconButtonStyle" TargetType="Button">
                 <Setter Property="Width" Value="38"/>
                 <Setter Property="Height" Value="38"/>
@@ -183,7 +166,6 @@
                 </Setter>
             </Style>
 
-            <!-- ══ Devotional list item ══ -->
             <Style x:Key="DevotionalButtonStyle" TargetType="Button">
                 <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                 <Setter Property="Cursor" Value="Hand"/>
@@ -206,7 +188,6 @@
                 </Setter>
             </Style>
 
-            <!-- ══ Useful-space tile ══ -->
             <Style x:Key="UsefulTileStyle" TargetType="Button">
                 <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="Margin" Value="6"/>

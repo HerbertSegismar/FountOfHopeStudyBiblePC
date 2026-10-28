@@ -3,7 +3,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks">
     <Grid>
-        <!-- Left: back -->
         <Button x:Name="BackButton" Click="BackButton_Click"
                 Width="30" Height="30" HorizontalAlignment="Left"
                 VerticalAlignment="Center" Margin="6,0,0,0"
@@ -16,10 +15,8 @@
                                         VerticalAlignment="Center"/>
         </Button>
 
-        <!-- Center: title row (content-sized, capped) -->
         <Grid x:Name="TitleRow" Margin="40,0,300,0" VerticalAlignment="Center">
             <Grid.ColumnDefinitions>
-                <!-- Auto + MaxWidth = "just wide enough for the reference, never wider" -->
                 <ColumnDefinition x:Name="TitleBookCol"    Width="Auto" MaxWidth="240"/>
                 <ColumnDefinition x:Name="TitleVersionCol" Width="Auto" MaxWidth="100"/>
             </Grid.ColumnDefinitions>
@@ -42,7 +39,6 @@
             </Button>
         </Grid>
 
-        <!-- Right: action buttons -->
         <StackPanel x:Name="ActionsPanel" Orientation="Horizontal"
                     HorizontalAlignment="Right" VerticalAlignment="Center"
                     Margin="0,0,8,0"/>

@@ -1,13 +1,11 @@
-﻿// Controls/ChapterView.xaml.cs
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Media.Media3D;
+using System.Windows.Threading;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
@@ -43,14 +41,16 @@ namespace FountOfHopeStudyBiblePC.Controls
         private readonly bool _scrollSyncEnabled;
 
         private int? _highlightedVerse;
-        private readonly Dictionary<int, int> _crossRefCounts = new();
-        private readonly List<SelectedWord> _selectedWords = new();
-        private readonly Dictionary<int, List<SelectedWord>> _groupedHighlights = new();
+        private readonly Dictionary<int, int> _crossRefCounts = [];
+        private readonly List<SelectedWord> _selectedWords = [];
+        private readonly Dictionary<int, List<SelectedWord>> _groupedHighlights = [];
         private Color _markerColor;
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Constructor
-        // ═══════════════════════════════════════════════════════════════
+        private Run? _dragStartRun;
+        private Run? _dragEndRun;
+        private bool _isWordDragActive;
+        private readonly Dictionary<Run, Brush?> _previewOriginals = [];
+
         public ChapterView(
             PassageSelection passage,
             List<VerseContent> content,
@@ -104,9 +104,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             Loaded += OnLoaded;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Lifecycle
-        // ═══════════════════════════════════════════════════════════════
         private void OnViewModelPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
         {
             switch (e.PropertyName)
@@ -126,7 +123,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                     RenderAll();
                     break;
 
-                // ── Field only, NO re-render ────────────────────────────
                 case nameof(AppViewModel.WordMarkerColor):
                     _markerColor = _viewModel.WordMarkerColor;
                     break;
@@ -138,8 +134,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             LoadCrossRefCounts();
             LoadWordHighlights();
 
-            // Determine target BEFORE the first render so the temp
-            // highlight is included in the initial paint.
             bool hasTarget = _isCurrentPage && _targetVerse.HasValue && _targetVerse.Value > 0;
             if (hasTarget)
             {
@@ -161,7 +155,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                             .ContainerFromIndex(targetIdx) as FrameworkElement;
                         container?.BringIntoView();
                     }
-                    HighlightTargetVerse();   // start the 2-second clear timer
+                    HighlightTargetVerse(); 
                     _onInitialScrollComplete();
                 }), System.Windows.Threading.DispatcherPriority.Loaded);
             }
@@ -171,9 +165,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Background rendering
-        // ═══════════════════════════════════════════════════════════════
         private void ApplyBackground()
         {
             var bgIndex = _viewModel.BgImageIndex;
@@ -229,9 +220,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             OverlayBorder.Visibility = Visibility.Visible;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Header
-        // ═══════════════════════════════════════════════════════════════
         private void UpdateInlineHeader()
         {
             InlineBookText.Text = _passage.BookName;
@@ -243,9 +231,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             InlineThemeIcon.Text = _viewModel.DarkTheme ? "☀" : "☾";
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Caches
-        // ═══════════════════════════════════════════════════════════════
         private void LoadCrossRefCounts()
         {
             _crossRefCounts.Clear();
@@ -274,19 +259,19 @@ namespace FountOfHopeStudyBiblePC.Controls
             foreach (var w in _selectedWords)
             {
                 if (!_groupedHighlights.TryGetValue(w.VerseNumber, out var list))
-                    _groupedHighlights[w.VerseNumber] = list = new List<SelectedWord>();
+                    _groupedHighlights[w.VerseNumber] = list = [];
                 list.Add(w);
             }
         }
 
         private void RenderAll()
         {
-            // ── CRITICAL: clear the processor cache before every render.
-            //    The cache stores ProcessedVerse objects that hold WPF Run
-            //    instances. Runs can only belong to one parent at a time, so
-            //    re-adding cached runs to a new TextBlock throws. Clearing the
-            //    cache forces ProcessVerse to build fresh runs each render.
             _processor.ClearCache();
+
+            ClearPreview();
+            _dragStartRun = null;
+            _dragEndRun = null;
+            _isWordDragActive = false;
 
             VerseItems.Items.Clear();
 
@@ -307,7 +292,7 @@ namespace FountOfHopeStudyBiblePC.Controls
         private Color GetThemeColor()
             => _viewModel.SelectedColor ?? (Color)ColorConverter.ConvertFromString("#FF7FB2FF");
 
-        private FrameworkElement BuildSubheadingBlock(Subheading sub)
+        private TextBlock BuildSubheadingBlock(Subheading sub)
         {
             var theme = GetThemeColor();
             return new TextBlock
@@ -322,7 +307,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             };
         }
 
-        private FrameworkElement BuildVerseBlock(Verse verse)
+        private Border BuildVerseBlock(Verse verse)
         {
             var fullVerse = verse with
             {
@@ -358,7 +343,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                 Cursor = Cursors.Hand,
             };
 
-            // Verse number (offset 0). Body runs start after this.
             tb.Inlines.Add(new Run($"{verse.VerseNumber} ")
             {
                 FontWeight = FontWeights.Bold,
@@ -392,8 +376,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                 options: new ProcessingOptions
                 {
                     ShowStrongs = _viewModel.ShowStrongs,
-                    // Word annotations are always created so clicks fire
-                    // in both Dictionary and Highlight modes.
                     EnableWordClick = true,
                     EnableStrongsClick = _onStrongsPress != null,
                     EnableTagClick = _onTagPress != null,
@@ -405,21 +387,9 @@ namespace FountOfHopeStudyBiblePC.Controls
                     _onTagPress?.Invoke(m, _passage.BookNumber, _passage.Chapter,
                                         verseNumber, _isPrimary));
 
-            // ── DIAGNOSTIC: log every verse built, so we can spot blanks
-            //    without guessing. Fires for every verse, not just empty ones,
-            //    so we can confirm the whole chapter is being processed.
-            App.Log($"BuildVerseBlock: v={verse.VerseNumber} " +
-                    $"rawLen={verse.Text?.Length ?? -1} " +
-                    $"bodyCount={processed.Body.Count} " +
-                    $"raw=<{(verse.Text is { Length: > 0 } s ? s.Substring(0, Math.Min(80, s.Length)) : "")}>");
-
             foreach (var inline in processed.Body)
                 tb.Inlines.Add(inline);
 
-            // ── FALLBACK: if ProcessVerse produced no visible body for a
-            //    non-empty verse.Text, render the tag-stripped raw text so
-            //    the verse never appears blank. This covers unknown tag
-            //    shapes that the parser hasn't been taught yet.
             if (processed.Body.Count == 0 && !string.IsNullOrWhiteSpace(verse.Text))
             {
                 var stripped = System.Text.RegularExpressions.Regex
@@ -447,17 +417,13 @@ namespace FountOfHopeStudyBiblePC.Controls
                 {
                     Foreground = new SolidColorBrush(theme),
                     FontWeight = FontWeights.Bold,
-                    // Must be an EMPTY collection, not null — Hyperlink re-adds the
-                    // default underline if you set null.
-                    TextDecorations = new TextDecorationCollection(),
+                    TextDecorations = [],
                     Cursor = Cursors.Hand,
                     ToolTip = refCount == 1
                         ? "View cross-reference"
                         : $"View {refCount} cross-references",
                 };
 
-                // Capture values at build time so a rapid double-click can't mis-fire
-                // against a newer verse.
                 var capturedBook = _passage.BookNumber;
                 var capturedChapter = _passage.Chapter;
                 var capturedVerse = verse.VerseNumber;
@@ -466,25 +432,15 @@ namespace FountOfHopeStudyBiblePC.Controls
 
                 refLink.Click += (s, e) =>
                 {
-                    // Stop the click bubbling up to VerseTextBlock_MouseLeftButtonUp —
-                    // otherwise the verse-level handler would also run and return early
-                    // with no visible effect, but we don't want it touching the event.
                     e.Handled = true;
-
-                    App.Log($"[CrossRefBadge] clicked b={capturedBook} " +
-                            $"c={capturedChapter} v={capturedVerse} primary={capturedPrimary}");
 
                     if (capturedCallback == null)
                     {
-                        App.Log("[CrossRefBadge] _onCrossRefClick is NULL — " +
-                                "check ReaderScreen.RenderCurrentMode wiring");
                         return;
                     }
 
                     capturedCallback(capturedBook, capturedChapter, capturedVerse, capturedPrimary);
                 };
-
-                // Widen the hit target — a single "[8]" is otherwise ~6px wide.
                 refLink.Inlines.Add(new Run("\u200B")
                 {
                     Foreground = Brushes.Transparent,
@@ -494,23 +450,19 @@ namespace FountOfHopeStudyBiblePC.Controls
                 tb.Inlines.Add(refLink);
             }
 
-            // ── [C] — verse-commentary marker ─────────────────────────────────
             if (_viewModel.IsStudyMode)
             {
                 tb.Inlines.Add(new Run(" "));
 
-                var commLink = new Hyperlink(new Run("[C]"))
+                var commLink = new Hyperlink(new Run("*"))
                 {
                     Foreground = new SolidColorBrush(theme),
                     FontWeight = FontWeights.Bold,
-                    // Empty collection (not null) — Hyperlink re-adds default underline
-                    // if you pass null.
-                    TextDecorations = new TextDecorationCollection(),
+                    TextDecorations = [],
                     Cursor = Cursors.Hand,
                     ToolTip = "Open verse commentary",
                 };
 
-                // Capture at build time — safe against rapid re-renders.
                 var cBook = _passage.BookNumber;
                 var cChap = _passage.Chapter;
                 var cVerse = verse.VerseNumber;
@@ -518,22 +470,16 @@ namespace FountOfHopeStudyBiblePC.Controls
 
                 commLink.Click += (s, e) =>
                 {
-                    e.Handled = true;   // don't let the verse-level click handler
-                                        // try to hit-test into the Hyperlink
-
-                    App.Log($"[CommentaryBadge] clicked b={cBook} c={cChap} v={cVerse}");
+                    e.Handled = true;
 
                     if (cCallback == null)
                     {
-                        App.Log("[CommentaryBadge] _onVerseCommentaryClick is NULL — " +
-                                "check ReaderScreen.RenderCurrentMode wiring");
                         return;
                     }
 
                     cCallback(cBook, cChap, cVerse);
                 };
 
-                // Widen the hit target from ~6px to the full "[C]" + margin.
                 commLink.Inlines.Add(new Run("\u200B")
                 {
                     Foreground = Brushes.Transparent,
@@ -544,7 +490,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             }
 
             _groupedHighlights.TryGetValue(verse.VerseNumber, out var highlights);
-            ApplyWordHighlights(tb, highlights ?? new List<SelectedWord>());
+            ApplyWordHighlights(tb, highlights ?? []);
 
             tb.MouseLeftButtonUp += VerseTextBlock_MouseLeftButtonUp;
             tb.MouseRightButtonUp += (_, e) =>
@@ -555,7 +501,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
                     _onVerseLongPress?.Invoke(v, p);
-                }), System.Windows.Threading.DispatcherPriority.Background);
+                }), DispatcherPriority.Background);
             };
 
             return new Border
@@ -567,12 +513,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             };
         }
 
-        /// <summary>
-        /// Applies persisted word highlights from the DB by matching character
-        /// offsets against each body Run. Clears any stale Background first —
-        /// important because VerseTextProcessor caches the Run objects across
-        /// renders, so a previous highlight would otherwise stick around.
-        /// </summary>
         private static void ApplyWordHighlights(TextBlock tb, List<SelectedWord> highlights)
         {
             var inlines = tb.Inlines.ToList();
@@ -582,8 +522,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             foreach (var inline in inlines)
             {
                 if (inline is not Run run) continue;
-
-                // ── KEY FIX: clear stale background from the cached Run ──
                 run.Background = null;
 
                 if (!skippedVerseNumber)
@@ -611,9 +549,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Click handling
-        // ═══════════════════════════════════════════════════════════════
         private void VerseTextBlock_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             if (sender is not TextBlock tb) return;
@@ -626,9 +561,6 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             var run = pos.Parent as Run;
 
-            // Fallback: if pos.Parent isn't a Run (click landed on the
-            // background rectangle WPF renders behind a highlighted Run),
-            // find the Run at that character offset.
             if (run == null)
             {
                 run = FindRunAtPosition(tb, pos);
@@ -657,10 +589,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             }
         }
 
-        /// <summary>
-        /// Finds the Run whose character span contains the TextPointer.
-        /// Used as a fallback when pos.Parent is not directly a Run.
-        /// </summary>
         private static Run? FindRunAtPosition(TextBlock tb, TextPointer pos)
         {
             var start = tb.ContentStart;
@@ -680,14 +608,10 @@ namespace FountOfHopeStudyBiblePC.Controls
 
         private void ToggleWordHighlight(Verse verse, Run run)
         {
-            // Clear the "just navigated here" highlight so it doesn't
-            // re-appear when we re-render below.
             _highlightedVerse = null;
 
-            var tb = run.Parent as TextBlock;
-            if (tb == null) return;
+            if (run.Parent is not TextBlock tb) return;
 
-            // Compute body-relative offset by skipping the verse number Run.
             int start = 0;
             bool found = false;
             bool skippedVerseNumber = false;
@@ -712,22 +636,14 @@ namespace FountOfHopeStudyBiblePC.Controls
                 Chapter = _passage.Chapter,
             };
 
-            // Find ALL overlapping entries, not just exact matches.
-            // Handles offset drift between renders and cleans up
-            // duplicate entries from earlier buggy toggles.
             var overlapping = _selectedWords
                 .Where(w => w.VerseNumber == verse.VerseNumber
                             && w.Start < end
                             && w.End > start)
                 .ToList();
 
-            App.Log($"ToggleWordHighlight: v={verse.VerseNumber}, " +
-                    $"[{start},{end}], overlapping={overlapping.Count}, " +
-                    $"runBg={(run.Background != null)}");
-
             if (overlapping.Count > 0)
             {
-                // ── TOGGLE OFF: remove every overlapping highlight ──
                 foreach (var entry in overlapping)
                 {
                     _selectedWords.Remove(entry);
@@ -736,7 +652,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             }
             else
             {
-                // ── TOGGLE ON ──
                 var sw = new SelectedWord(verse.VerseNumber, start, end, _markerColor);
                 _selectedWords.Add(sw);
                 if (_databaseHelper != null)
@@ -747,12 +662,11 @@ namespace FountOfHopeStudyBiblePC.Controls
                 }
             }
 
-            // Rebuild grouped highlights
             _groupedHighlights.Clear();
             foreach (var w in _selectedWords)
             {
                 if (!_groupedHighlights.TryGetValue(w.VerseNumber, out var list))
-                    _groupedHighlights[w.VerseNumber] = list = new List<SelectedWord>();
+                    _groupedHighlights[w.VerseNumber] = list = [];
                 list.Add(w);
             }
 
@@ -760,9 +674,228 @@ namespace FountOfHopeStudyBiblePC.Controls
             RenderAll();
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Scroll helpers
-        // ═══════════════════════════════════════════════════════════════
+        public bool BeginWordDrag(Point positionInChapterView)
+        {
+            var run = FindWordRunAt(positionInChapterView);
+            if (run == null) return false;
+
+            _dragStartRun = run;
+            _dragEndRun = run;
+            _isWordDragActive = true;
+            return true;
+        }
+
+        public void UpdateWordDrag(Point positionInChapterView)
+        {
+            if (!_isWordDragActive) return;
+
+            var run = FindWordRunAt(positionInChapterView);
+            if (run != null) _dragEndRun = run;
+
+            UpdatePreview();
+        }
+
+        public void CommitWordDrag()
+        {
+            if (!_isWordDragActive || _dragStartRun == null || _dragEndRun == null)
+            {
+                CancelWordDrag();
+                return;
+            }
+
+            var runs = EnumerateAllWordRuns().ToList();
+            int a = runs.IndexOf(_dragStartRun);
+            int b = runs.IndexOf(_dragEndRun);
+
+            if (a < 0 || b < 0 || a == b)
+            {
+                CancelWordDrag();
+                return;
+            }
+
+            int lo = Math.Min(a, b);
+            int hi = Math.Max(a, b);
+
+            _highlightedVerse = null;
+
+            bool anyAdded = false;
+
+            for (int i = lo; i <= hi; i++)
+            {
+                var span = GetWordSpan(runs[i]);
+                if (span == null) continue;
+                var (verse, _, start, end) = span.Value;
+                if (end <= start) continue;
+
+                bool already = _selectedWords.Any(w =>
+                    w.VerseNumber == verse.VerseNumber
+                    && w.Start < end
+                    && w.End > start);
+                if (already) continue;
+
+                var fullVerse = verse with
+                {
+                    BookName = _passage.BookName,
+                    Chapter = _passage.Chapter,
+                };
+
+                _selectedWords.Add(new SelectedWord(verse.VerseNumber, start, end, _markerColor));
+                anyAdded = true;
+
+                if (_databaseHelper != null)
+                {
+                    var argb = (_markerColor.A << 24) | (_markerColor.R << 16) |
+                               (_markerColor.G << 8) | _markerColor.B;
+                    _databaseHelper.AddWordHighlight(fullVerse, start, end, argb);
+                }
+            }
+
+            _dragStartRun = null;
+            _dragEndRun = null;
+            _isWordDragActive = false;
+            ClearPreview();
+
+            if (!anyAdded) return;
+
+            _groupedHighlights.Clear();
+            foreach (var w in _selectedWords)
+            {
+                if (!_groupedHighlights.TryGetValue(w.VerseNumber, out var list))
+                    _groupedHighlights[w.VerseNumber] = list = [];
+                list.Add(w);
+            }
+
+            _onWordHighlightAction?.Invoke();
+            RenderAll();
+        }
+
+        public void CancelWordDrag()
+        {
+            _dragStartRun = null;
+            _dragEndRun = null;
+            _isWordDragActive = false;
+            ClearPreview();
+        }
+
+        private void UpdatePreview()
+        {
+            if (_dragStartRun == null || _dragEndRun == null) return;
+
+            var runs = EnumerateAllWordRuns().ToList();
+            int a = runs.IndexOf(_dragStartRun);
+            int b = runs.IndexOf(_dragEndRun);
+            if (a < 0 || b < 0) return;
+
+            int lo = Math.Min(a, b);
+            int hi = Math.Max(a, b);
+
+            var inRange = new HashSet<Run>();
+            for (int i = lo; i <= hi; i++) inRange.Add(runs[i]);
+
+            foreach (var r in _previewOriginals.Keys.ToList())
+            {
+                if (!inRange.Contains(r))
+                {
+                    r.Background = _previewOriginals[r];
+                    _previewOriginals.Remove(r);
+                }
+            }
+
+            var brush = new SolidColorBrush(_markerColor) { Opacity = 0.4 };
+            foreach (var r in inRange)
+            {
+                if (!_previewOriginals.ContainsKey(r))
+                {
+                    _previewOriginals[r] = r.Background;
+                    r.Background = brush;
+                }
+            }
+        }
+
+        private void ClearPreview()
+        {
+            foreach (var kvp in _previewOriginals)
+                kvp.Key.Background = kvp.Value;
+            _previewOriginals.Clear();
+        }
+
+        private Run? FindWordRunAt(Point positionInChapterView)
+        {
+            if (InputHitTest(positionInChapterView) is not DependencyObject hit) return null;
+
+            TextBlock? tb = null;
+            var current = hit;
+            while (current != null)
+            {
+                if (current is TextBlock t && t.Tag is Verse) { tb = t; break; }
+                current = GetNodeParent(current);
+            }
+            if (tb == null) return null;
+
+            var local = this.TranslatePoint(positionInChapterView, tb);
+            var pos = tb.GetPositionFromPoint(local, snapToText: true);
+            if (pos == null) return null;
+
+            var run = pos.Parent as Run ?? FindRunAtPosition(tb, pos);
+            if (run == null) return null;
+
+            return run.Tag is VerseAnnotation { Tag: "word" } ? run : null;
+        }
+
+        private static DependencyObject? GetNodeParent(DependencyObject node)
+        {
+            if (node is Visual || node is Visual3D)
+                return VisualTreeHelper.GetParent(node);
+
+            if (node is FrameworkContentElement fce)
+                return fce.Parent;
+
+            return null;
+        }
+        private IEnumerable<Run> EnumerateAllWordRuns()
+        {
+            for (int i = 0; i < _content.Count; i++)
+            {
+                if (_content[i] is not VerseContent.VerseVal) continue;
+
+                if (VerseItems.ItemContainerGenerator
+                    .ContainerFromIndex(i) is not FrameworkElement container) continue;
+
+                TextBlock? tb = container as TextBlock
+                    ?? (container as Border)?.Child as TextBlock;
+                if (tb == null) continue;
+
+                foreach (var inline in tb.Inlines)
+                    if (inline is Run r && r.Tag is VerseAnnotation { Tag: "word" })
+                        yield return r;
+            }
+        }
+
+        private static (Verse verse, TextBlock tb, int start, int end)? GetWordSpan(Run run)
+        {
+            if (run.Tag is not VerseAnnotation { Tag: "word" }) return null;
+            if (run.Parent is not TextBlock tb) return null;
+            if (tb.Tag is not Verse verse) return null;
+
+            int start = 0;
+            bool found = false;
+            bool skippedVerseNumber = false;
+
+            foreach (var inline in tb.Inlines)
+            {
+                if (ReferenceEquals(inline, run)) { found = true; break; }
+                if (inline is not Run r) continue;
+                if (!skippedVerseNumber) { skippedVerseNumber = true; continue; }
+                start += r.Text?.Length ?? 0;
+            }
+
+            if (!found) return null;
+
+            int len = run.Text?.Length ?? 0;
+            if (len <= 0) return null;
+            return (verse, tb, start, start + len);
+        }
+
         private int FindVerseIndex(int verseNumber)
         {
             for (int i = 0; i < _content.Count; i++)
@@ -782,9 +915,8 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             for (int i = 0; i < VerseItems.Items.Count; i++)
             {
-                var container = VerseItems.ItemContainerGenerator
-                    .ContainerFromIndex(i) as FrameworkElement;
-                if (container == null) return null;
+                if (VerseItems.ItemContainerGenerator
+                    .ContainerFromIndex(i) is not FrameworkElement container) return null;
                 double h = container.ActualHeight;
                 if (h <= 0) return null;
 
@@ -804,9 +936,8 @@ namespace FountOfHopeStudyBiblePC.Controls
             double accumulated = 0;
             for (int i = 0; i < verseIndex && i < VerseItems.Items.Count; i++)
             {
-                var container = VerseItems.ItemContainerGenerator
-                    .ContainerFromIndex(i) as FrameworkElement;
-                if (container != null) accumulated += container.ActualHeight;
+                if (VerseItems.ItemContainerGenerator
+                    .ContainerFromIndex(i) is FrameworkElement container) accumulated += container.ActualHeight;
             }
 
             sv.ScrollToVerticalOffset(accumulated + offsetFromTop);
@@ -814,7 +945,7 @@ namespace FountOfHopeStudyBiblePC.Controls
 
         private void HighlightTargetVerse()
         {
-            var timer = new System.Windows.Threading.DispatcherTimer
+            var timer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(2)
             };
@@ -827,9 +958,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             timer.Start();
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Header button handlers
-        // ═══════════════════════════════════════════════════════════════
         private void InlineBookChapterBtn_Click(object sender, RoutedEventArgs e)
         {
             if (_scrollSyncEnabled || _isPrimary)

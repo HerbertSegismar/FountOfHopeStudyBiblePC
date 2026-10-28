@@ -1,6 +1,4 @@
-﻿// Controls/ColorWheelControl.cs
-using System;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using FountOfHopeStudyBiblePC.Helpers;
@@ -49,9 +47,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             Cursor = Cursors.Hand;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Rendering
-        // ═══════════════════════════════════════════════════════════
         protected override void OnRender(DrawingContext dc)
         {
             base.OnRender(dc);
@@ -64,7 +59,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             Point center = new(w / 2.0, h / 2.0);
             double brightness = Brightness;
 
-            // ── 90 hue arcs at 4° each with 0.5° overlap ──
             for (int i = 0; i < 90; i++)
             {
                 double startAngle = i * 4.0;
@@ -77,10 +71,9 @@ namespace FountOfHopeStudyBiblePC.Controls
                 DrawArc(dc, center, radius, startAngle, sweepAngle, brush);
             }
 
-            // ── Radial white overlay: opacity ~0.7 at center, 0 at edge ──
             var overlayBrush = new RadialGradientBrush(
-                Color.FromArgb(0xB3, 0xFF, 0xFF, 0xFF),   // ~70% white
-                Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF))   // transparent
+                Color.FromArgb(0xB3, 0xFF, 0xFF, 0xFF),
+                Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF))
             {
                 GradientOrigin = new Point(0.5, 0.5),
                 Center = new Point(0.5, 0.5),
@@ -90,7 +83,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             overlayBrush.Freeze();
             dc.DrawEllipse(overlayBrush, null, center, radius, radius);
 
-            // ── Indicator at current hue/sat ──
             var (hueNow, satNow, _) = ColorHelpers.ToHsv(SelectedColor);
             double rad = hueNow * Math.PI / 180.0;
             double indicatorRadius = satNow * radius;
@@ -98,23 +90,19 @@ namespace FountOfHopeStudyBiblePC.Controls
                 center.X + indicatorRadius * Math.Cos(rad),
                 center.Y + indicatorRadius * Math.Sin(rad));
 
-            // Line from center to indicator
             var linePen = new Pen(
                 new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)), 1);
             linePen.Freeze();
             dc.DrawLine(linePen, center, indicator);
 
-            // White ring
             var ringPen = new Pen(Brushes.White, 2);
             ringPen.Freeze();
             dc.DrawEllipse(null, ringPen, indicator, 11, 11);
 
-            // Solid color fill
             var fillBrush = new SolidColorBrush(SelectedColor);
             fillBrush.Freeze();
             dc.DrawEllipse(fillBrush, null, indicator, 8, 8);
 
-            // Center dot
             var centerDot = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF));
             centerDot.Freeze();
             dc.DrawEllipse(centerDot, null, center, 2, 2);
@@ -152,9 +140,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             dc.DrawGeometry(brush, null, geometry);
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Mouse interaction
-        // ═══════════════════════════════════════════════════════════
         protected override void OnMouseDown(MouseButtonEventArgs e)
         {
             base.OnMouseDown(e);
@@ -190,7 +175,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             double radius = Math.Min(ActualWidth, ActualHeight) / 2.0 - 4;
             Point center = new(ActualWidth / 2.0, ActualHeight / 2.0);
 
-            // Clamp to circle so dragging outside the wheel doesn't snap hue
             double dx = pt.X - center.X;
             double dy = pt.Y - center.Y;
             double dist = Math.Sqrt(dx * dx + dy * dy);
@@ -205,7 +189,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                 new Size(ActualWidth, ActualHeight),
                 Brightness);
 
-            // Preserve current alpha
             newColor = Color.FromArgb(SelectedColor.A, newColor.R, newColor.G, newColor.B);
 
             SelectedColor = newColor;

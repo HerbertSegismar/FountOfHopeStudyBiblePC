@@ -1,4 +1,4 @@
-// Views/SettingsScreen.xaml.cs
+﻿// Views/SettingsScreen.xaml.cs
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.ViewModels;
@@ -38,16 +38,34 @@ namespace FountOfHopeStudyBiblePC.Views
                 case nameof(AppViewModel.SelectedFontFamily):
                 case nameof(AppViewModel.IsDictionaryMode):
                 case nameof(AppViewModel.BgImageIndex):
-                // ?? Version changes � rebuild so the version cards refresh ??
+                // ── Version changes — rebuild so the version cards refresh ──
                 case nameof(AppViewModel.CurrentDbName):
                 case nameof(AppViewModel.CurrentVersionAbbr):
                 case nameof(AppViewModel.SecondaryDbName):
                 case nameof(AppViewModel.SecondaryVersionAbbr):
-                // ?? Mode flips that affect which controls are visible ??
+                // ── Mode flips that affect which controls are visible ──
                 case nameof(AppViewModel.IsStudyMode):
                 case nameof(AppViewModel.ShowStrongs):
                 case nameof(AppViewModel.ScrollSync):
                 case nameof(AppViewModel.SquareAspectViews):
+                // ── Color changes — refresh swatches + selected presets ──
+                case nameof(AppViewModel.HeaderButtonsColor):
+                case nameof(AppViewModel.SelectedColor):
+                case nameof(AppViewModel.IsCustomColor):
+                case nameof(AppViewModel.CustomColor):
+                case nameof(AppViewModel.WordsOfJesus):
+                case nameof(AppViewModel.VerseMarkerColor):
+                case nameof(AppViewModel.WordMarkerColor):
+                case nameof(AppViewModel.DarkModalBackgroundColor):
+                case nameof(AppViewModel.LightModalBackgroundColor):
+                case nameof(AppViewModel.DarkThemeReaderFontColor):
+                case nameof(AppViewModel.LightThemeReaderFontColor):
+                case nameof(AppViewModel.DarkOverlayColor):
+                case nameof(AppViewModel.LightOverlayColor):
+                // ── Numeric values edited outside the settings screen ──
+                case nameof(AppViewModel.FontSize):
+                case nameof(AppViewModel.OrbsCount):
+                case nameof(AppViewModel.OverlayOpacity):
                     Dispatcher.BeginInvoke(new Action(RebuildAll),
                         System.Windows.Threading.DispatcherPriority.Background);
                     break;
@@ -82,7 +100,6 @@ namespace FountOfHopeStudyBiblePC.Views
 
             content.Children.Add(BuildLabel("Color Scheme"));
 
-            // Preset color buttons + custom
             var colorStrip = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
             foreach (var theme in PredefinedColorThemes.All)
             {
@@ -108,6 +125,13 @@ namespace FountOfHopeStudyBiblePC.Views
 
             content.Children.Add(colorStrip);
 
+            content.Children.Add(BuildDivider());
+            content.Children.Add(BuildColorRow(
+                "App Bar Contents Color",
+                "App bar text and buttons color",
+                _viewModel.HeaderButtonsColor,
+                () => _viewModel.ShowHeaderButtonsColorWheel = true));
+
             return BuildSectionBorder("App Settings", "Customize app appearance", content);
         }
 
@@ -115,7 +139,6 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             var content = new StackPanel();
 
-            // -- Primary version card --
             content.Children.Add(BuildVersionCard(
                 "Primary Bible Version",
                 _viewModel.CurrentVersionAbbr,
@@ -127,7 +150,6 @@ namespace FountOfHopeStudyBiblePC.Views
                     _viewModel.ShowVersionInfoDialog = true;
                 }));
 
-            // -- Secondary version (multi only) --
             if (_viewModel.MultiVersion)
             {
                 content.Children.Add(BuildVersionCard(
@@ -142,7 +164,6 @@ namespace FountOfHopeStudyBiblePC.Views
                     }));
             }
 
-            // -- Multi-version toggle --
             content.Children.Add(BuildSwitchRow(
                 "Multi-Version Display",
                 "Show two Bible versions side by side",
@@ -168,18 +189,16 @@ namespace FountOfHopeStudyBiblePC.Views
                     v => _viewModel.SquareAspectViews = v));
             }
 
-            // -- Orbs count (if orbs enabled) --
             if (_viewModel.RenderOrbs)
             {
                 content.Children.Add(BuildStepperRow(
-                    "Orbs Count (1�20)",
+                    "Orbs Count (1–20)",
                     "Adjust the number of rendered orbs",
                     _viewModel.OrbsCount,
                     () => _viewModel.OrbsCount = Math.Max(1, _viewModel.OrbsCount - 1),
                     () => _viewModel.OrbsCount = Math.Min(20, _viewModel.OrbsCount + 1)));
             }
 
-            // -- Font family --
             content.Children.Add(BuildLabel("Font Family"));
             var fontStrip = new WrapPanel { Margin = new Thickness(0, 8, 0, 8) };
             foreach (var family in FontsHelper.AvailableFontFamilies)
@@ -191,15 +210,13 @@ namespace FountOfHopeStudyBiblePC.Views
             }
             content.Children.Add(fontStrip);
 
-            // -- Font size --
-            content.Children.Add(BuildStepperRow(
+            content.Children.Add(BuildEditableStepperRow(
                 "Font Size",
-                "Adjust text size",
-                _viewModel.FontSize,
-                () => _viewModel.FontSize = Math.Max(1, _viewModel.FontSize - 1),
-                () => _viewModel.FontSize = Math.Min(100, _viewModel.FontSize + 1)));
+                "Adjust text size (1–100)",
+                () => _viewModel.FontSize,
+                1, 100,
+                v => _viewModel.FontSize = v));
 
-            // -- Study / Dictionary / Strong's toggles --
             content.Children.Add(BuildSwitchRow(
                 "Study Mode",
                 "Show cross-refs and commentary buttons after each verse",
@@ -218,7 +235,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 _viewModel.ShowStrongs,
                 v => _viewModel.ShowStrongs = v));
 
-            // -- Color swatch rows --
             if (!_viewModel.IsDictionaryMode)
             {
                 content.Children.Add(BuildColorRow(
@@ -233,12 +249,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 "Color for the words of the Lord Jesus",
                 _viewModel.WordsOfJesus,
                 () => _viewModel.ShowJesusWordsColorWheelDialog = true));
-
-            content.Children.Add(BuildColorRow(
-                "Header Contents Color",
-                "App bar text and buttons color",
-                _viewModel.HeaderButtonsColor,
-                () => _viewModel.ShowHeaderButtonsColorWheel = true));
 
             content.Children.Add(BuildColorRow(
                 "Verse Marker Color",
@@ -275,12 +285,11 @@ namespace FountOfHopeStudyBiblePC.Views
                     () => _viewModel.ShowLightReaderFontColorWheelDialog = true));
             }
 
-            // -- Background texture --
             content.Children.Add(BuildClickRow(
                 "Reader BG Texture",
                 "Choose from built-in textures or upload a custom one",
-                onClick: () => App.Log("SettingsScreen: BgModal not yet implemented � TODO"),
-                trailing: new TextBlock { Text = "�", FontSize = 18, Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xB4, 0xC0)) }));
+                onClick: () => App.Log("SettingsScreen: BgModal not yet implemented — TODO"),
+                trailing: new TextBlock { Text = "›", FontSize = 18, Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xB4, 0xC0)) }));
 
             if (_viewModel.BgImageIndex > 0)
             {
@@ -295,7 +304,6 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             var content = new StackPanel();
 
-            // Row of 6 highlight color squares
             var row = new UniformGrid
             {
                 Columns = 6,
@@ -390,7 +398,7 @@ namespace FountOfHopeStudyBiblePC.Views
                         Environment.SpecialFolder.LocalApplicationData),
                         "FountOfHopeStudyBiblePC"),
                     "Data & Storage", MessageBoxButton.OK, MessageBoxImage.Information),
-                trailing: new TextBlock { Text = "�", FontSize = 18, Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xB4, 0xC0)) }));
+                trailing: new TextBlock { Text = "›", FontSize = 18, Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xB4, 0xC0)) }));
 
             content.Children.Add(BuildDivider());
 
@@ -402,7 +410,7 @@ namespace FountOfHopeStudyBiblePC.Views
                     var dlg = new AboutDialog { Owner = Window.GetWindow(this) };
                     dlg.Show();
                 },
-                trailing: new TextBlock { Text = "�", FontSize = 18, Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xB4, 0xC0)) }));
+                trailing: new TextBlock { Text = "›", FontSize = 18, Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xB4, 0xC0)) }));
 
             return BuildSectionBorder("More Options",
                 "Additional preferences", content);
@@ -633,6 +641,137 @@ namespace FountOfHopeStudyBiblePC.Views
 
             var plus = new Button { Content = "+", Width = 32, Height = 32, FontSize = 16, Cursor = Cursors.Hand };
             plus.Click += (_, _) => onPlus();
+            stepper.Children.Add(plus);
+
+            Grid.SetColumn(stepper, 1);
+            grid.Children.Add(stepper);
+            return grid;
+        }
+
+        private FrameworkElement BuildEditableStepperRow(
+            string title,
+            string subtitle,
+            Func<int> getValue,
+            int min,
+            int max,
+            Action<int> setValue)
+        {
+            var grid = new Grid { Margin = new Thickness(0, 8, 0, 8) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition
+            { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var left = new StackPanel();
+            left.Children.Add(new TextBlock
+            {
+                Text = title,
+                FontSize = 14,
+                FontWeight = FontWeights.Medium,
+                Foreground = (Brush)FindResource("OnSurface"),
+            });
+            left.Children.Add(new TextBlock
+            {
+                Text = subtitle,
+                FontSize = 12,
+                Foreground = (Brush)FindResource("OnSurfaceVariant"),
+                Margin = new Thickness(0, 2, 8, 0),
+            });
+            Grid.SetColumn(left, 0);
+            grid.Children.Add(left);
+
+            var stepper = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+
+            var valueBox = new TextBox
+            {
+                Text = getValue().ToString(),
+                Width = 56,
+                Height = 32,
+                FontSize = 16,
+                FontWeight = FontWeights.Bold,
+                Foreground = (Brush)FindResource("AppPrimaryBrush"),
+                Background = Brushes.Transparent,
+                BorderBrush = (Brush)FindResource("DividerBrush"),
+                BorderThickness = new Thickness(1),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                Margin = new Thickness(6, 0, 6, 0),
+                Cursor = Cursors.IBeam,
+            };
+
+            valueBox.PreviewTextInput += (_, e) =>
+            {
+                e.Handled = e.Text.Any(c => !char.IsDigit(c));
+            };
+
+            DataObject.AddPastingHandler(valueBox, (_, e) =>
+            {
+                if (e.DataObject.GetData(DataFormats.Text) is string pasted
+                    && pasted.Any(c => !char.IsDigit(c)))
+                {
+                    e.CancelCommand();
+                }
+            });
+
+            void Commit()
+            {
+                if (int.TryParse(valueBox.Text, out var v))
+                {
+                    var clamped = Math.Clamp(v, min, max);
+                    setValue(clamped);
+                }
+                valueBox.Text = getValue().ToString();
+                valueBox.CaretIndex = valueBox.Text.Length;
+            }
+
+            valueBox.KeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Enter)
+                {
+                    Commit();
+                    e.Handled = true;
+                }
+            };
+            valueBox.LostFocus += (_, _) => Commit();
+
+            var minus = new Button
+            {
+                Content = "-",
+                Width = 32,
+                Height = 32,
+                FontSize = 16,
+                Cursor = Cursors.Hand,
+            };
+            minus.Click += (_, _) =>
+            {
+                Commit();
+                var current = getValue();
+                setValue(Math.Max(min, current - 1));
+                valueBox.Text = getValue().ToString();
+            };
+            stepper.Children.Add(minus);
+
+            stepper.Children.Add(valueBox);
+
+            var plus = new Button
+            {
+                Content = "+",
+                Width = 32,
+                Height = 32,
+                FontSize = 16,
+                Cursor = Cursors.Hand,
+            };
+            plus.Click += (_, _) =>
+            {
+                Commit();
+                var current = getValue();
+                setValue(Math.Min(max, current + 1));
+                valueBox.Text = getValue().ToString();
+            };
             stepper.Children.Add(plus);
 
             Grid.SetColumn(stepper, 1);
@@ -986,10 +1125,10 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             var result = MessageBox.Show(
                 "This will restore EVERY setting to its default value:\n\n" +
-                "� Font size, theme, colors\n" +
-                "� Bible versions, layout, sync\n" +
-                "� Background, overlay, palette colors\n" +
-                "� Study mode, etc.\n\n" +
+                "• Font size, theme, colors\n" +
+                "• Bible versions, layout, sync\n" +
+                "• Background, overlay, palette colors\n" +
+                "• Study mode, etc.\n\n" +
                 "This action cannot be undone. Continue?",
                 "Reset All Settings", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (result != MessageBoxResult.Yes) return;

@@ -1,20 +1,16 @@
-﻿// Controls/SyncedMultiVersionReader.xaml.cs
-using System;
-using System.Collections.Generic;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
-using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
 using FountOfHopeStudyBiblePC.ViewModels;
+using FountOfHopeStudyBiblePC.Views;
 
 namespace FountOfHopeStudyBiblePC.Controls
 {
-    public partial class SyncedMultiVersionReader : UserControl
+    public partial class SyncedMultiVersionReader : UserControl, IWordHighlightHost
     {
-        // ── Dependencies ────────────────────────────────────────────
         private readonly PassageSelection _primaryCurrent;
         private readonly int? _targetVerse;
         private readonly DatabaseHelper? _databaseHelper;
@@ -36,14 +32,12 @@ namespace FountOfHopeStudyBiblePC.Controls
         private readonly Action<int, int, int> _onVerseCommentaryClick;
         private readonly Action _onWordHighlightAction;
 
-        // ── Live state ──────────────────────────────────────────────
         private ChapterView? _primaryView;
         private ChapterView? _secondaryView;
         private bool _isSyncing;
 
-        // ═══════════════════════════════════════════════════════════
-        //  Constructor
-        // ═══════════════════════════════════════════════════════════
+        private ChapterView? _activePane;
+
         public SyncedMultiVersionReader(
             PassageSelection primaryCurrent,
             int? targetVerse,
@@ -92,7 +86,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             PreloadBoth(_primaryCurrent);
             BuildLayout();
 
-            // Rebuild when multi-layout toggles (horizontal <-> vertical)
             _viewModel.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(AppViewModel.MultiViewLayout))
@@ -101,9 +94,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             };
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Preloading
-        // ═══════════════════════════════════════════════════════════
         private void PreloadBoth(PassageSelection passage)
         {
             PreloadChapterForSide(passage, _primaryLoadedVerses, _databaseHelper);
@@ -122,10 +112,10 @@ namespace FountOfHopeStudyBiblePC.Controls
             if (db != null)
             {
                 var verses = db.GetVerses(passage.BookNumber, passage.Chapter)
-                             ?? new List<Verse>();
+                             ?? [];
                 var subheadings = _subheadingsDbHelper?.GetSubheadings(
                                       passage.BookNumber, passage.Chapter)
-                                  ?? new List<Subheading>();
+                                  ?? [];
 
                 var subByVerse = new Dictionary<int, List<Subheading>>();
                 foreach (var s in subheadings)
@@ -151,12 +141,8 @@ namespace FountOfHopeStudyBiblePC.Controls
             cache[key] = content;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Layout
-        // ═══════════════════════════════════════════════════════════
         private void BuildLayout()
         {
-            // Detach old handlers before replacing
             if (_primaryView?.Scroller != null)
                 _primaryView.Scroller.ScrollChanged -= OnPrimaryScroll;
             if (_secondaryView?.Scroller != null)
@@ -170,13 +156,12 @@ namespace FountOfHopeStudyBiblePC.Controls
             _primaryLoadedVerses.TryGetValue(key, out var primaryContent);
             _secondaryLoadedVerses.TryGetValue(key, out var secondaryContent);
 
-            primaryContent ??= new List<VerseContent>();
-            secondaryContent ??= new List<VerseContent>();
+            primaryContent ??= [];
+            secondaryContent ??= [];
 
             var dividerBrush = new SolidColorBrush(
                 Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
 
-            // ── Build the two ChapterViews ──────────────────────────
             _primaryView = new ChapterView(
                 passage: _primaryCurrent,
                 content: primaryContent,
@@ -225,7 +210,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                 scrollSyncEnabled: _viewModel.ScrollSync,
                 markerColor: _viewModel.WordMarkerColor);
 
-            // ── Arrange per layout ──────────────────────────────────
             if (_viewModel.MultiViewLayout == "horizontal")
             {
                 RootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -242,7 +226,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                 RootGrid.Children.Add(divider);
                 RootGrid.Children.Add(_secondaryView);
             }
-            else // vertical
+            else
             {
                 RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
                 RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1) });
@@ -262,9 +246,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             WireScrollSync();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Scroll sync
-        // ═══════════════════════════════════════════════════════════
         private void WireScrollSync()
         {
             if (_primaryView?.Scroller != null)
@@ -311,11 +292,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             }
         }
 
-        /// <summary>
-        /// Maps the top-of-viewport position from one ChapterView onto the
-        /// other by aligning on verse index. Handles differing verse heights
-        /// (e.g. KJV vs ESV) better than a raw percentage-of-extent sync.
-        /// </summary>
         private static void SyncScroll(ChapterView? from, ChapterView? to)
         {
             if (from == null || to == null) return;
@@ -324,6 +300,52 @@ namespace FountOfHopeStudyBiblePC.Controls
             if (info == null) return;
 
             to.ScrollToVerseOffset(info.Value.verseIndex, info.Value.offsetFromTop);
+        }
+
+        public bool BeginWordDrag(Point positionInHost)
+        {
+            var pane = FindPaneAt(positionInHost);
+            if (pane == null) return false;
+
+            var local = TranslatePoint(positionInHost, pane);
+            if (!pane.BeginWordDrag(local)) return false;
+
+            _activePane = pane;
+            return true;
+        }
+
+        public void UpdateWordDrag(Point positionInHost)
+        {
+            if (_activePane == null) return;
+            var local = TranslatePoint(positionInHost, _activePane);
+            _activePane.UpdateWordDrag(local);
+        }
+
+        public void CommitWordDrag()
+        {
+            _activePane?.CommitWordDrag();
+            _activePane = null;
+        }
+
+        public void CancelWordDrag()
+        {
+            _activePane?.CancelWordDrag();
+            _activePane = null;
+        }
+
+        private ChapterView? FindPaneAt(Point positionInHost)
+        {
+            var hit = InputHitTest(positionInHost) as DependencyObject;
+            if (hit == null) return null;
+
+            var current = hit;
+            while (current != null)
+            {
+                if (ReferenceEquals(current, _primaryView)) return _primaryView;
+                if (ReferenceEquals(current, _secondaryView)) return _secondaryView;
+                current = VisualTreeHelper.GetParent(current);
+            }
+            return null;
         }
     }
 }
