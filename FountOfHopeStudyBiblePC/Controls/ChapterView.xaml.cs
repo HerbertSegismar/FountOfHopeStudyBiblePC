@@ -454,13 +454,18 @@ namespace FountOfHopeStudyBiblePC.Controls
             {
                 tb.Inlines.Add(new Run(" "));
 
-                var commLink = new Hyperlink(new Run("*"))
+                var star = new TextBlock
                 {
-                    Foreground = new SolidColorBrush(theme),
+                    Text = "*",
+                    FontSize = _viewModel.FontSize * 1.5,
                     FontWeight = FontWeights.Bold,
-                    TextDecorations = [],
+                    Foreground = new SolidColorBrush(theme),
                     Cursor = Cursors.Hand,
                     ToolTip = "Open verse commentary",
+                    RenderTransform = new TranslateTransform(
+                        0, Math.Round(_viewModel.FontSize * 0.4)),
+                    Padding = new Thickness(2, 0, 2, 0),
+                    Background = Brushes.Transparent,
                 };
 
                 var cBook = _passage.BookNumber;
@@ -468,25 +473,16 @@ namespace FountOfHopeStudyBiblePC.Controls
                 var cVerse = verse.VerseNumber;
                 var cCallback = _onVerseCommentaryClick;
 
-                commLink.Click += (s, e) =>
+                star.MouseLeftButtonUp += (s, e) =>
                 {
                     e.Handled = true;
-
-                    if (cCallback == null)
-                    {
-                        return;
-                    }
-
-                    cCallback(cBook, cChap, cVerse);
+                    cCallback?.Invoke(cBook, cChap, cVerse);
                 };
 
-                commLink.Inlines.Add(new Run("\u200B")
+                tb.Inlines.Add(new InlineUIContainer(star)
                 {
-                    Foreground = Brushes.Transparent,
-                    FontSize = _viewModel.FontSize,
+                    BaselineAlignment = BaselineAlignment.Baseline,
                 });
-
-                tb.Inlines.Add(commLink);
             }
 
             _groupedHighlights.TryGetValue(verse.VerseNumber, out var highlights);

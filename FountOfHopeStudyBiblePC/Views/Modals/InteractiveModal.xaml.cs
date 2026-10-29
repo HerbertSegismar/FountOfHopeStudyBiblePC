@@ -421,10 +421,17 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         // ═══════════════════════════════════════════════════════════
         //  Verse list
         // ═══════════════════════════════════════════════════════════
+
+        private Color GetThemeColor()
+            => _viewModel.SelectedColor ?? (Color)ColorConverter.ConvertFromString("#FF7FB2FF");
+
         private void RenderVerseList(ModalPage page)
         {
             var passage = page.Passage;
             if (passage == null || page.Verses == null) return;
+
+            // Keep this in sync with ProcessVerse(baseFontSize: ...) below.
+            const double BaseFontSize = 12;
 
             var processor = new VerseTextProcessor();
             var themeColors = new ThemeColors(
@@ -448,6 +455,8 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
             int? lastChapter = null;
 
+            var theme = GetThemeColor();
+
             foreach (var verse in page.Verses)
             {
                 int currentChapter = verse.Chapter is int cc ? cc : 0;
@@ -464,10 +473,11 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     lastChapter = currentChapter;
                 }
 
+                // Verse number — colored like the asterisk (theme color).
                 BodyText.Inlines.Add(new Run($" {verse.VerseNumber} ")
                 {
                     FontWeight = FontWeights.Bold,
-                    Foreground = new SolidColorBrush(themeColors.VerseNumber),
+                    Foreground = new SolidColorBrush(theme),
                 });
 
                 int vBook = passage.BookNumber is int pb && pb > 0 ? pb : 1;
@@ -480,7 +490,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
                 var processed = processor.ProcessVerse(
                     verseText: verse.Text,
-                    baseFontSize: 12,
+                    baseFontSize: BaseFontSize,
                     themeColors: themeColors,
                     textColor: themeColors.TextColor,
                     isOldTestament: vIsOld,
@@ -505,7 +515,8 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     BodyText.Inlines.Add(new Run(" "));
                     var refLink = new Hyperlink(new Run($"[{refCount}]"))
                     {
-                        Foreground = new SolidColorBrush(themeColors.Primary),
+                        // Colored like the asterisk (theme color).
+                        Foreground = new SolidColorBrush(theme),
                         FontWeight = FontWeights.Bold,
                         TextDecorations = new TextDecorationCollection(),
                         Cursor = Cursors.Hand,
@@ -523,23 +534,39 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 }
 
                 BodyText.Inlines.Add(new Run(" "));
-                var star = new Hyperlink(new Run("*"))
+
+                var starTag = new VerseCommentaryTagInfo
                 {
-                    Foreground = new SolidColorBrush(themeColors.VerseNumber),
+                    BookNumber = vBook,
+                    Chapter = vChapter,
+                    VerseNumber = vVerse,
+                    IsOldTestament = vIsOld,
+                };
+
+                var starBlock = new TextBlock
+                {
+                    Text = "*",
+                    FontSize = BaseFontSize * 2.5,
                     FontWeight = FontWeights.Bold,
-                    TextDecorations = new TextDecorationCollection(),
+                    Foreground = new SolidColorBrush(theme),
                     Cursor = Cursors.Hand,
                     ToolTip = "Open verse commentary",
-                    Tag = new VerseCommentaryTagInfo
-                    {
-                        BookNumber = vBook,
-                        Chapter = vChapter,
-                        VerseNumber = vVerse,
-                        IsOldTestament = vIsOld,
-                    },
+                    RenderTransform = new TranslateTransform(
+                        0, Math.Round(BaseFontSize)),
+                    Padding = new Thickness(2, 0, 2, 0),
+                    Background = Brushes.Transparent,
                 };
-                star.Click += VerseCommentaryLink_Click;
-                BodyText.Inlines.Add(star);
+
+                starBlock.MouseLeftButtonUp += (_, args) =>
+                {
+                    args.Handled = true;
+                    OpenVerseCommentaryForTag(starTag);
+                };
+
+                BodyText.Inlines.Add(new InlineUIContainer(starBlock)
+                {
+                    BaselineAlignment = BaselineAlignment.Baseline,
+                });
 
                 BodyText.Inlines.Add(new LineBreak());
             }
@@ -629,15 +656,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Inline HTML → WPF Inlines
-        //  Preserves <b>/<i>/<u>/<sup>/<sub>/<p>/<br>/<hr>/<h1-6>/
-        //  <ul>/<ol>/<li>/<blockquote>, decodes entities, handles
-        //  <a href> links with nested formatting.
-        //  Self-closing variants (<p/>, <h1/>, <blockquote/>) are
-        //  treated the same as their closing counterparts — some
-        //  commentary DBs use `<p/>` as a paragraph separator.
-        // ═══════════════════════════════════════════════════════════
         private void RenderInlineHtml(string content)
         {
             if (string.IsNullOrEmpty(content)) return;
@@ -888,7 +906,11 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         {
             if (sender is not Hyperlink link) return;
             if (link.Tag is not VerseCommentaryTagInfo tag) return;
+            OpenVerseCommentaryForTag(tag);
+        }
 
+        private void OpenVerseCommentaryForTag(VerseCommentaryTagInfo tag)
+        {
             BuildVerseCommentaryInitial(
                 tag.BookNumber, tag.Chapter, tag.VerseNumber, tag.IsOldTestament);
             UpdateView();
