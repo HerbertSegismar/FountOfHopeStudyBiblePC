@@ -32,6 +32,27 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         private readonly Dictionary<int, int> _crossRefCounts = [];
 
+        // ─────────────────────────────────────────────────────────────
+        //  Source-generated regexes (SYSLIB1045)
+        // ─────────────────────────────────────────────────────────────
+
+        [GeneratedRegex("\\bhref\\s*=\\s*[\"']([^\"']+)[\"']", RegexOptions.IgnoreCase)]
+        private static partial Regex HrefAttrRegex();
+
+        [GeneratedRegex(@"^[HG]\d+")]
+        private static partial Regex StrongNumberRegex();
+
+        [GeneratedRegex(@"^\d+")]
+        private static partial Regex LeadingDigitsRegex();
+
+        [GeneratedRegex(@"^See\s+", RegexOptions.IgnoreCase)]
+        private static partial Regex SeePrefixRegex();
+
+        [GeneratedRegex(@"\d")]
+        private static partial Regex ContainsDigitRegex();
+
+        // ─────────────────────────────────────────────────────────────
+
         public InteractiveModal(
             AppViewModel viewModel,
             DatabaseHelper? bibleDb,
@@ -106,7 +127,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 : null;
         }
 
-        private DatabaseHelper? CreateCommentaryHelperIfExists(string? bibleDbName)
+        private static DatabaseHelper? CreateCommentaryHelperIfExists(string? bibleDbName)
         {
             if (string.IsNullOrWhiteSpace(bibleDbName)) return null;
 
@@ -138,11 +159,12 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             var fg = _viewModel.DarkTheme ? Colors.White : Colors.Black;
             BodyText.Foreground = new SolidColorBrush(fg);
             TitleText.Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor);
+
+            // The clickable title word matches the same accent used by every
+            // other hyperlink in the modal (the asterisk's color).
+            TitleWordLink.Foreground = new SolidColorBrush(GetThemeColor());
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Initial page
-        // ═══════════════════════════════════════════════════════════
         private void BuildInitialPage(
             string type, bool isOldTestament,
             string initialTitle, string initialContent,
@@ -344,9 +366,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             });
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  View refresh
-        // ═══════════════════════════════════════════════════════════
         private void UpdateView()
         {
             if (_stack.Count == 0) { Close(); return; }
@@ -418,9 +437,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             RenderInlineHtml(page.Content);
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Verse list
-        // ═══════════════════════════════════════════════════════════
 
         private Color GetThemeColor()
             => _viewModel.SelectedColor ?? (Color)ColorConverter.ConvertFromString("#FF7FB2FF");
@@ -430,8 +446,11 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             var passage = page.Passage;
             if (passage == null || page.Verses == null) return;
 
-            // Keep this in sync with ProcessVerse(baseFontSize: ...) below.
             const double BaseFontSize = 12;
+
+            // Single accent shared by the asterisk, cross-ref links, and the
+            // note/footnote markers so they all visually agree.
+            var theme = GetThemeColor();
 
             var processor = new VerseTextProcessor();
             var themeColors = new ThemeColors(
@@ -440,8 +459,9 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     : _viewModel.LightThemeReaderFontColor,
                 VerseNumber: _viewModel.HeaderButtonsColor,
                 Primary: _viewModel.HeaderButtonsColor,
-                TagColor: Colors.MediumPurple,
-                TagBg: Color.FromArgb(0x33, 0x7F, 0xB2, 0xFF),
+                // Notes markers (footnote letters/numbers) use the accent.
+                TagColor: theme,
+                TagBg: Color.FromArgb(0x33, theme.R, theme.G, theme.B),
                 WordsOfJesus: _viewModel.WordsOfJesus,
                 SearchHighlightBg: Color.FromArgb(0x55, 0x7F, 0xB2, 0xFF),
                 HighlightIcon: _viewModel.HeaderButtonsColor,
@@ -454,8 +474,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 .Count() > 1;
 
             int? lastChapter = null;
-
-            var theme = GetThemeColor();
 
             foreach (var verse in page.Verses)
             {
@@ -473,7 +491,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     lastChapter = currentChapter;
                 }
 
-                // Verse number — colored like the asterisk (theme color).
                 BodyText.Inlines.Add(new Run($" {verse.VerseNumber} ")
                 {
                     FontWeight = FontWeights.Bold,
@@ -515,10 +532,10 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     BodyText.Inlines.Add(new Run(" "));
                     var refLink = new Hyperlink(new Run($"[{refCount}]"))
                     {
-                        // Colored like the asterisk (theme color).
+                        // Matches the asterisk's accent color.
                         Foreground = new SolidColorBrush(theme),
                         FontWeight = FontWeights.Bold,
-                        TextDecorations = new TextDecorationCollection(),
+                        TextDecorations = [],
                         Cursor = Cursors.Hand,
                         ToolTip = "Open cross-references",
                         Tag = new VerseCommentaryTagInfo
@@ -548,12 +565,20 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     Text = "*",
                     FontSize = BaseFontSize * 2.5,
                     FontWeight = FontWeights.Bold,
+                    // Asterisk keeps its original accent color — this is the
+                    // reference color that every other hyperlink matches.
                     Foreground = new SolidColorBrush(theme),
                     Cursor = Cursors.Hand,
                     ToolTip = "Open verse commentary",
                     RenderTransform = new TranslateTransform(
                         0, Math.Round(BaseFontSize)),
                     Padding = new Thickness(2, 0, 2, 0),
+                    // Constrain the line box to the base font's line height so
+                    // the oversized glyph doesn't inflate the line height.
+                    // ClipToBounds is false by default, so the glyph renders
+                    // at its natural visual size, overflowing the layout slot.
+                    LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+                    LineHeight = BaseFontSize * 1.2,
                     Background = Brushes.Transparent,
                 };
 
@@ -593,10 +618,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             var passage = page.Passage;
             int book = passage?.BookNumber is int b && b > 0 ? b : 1;
             int chapter = passage?.Chapter is int c && c > 0 ? c : 1;
-
-            System.Diagnostics.Debug.WriteLine(
-                $"[ModalBody click] tag='{ann.Tag}' value='{ann.Value}' " +
-                $"b={book} c={chapter} old={page.IsOldTestament}");
 
             switch (ann.Tag)
             {
@@ -735,14 +756,14 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                             }
                             else
                             {
-                                var m = Regex.Match(attrs,
-                                    "\\bhref\\s*=\\s*[\"']([^\"']+)[\"']",
-                                    RegexOptions.IgnoreCase);
+                                var m = HrefAttrRegex().Match(attrs);
                                 if (m.Success)
                                 {
                                     link = new Hyperlink
                                     {
-                                        Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor),
+                                        // Match the asterisk's accent color so
+                                        // all hyperlinks in the modal agree.
+                                        Foreground = new SolidColorBrush(GetThemeColor()),
                                         Tag = DecodeEntities(m.Groups[1].Value),
                                         TextDecorations = TextDecorations.Underline,
                                         Cursor = Cursors.Hand,
@@ -835,8 +856,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                             if (closing || selfClosing) EnsureTrailingLineBreaks(2);
                             else EnsureTrailingLineBreaks(1);
                             break;
-
-                            // <span>, <font>, <style>, unknown → silently ignored
                     }
 
                     i = end + 1;
@@ -1002,20 +1021,19 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 NavigateToPassage(seeContent, linkText);
                 return;
             }
-            if (Regex.IsMatch(seeContent, @"^[HG]\d+"))
+            if (StrongNumberRegex().IsMatch(seeContent))
             {
                 ShowStrongDefinition(seeContent);
                 return;
             }
-            if (Regex.IsMatch(seeContent, @"^\d+"))
+            if (LeadingDigitsRegex().IsMatch(seeContent))
             {
                 var isOld = _stack[^1].IsOldTestament;
                 ShowCombinedStrongDefinition("H" + seeContent, "G" + seeContent, isOld);
                 return;
             }
 
-            var wordToFetch = Regex.Replace(linkText, @"^See\s+", "",
-                RegexOptions.IgnoreCase).Trim();
+            var wordToFetch = SeePrefixRegex().Replace(linkText, "").Trim();
             if (string.IsNullOrEmpty(wordToFetch)) wordToFetch = seeContent;
 
             BuildDefinitionInitial(wordToFetch, "", _stack[^1].IsOldTestament);
@@ -1025,7 +1043,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private void OnWordPressInVerse(string word, int book, int chapter, int verse, bool isOldTestament)
         {
             var trimmed = (word ?? "").Trim();
-            if (string.IsNullOrEmpty(trimmed) || Regex.IsMatch(trimmed, "\\d")) return;
+            if (string.IsNullOrEmpty(trimmed) || ContainsDigitRegex().IsMatch(trimmed)) return;
 
             BuildDefinitionInitial(trimmed, "", isOldTestament);
             UpdateView();
@@ -1042,7 +1060,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             else
                 prefixed = (isOldTestament ? "H" : "G") + trimmed;
 
-            if (!Regex.IsMatch(prefixed, @"^[HG]\d+")) return;
+            if (!StrongNumberRegex().IsMatch(prefixed)) return;
 
             ShowStrongDefinition(prefixed);
         }

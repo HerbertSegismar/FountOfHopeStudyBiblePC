@@ -155,7 +155,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                             .ContainerFromIndex(targetIdx) as FrameworkElement;
                         container?.BringIntoView();
                     }
-                    HighlightTargetVerse(); 
+                    HighlightTargetVerse();
                     _onInitialScrollComplete();
                 }), System.Windows.Threading.DispatcherPriority.Loaded);
             }
@@ -333,11 +333,15 @@ namespace FountOfHopeStudyBiblePC.Controls
                     ? new SolidColorBrush(Color.FromArgb(0x55, theme.R, theme.G, theme.B))
                     : Brushes.Transparent);
 
+            // The line height the surrounding body uses. Note markers and the
+            // asterisk are constrained to this so they don't inflate the row.
+            var baseLineHeight = _viewModel.FontSize * 1.333;
+
             var tb = new TextBlock
             {
                 TextWrapping = TextWrapping.Wrap,
                 FontSize = _viewModel.FontSize,
-                LineHeight = _viewModel.FontSize * 1.333,
+                LineHeight = baseLineHeight,
                 FontFamily = FontsHelper.GetFontFamily(_viewModel.SelectedFontFamily),
                 Tag = verse,
                 Cursor = Cursors.Hand,
@@ -465,6 +469,12 @@ namespace FountOfHopeStudyBiblePC.Controls
                     RenderTransform = new TranslateTransform(
                         0, Math.Round(_viewModel.FontSize * 0.4)),
                     Padding = new Thickness(2, 0, 2, 0),
+                    // Constrain the line box to the surrounding body's line
+                    // height so the oversized glyph doesn't inflate the row.
+                    // ClipToBounds is false by default, so the glyph still
+                    // paints at its natural visual size, overflowing the slot.
+                    LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+                    LineHeight = baseLineHeight,
                     Background = Brushes.Transparent,
                 };
 
