@@ -131,7 +131,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                 case nameof(AppViewModel.IsStudyMode):
                 case nameof(AppViewModel.ShowStrongs):
                 case nameof(AppViewModel.IsDictionaryMode):
-                    RenderAll();
+                    if (!_isWordDragActive) RenderAll();
                     break;
 
                 case nameof(AppViewModel.WordMarkerColor):
