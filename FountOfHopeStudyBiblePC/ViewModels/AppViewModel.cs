@@ -264,7 +264,44 @@ namespace FountOfHopeStudyBiblePC.ViewModels
         public bool ShowLightOverlayColorWheel { get => _showLightOverlayColorWheel; set => Set(ref _showLightOverlayColorWheel, value); }
 
         private bool _isDictionaryMode = true;
-        public bool IsDictionaryMode { get => _isDictionaryMode; set => Set(ref _isDictionaryMode, value); }
+        public bool IsDictionaryMode
+        {
+            get => _isDictionaryMode;
+            set
+            {
+                if (_isDictionaryMode == value) return;
+                _isDictionaryMode = value;
+
+                // Modes are mutually exclusive: turning dictionary on turns
+                // highlight off, and vice versa. Subscribers to either property
+                // see the correct final state because we notify after both
+                // fields have been updated.
+                if (value && _isHighlightMode)
+                {
+                    _isHighlightMode = false;
+                    OnPropertyChanged(nameof(IsHighlightMode));
+                }
+                OnPropertyChanged();
+            }
+        }
+
+        private bool _isHighlightMode;
+        public bool IsHighlightMode
+        {
+            get => _isHighlightMode;
+            set
+            {
+                if (_isHighlightMode == value) return;
+                _isHighlightMode = value;
+
+                if (value && _isDictionaryMode)
+                {
+                    _isDictionaryMode = false;
+                    OnPropertyChanged(nameof(IsDictionaryMode));
+                }
+                OnPropertyChanged();
+            }
+        }
 
         private Color _verseMarkerColor = Argb(0xFF95F198);
         public Color VerseMarkerColor { get => _verseMarkerColor; set => Set(ref _verseMarkerColor, value); }

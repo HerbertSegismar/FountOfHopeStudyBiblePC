@@ -343,8 +343,31 @@ namespace FountOfHopeStudyBiblePC.Controls
             {
                 if (ReferenceEquals(current, _primaryView)) return _primaryView;
                 if (ReferenceEquals(current, _secondaryView)) return _secondaryView;
-                current = VisualTreeHelper.GetParent(current);
+                current = GetSafeParent(current);
             }
+            return null;
+        }
+
+        /// <summary>
+        /// Walks one level up the WPF element tree, correctly handling
+        /// ContentElement / FrameworkContentElement (e.g. <see cref="System.Windows.Documents.Run"/>)
+        /// which are not Visuals and would otherwise throw
+        /// from <see cref="VisualTreeHelper.GetParent"/>.
+        /// </summary>
+        private static DependencyObject? GetSafeParent(DependencyObject current)
+        {
+            // Real Visual / Visual3D → use the visual tree.
+            if (current is Visual || current is System.Windows.Media.Media3D.Visual3D)
+                return VisualTreeHelper.GetParent(current);
+
+            // Content tree (Run, Paragraph, etc.) → use logical parent.
+            // e.g. Run → TextBlock.
+            if (current is FrameworkContentElement fce)
+                return fce.Parent;
+
+            if (current is ContentElement ce)
+                return ContentOperations.GetParent(ce);
+
             return null;
         }
     }

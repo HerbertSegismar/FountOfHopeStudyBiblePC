@@ -47,11 +47,11 @@ namespace FountOfHopeStudyBiblePC.Views
         private DatabaseHelper? _secondaryCommentaryDbHelper;   // footnotes for secondary version
         private readonly DatabaseHelper? _subheadingsDbHelper;
 
-        // ── FAB / highlight state ───────────────────────────────────────
+        // ── FAB / palette state ─────────────────────────────────────────
         private bool _isButtonVisible = true;
-        private bool _isWordHighlightMode;
+        private bool _isPaletteVisible;                                 // ← 5 s auto-hide window
         private System.Windows.Threading.DispatcherTimer? _fadeTimer;
-        private System.Windows.Threading.DispatcherTimer? _highlightTimer;
+        private System.Windows.Threading.DispatcherTimer? _paletteTimer;
 
         // ── Word drag-selection state ───────────────────────────────────
         private const double WordDragThresholdPixels = 3.0;
@@ -122,18 +122,24 @@ namespace FountOfHopeStudyBiblePC.Views
                 _fadeTimer!.Stop();
             };
 
-            _highlightTimer = new System.Windows.Threading.DispatcherTimer
+            // Palette-only timer. It does not touch IsHighlightMode — it
+            // just fades the colour bar out after 5 s of no gesture.
+            _paletteTimer = new System.Windows.Threading.DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(5)
             };
-            _highlightTimer.Tick += (_, _) =>
+            _paletteTimer.Tick += (_, _) =>
             {
-                _isWordHighlightMode = false;
-                UpdateHighlightColorBar();
-                _highlightTimer!.Stop();
+                _isPaletteVisible = false;
+                UpdatePaletteVisibility();
+                _paletteTimer!.Stop();
             };
 
             // ── Drag-to-highlight preview hooks ─────────────────────────
+            // Drag ALWAYS paints highlights. Once movement passes the
+            // threshold, we explicitly promote the app to highlight mode
+            // so click routing, palette visibility, and mode flags all
+            // stay coherent for the rest of the interaction.
             ReaderHost.PreviewMouseLeftButtonDown += ReaderHost_PreviewMouseLeftButtonDown;
             ReaderHost.PreviewMouseMove += ReaderHost_PreviewMouseMove;
             ReaderHost.PreviewMouseLeftButtonUp += ReaderHost_PreviewMouseLeftButtonUp;
@@ -143,6 +149,7 @@ namespace FountOfHopeStudyBiblePC.Views
             Unloaded += ReaderScreen_Unloaded;
 
             BuildHighlightColorBar();
+            UpdatePaletteVisibility();
             RenderCurrentMode();
             _hasAppliedInitialScroll = true;
         }
@@ -172,7 +179,7 @@ namespace FountOfHopeStudyBiblePC.Views
         private void ReaderScreen_Unloaded(object sender, RoutedEventArgs e)
         {
             _fadeTimer?.Stop();
-            _highlightTimer?.Stop();
+            _paletteTimer?.Stop();
 
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
 
@@ -192,14 +199,12 @@ namespace FountOfHopeStudyBiblePC.Views
             _secondaryDatabaseHelper?.Dispose();
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  ViewModel subscription
-        // ═══════════════════════════════════════════════════════════════
         private void OnViewModelPropertyChanged(object? sender,
             System.ComponentModel.PropertyChangedEventArgs e)
         {
             switch (e.PropertyName)
             {
+                // ── Data-source changes → must rebuild ────────────────────────
                 case nameof(AppViewModel.SelectedCrossReferenceDatabase):
                     ReloadCrossRefHelper();
                     break;
@@ -226,24 +231,6 @@ namespace FountOfHopeStudyBiblePC.Views
                     RenderCurrentMode();
                     break;
 
-                case nameof(AppViewModel.DarkTheme):
-                case nameof(AppViewModel.WordsOfJesus):
-                case nameof(AppViewModel.FontSize):
-                case nameof(AppViewModel.LightThemeReaderFontColor):
-                case nameof(AppViewModel.DarkThemeReaderFontColor):
-                case nameof(AppViewModel.WordMarkerColor):
-                case nameof(AppViewModel.VerseMarkerColor):
-                case nameof(AppViewModel.IsDictionaryMode):
-                case nameof(AppViewModel.BgImageIndex):
-                case nameof(AppViewModel.OverlayOpacity):
-                case nameof(AppViewModel.LightOverlayColor):
-                case nameof(AppViewModel.DarkOverlayColor):
-                case nameof(AppViewModel.ShowStrongs):
-                case nameof(AppViewModel.IsStudyMode):
-                case nameof(AppViewModel.PredefinedHighlightColors):
-                    RenderCurrentMode();
-                    break;
-
                 case nameof(AppViewModel.ScrollSync):
                     if (_viewModel.MultiVersion && _viewModel.ScrollSync)
                     {
@@ -251,6 +238,46 @@ namespace FountOfHopeStudyBiblePC.Views
                         _secondaryCurrent = _primaryCurrent;
                         RenderCurrentMode();
                     }
+                    break;
+
+                // ── Mode state ────────────────────────────────────────────────
+                // Entering highlight mode reveals the palette + starts its
+                // 5-second timer. Leaving it hides the palette immediately.
+                // The mode itself is user-controlled and never expires.
+                case nameof(AppViewModel.IsHighlightMode):
+                    if (_viewModel.IsHighlightMode)
+                        ShowPalette();
+                    else
+                        HidePalette();
+                    break;
+
+                case nameof(AppViewModel.IsDictionaryMode):
+                    if (_viewModel.IsDictionaryMode && !_isWordDragActive)
+                        HidePalette();
+                    break;
+
+                // ── Word-marker palette ───────────────────────────────────────
+                case nameof(AppViewModel.WordMarkerColor):
+                    BuildHighlightColorBar();
+                    break;
+
+                case nameof(AppViewModel.PredefinedHighlightColors):
+                    BuildHighlightColorBar();
+                    break;
+
+                // ── Appearance-only changes → handled by ChapterView ─────────
+                case nameof(AppViewModel.DarkTheme):
+                case nameof(AppViewModel.WordsOfJesus):
+                case nameof(AppViewModel.FontSize):
+                case nameof(AppViewModel.LightThemeReaderFontColor):
+                case nameof(AppViewModel.DarkThemeReaderFontColor):
+                case nameof(AppViewModel.VerseMarkerColor):
+                case nameof(AppViewModel.BgImageIndex):
+                case nameof(AppViewModel.OverlayOpacity):
+                case nameof(AppViewModel.LightOverlayColor):
+                case nameof(AppViewModel.DarkOverlayColor):
+                case nameof(AppViewModel.ShowStrongs):
+                case nameof(AppViewModel.IsStudyMode):
                     break;
             }
         }
@@ -295,8 +322,6 @@ namespace FountOfHopeStudyBiblePC.Views
 
             var comDbName = bibleDbName.Replace(".sqlite3", "com.sqlite3");
 
-            // Only open if the file can actually be found — otherwise GetCommentary
-            // would silently return null because _connection is null.
             var localPath = DatabaseHelper.GetDatabaseFilePath(comDbName);
             if (System.IO.File.Exists(localPath))
                 return new DatabaseHelper(comDbName);
@@ -323,7 +348,6 @@ namespace FountOfHopeStudyBiblePC.Views
                     ? new DatabaseHelper(_viewModel.SecondaryDbName)
                     : null;
 
-            // Secondary footnote DB must be reloaded whenever the secondary version changes.
             _secondaryCommentaryDbHelper?.Dispose();
             _secondaryCommentaryDbHelper = CreateCommentaryHelperIfExists(
                 _secondaryDatabaseHelper?.DatabaseName);
@@ -355,7 +379,7 @@ namespace FountOfHopeStudyBiblePC.Views
         }
 
         // ═══════════════════════════════════════════════════════════════
-        //  Word-highlight color bar
+        //  Highlight palette (colour bar)
         // ═══════════════════════════════════════════════════════════════
         private void BuildHighlightColorBar()
         {
@@ -379,48 +403,74 @@ namespace FountOfHopeStudyBiblePC.Views
                 }
                 swatch.MouseLeftButtonUp += (_, _) =>
                 {
-                    if (swatch.Tag is Color c)
+                    if (swatch.Tag is not Color c) return;
+
+                    bool wasSameColor = c == _viewModel.WordMarkerColor;
+                    _viewModel.WordMarkerColor = c;
+
+                    // Tap-again on the active swatch exits highlight mode.
+                    if (_viewModel.IsHighlightMode && wasSameColor)
                     {
-                        _viewModel.WordMarkerColor = c;
-                        ActivateWordHighlightMode();
-                        BuildHighlightColorBar();
+                        _viewModel.IsHighlightMode = false;
+                        _viewModel.IsDictionaryMode = true;
                     }
+                    else
+                    {
+                        _viewModel.IsHighlightMode = true;
+                        _viewModel.IsDictionaryMode = false;
+                        ShowPalette();          // bump the 5 s timer
+                    }
+
+                    BuildHighlightColorBar();
                 };
                 HighlightColorList.Children.Add(swatch);
             }
         }
 
+        /// <summary>
+        /// Called from ChapterView after a single word click in highlight
+        /// mode (via `onWordHighlightAction`). Re-reveals the palette but
+        /// leaves the mode state untouched.
+        /// </summary>
         private void ActivateWordHighlightMode()
         {
-            _isWordHighlightMode = true;
-            UpdateHighlightColorBar();
-            _highlightTimer?.Stop();
-            _highlightTimer?.Start();
+            if (!_viewModel.IsHighlightMode) return;   // dictionary mode → ignore
+            ShowPalette();
         }
-
-        private void UpdateHighlightColorBar()
-        {
-            HighlightColorBar.Visibility =
-                _isWordHighlightMode ? Visibility.Visible : Visibility.Collapsed;
-            FullscreenFab.Visibility =
-                _isWordHighlightMode ? Visibility.Collapsed : Visibility.Visible;
-
-            // Drop any in-flight drag when leaving highlight mode.
-            if (!_isWordHighlightMode && _isWordDragActive)
-                AbortWordDrag();
-        }
-
-        // ═══════════════════════════════════════════════════════════════
-        //  Drag-to-highlight (preview pipeline over ReaderHost)
-        // ═══════════════════════════════════════════════════════════════
 
         /// <summary>
-        /// Routes mouse positions in the coordinate space expected by the
-        /// active drag path:
-        ///   • IWordHighlightHost → the reader control (it will translate
-        ///     to its internal pane itself).
-        ///   • fallback (visual-tree word scan) → ReaderHost.
+        /// Reveal the palette and (re)start its auto-hide timer. Public so
+        /// a toolbar button / keyboard shortcut can bring it back without
+        /// toggling the mode off and on again.
         /// </summary>
+        public void ShowPalette()
+        {
+            _isPaletteVisible = true;
+            UpdatePaletteVisibility();
+            _paletteTimer?.Stop();
+            _paletteTimer?.Start();
+        }
+
+        /// <summary>
+        /// Hide the palette immediately. Does not change IsHighlightMode.
+        /// </summary>
+        public void HidePalette()
+        {
+            _isPaletteVisible = false;
+            _paletteTimer?.Stop();
+            UpdatePaletteVisibility();
+        }
+
+        private void UpdatePaletteVisibility()
+        {
+            HighlightColorBar.Visibility = _isPaletteVisible
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            FullscreenFab.Visibility = _isPaletteVisible
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+        }
         private Point GetHighlightHostPoint(MouseEventArgs e)
             => _wordHighlightHost is UIElement el
                 ? e.GetPosition(el)
@@ -428,7 +478,6 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void ReaderHost_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (!_isWordHighlightMode) return;
             if (e.ChangedButton != MouseButton.Left) return;
 
             var pos = GetHighlightHostPoint(e);
@@ -450,9 +499,10 @@ namespace FountOfHopeStudyBiblePC.Views
             _isWordDragActive = true;
             _wordDragHasMoved = false;
 
-            // Freeze the auto-off timers so a slow drag isn't cancelled mid-flight.
             _fadeTimer?.Stop();
-            _highlightTimer?.Stop();
+            // Do not show the palette or touch the mode flags here — this
+            // might turn out to be a plain click (dictionary lookup), which
+            // must not flip modes or pop the palette.
         }
 
         private void ReaderHost_PreviewMouseMove(object sender, MouseEventArgs e)
@@ -472,6 +522,21 @@ namespace FountOfHopeStudyBiblePC.Views
                  Math.Abs(pos.Y - _wordDragStartPoint.Y) > WordDragThresholdPixels))
             {
                 _wordDragHasMoved = true;
+
+                // A drag is an explicit highlight gesture. Promote the app
+                // to highlight mode the moment the gesture is proven to be
+                // a drag, so the palette, the mode flags, and per-word click
+                // routing are all consistent for the rest of the interaction.
+                if (!_viewModel.IsHighlightMode)
+                {
+                    _viewModel.IsDictionaryMode = false;
+                    _viewModel.IsHighlightMode = true;
+                    // The IsHighlightMode setter fires PropertyChanged, and
+                    // our handler already calls ShowPalette(); calling it
+                    // again below is idempotent and also covers the "already
+                    // in highlight mode" path where no property change fires.
+                }
+                ShowPalette();
             }
 
             if (_wordHighlightHost != null)
@@ -526,8 +591,6 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void ReaderHost_MouseLeave(object sender, MouseEventArgs e)
         {
-            // Only abort when the button is already up — otherwise keep tracking
-            // (the user may drag back inside ReaderHost).
             if (_isWordDragActive && e.LeftButton != MouseButtonState.Pressed)
                 AbortWordDrag();
         }
@@ -539,13 +602,8 @@ namespace FountOfHopeStudyBiblePC.Views
             _wordDragStartBlock = null;
             _wordDragEndBlock = null;
             ScheduleFade();
-
-            // Resume the highlight-mode auto-off once the drag finishes.
-            if (_isWordHighlightMode)
-            {
-                _highlightTimer?.Stop();
-                _highlightTimer?.Start();
-            }
+            // No palette-timer restart — the palette auto-hides on its own
+            // schedule; the mode itself never expires.
         }
 
         private void AbortWordDrag()
@@ -564,8 +622,13 @@ namespace FountOfHopeStudyBiblePC.Views
             while (current != null)
             {
                 if (current is TextBlock tb)
-                    return IsWordElement(tb) ? tb : null;  // stop at a non-word TextBlock
-                current = VisualTreeHelper.GetParent(current);
+                    return IsWordElement(tb) ? tb : null;
+                // VisualTreeHelpers.GetParent handles Run / Span / Hyperlink
+                // / Paragraph as well as visuals. Direct VisualTreeHelper
+                // .GetParent would throw on any FrameworkContentElement,
+                // which is exactly what OriginalSource often is when the
+                // user clicks on text inside a TextBlock.
+                current = VisualTreeHelpers.GetParent(current);
             }
             return null;
         }
@@ -576,12 +639,6 @@ namespace FountOfHopeStudyBiblePC.Views
             return FindWordElementAt(hit);
         }
 
-        /// <summary>
-        /// A word element is a TextBlock whose (trimmed) text is a single, non-empty
-        /// token containing at least one letter. This excludes verse numbers, paragraph
-        /// containers, and whitespace-only blocks.
-        /// Children can opt a TextBlock out by setting <c>Tag = "noword"</c>.
-        /// </summary>
         private static bool IsWordElement(TextBlock tb)
         {
             if (tb.Tag is string tag && tag == "noword") return false;
@@ -593,7 +650,7 @@ namespace FountOfHopeStudyBiblePC.Views
             bool hasLetter = false;
             foreach (var ch in trimmed)
             {
-                if (char.IsWhiteSpace(ch)) return false;   // multi-word → container
+                if (char.IsWhiteSpace(ch)) return false;
                 if (!hasLetter && char.IsLetter(ch)) hasLetter = true;
             }
             return hasLetter;
@@ -639,7 +696,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 words[i].Background = brush;
         }
 
-        // ── Fallback: translucent preview during drag ──────────────────
         private void UpdateDragPreview()
         {
             if (_wordDragStartBlock == null || _wordDragEndBlock == null) return;
@@ -650,7 +706,6 @@ namespace FountOfHopeStudyBiblePC.Views
             var inRange = new HashSet<TextBlock>(
                 words.Skip(range.Value.from).Take(range.Value.to - range.Value.from + 1));
 
-            // Restore words that left the range.
             foreach (var word in _dragPreviewOriginals.Keys.ToList())
             {
                 if (!inRange.Contains(word))
@@ -660,7 +715,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 }
             }
 
-            // Add a translucent marker to newly-entered words.
             var previewBrush = new SolidColorBrush(_viewModel.WordMarkerColor) { Opacity = 0.4 };
             foreach (var word in inRange)
             {
@@ -785,8 +839,6 @@ namespace FountOfHopeStudyBiblePC.Views
                     onWordHighlightAction: ActivateWordHighlightMode);
             }
 
-            // Cache the optional drag-capable host so the preview pipeline
-            // knows whether to delegate or use the fallback.
             _wordHighlightHost = ReaderHost.Content as IWordHighlightHost;
         }
 
@@ -1022,7 +1074,6 @@ namespace FountOfHopeStudyBiblePC.Views
             {
                 return;
             }
-
 
             var cache = _selectedIsPrimary ? _primaryLoadedVerses : _secondaryLoadedVerses;
             var db = _selectedIsPrimary ? _databaseHelper : _secondaryDatabaseHelper;

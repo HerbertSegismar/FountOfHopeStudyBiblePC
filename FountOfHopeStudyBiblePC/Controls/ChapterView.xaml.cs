@@ -4,7 +4,6 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Media.Media3D;
 using System.Windows.Threading;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
@@ -108,11 +107,23 @@ namespace FountOfHopeStudyBiblePC.Controls
         {
             switch (e.PropertyName)
             {
-                case nameof(AppViewModel.DarkTheme):
-                case nameof(AppViewModel.FontSize):
-                case nameof(AppViewModel.WordsOfJesus):
+                // Background texture + overlay colour — need ApplyBackground,
+                // not just a text re-render.
                 case nameof(AppViewModel.BgImageIndex):
                 case nameof(AppViewModel.OverlayOpacity):
+                case nameof(AppViewModel.LightOverlayColor):
+                case nameof(AppViewModel.DarkOverlayColor):
+                    ApplyBackground();
+                    RenderAll();
+                    break;
+
+                case nameof(AppViewModel.DarkTheme):
+                    ApplyBackground();     // DarkTheme also picks the overlay colour
+                    RenderAll();
+                    break;
+
+                case nameof(AppViewModel.FontSize):
+                case nameof(AppViewModel.WordsOfJesus):
                 case nameof(AppViewModel.SelectedColor):
                 case nameof(AppViewModel.SelectedFontFamily):
                 case nameof(AppViewModel.DarkThemeReaderFontColor):
@@ -266,26 +277,38 @@ namespace FountOfHopeStudyBiblePC.Controls
 
         private void RenderAll()
         {
-            _processor.ClearCache();
+            var sv = VerseScroller;
+            var savedVOffset = sv?.VerticalOffset ?? 0;
+            var savedHOffset = sv?.HorizontalOffset ?? 0;
 
+            _processor.ClearCache();
             ClearPreview();
             _dragStartRun = null;
             _dragEndRun = null;
             _isWordDragActive = false;
 
             VerseItems.Items.Clear();
-
             foreach (var item in _content)
             {
                 switch (item)
                 {
                     case VerseContent.SubheadingVal sub:
-                        VerseItems.Items.Add(BuildSubheadingBlock(sub.Subheading));
-                        break;
+                        VerseItems.Items.Add(BuildSubheadingBlock(sub.Subheading)); break;
                     case VerseContent.VerseVal v:
-                        VerseItems.Items.Add(BuildVerseBlock(v.Verse));
-                        break;
+                        VerseItems.Items.Add(BuildVerseBlock(v.Verse)); break;
                 }
+            }
+
+            if (savedVOffset > 0.5)
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (VerseScroller != null)
+                    {
+                        VerseScroller.ScrollToVerticalOffset(savedVOffset);
+                        VerseScroller.ScrollToHorizontalOffset(savedHOffset);
+                    }
+                }), DispatcherPriority.Loaded);
             }
         }
 
@@ -724,7 +747,11 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             _highlightedVerse = null;
 
-            bool anyAdded = false;
+            // ── Block decision: majority highlighted → clear; majority plain → add;
+            //    tie → first word's state decides. ─────────────────────────────
+            int highlightedCount = 0;
+            int totalCount = 0;
+            bool? firstWordHighlighted = null;
 
             for (int i = lo; i <= hi; i++)
             {
@@ -737,7 +764,36 @@ namespace FountOfHopeStudyBiblePC.Controls
                     w.VerseNumber == verse.VerseNumber
                     && w.Start < end
                     && w.End > start);
-                if (already) continue;
+
+                if (firstWordHighlighted == null)
+                    firstWordHighlighted = already;
+
+                totalCount++;
+                if (already) highlightedCount++;
+            }
+
+            if (totalCount == 0)
+            {
+                CancelWordDrag();
+                return;
+            }
+
+            bool clearBlock;
+            if (highlightedCount * 2 > totalCount)
+                clearBlock = true;                                  // strict majority highlighted
+            else if (highlightedCount * 2 < totalCount)
+                clearBlock = false;                                 // strict majority plain
+            else
+                clearBlock = firstWordHighlighted == true;          // tie → first word wins
+
+            bool anyChanged = false;
+
+            for (int i = lo; i <= hi; i++)
+            {
+                var span = GetWordSpan(runs[i]);
+                if (span == null) continue;
+                var (verse, _, start, end) = span.Value;
+                if (end <= start) continue;
 
                 var fullVerse = verse with
                 {
@@ -745,14 +801,34 @@ namespace FountOfHopeStudyBiblePC.Controls
                     Chapter = _passage.Chapter,
                 };
 
-                _selectedWords.Add(new SelectedWord(verse.VerseNumber, start, end, _markerColor));
-                anyAdded = true;
+                var overlapping = _selectedWords
+                    .Where(w => w.VerseNumber == verse.VerseNumber
+                                && w.Start < end
+                                && w.End > start)
+                    .ToList();
 
-                if (_databaseHelper != null)
+                if (clearBlock)
                 {
-                    var argb = (_markerColor.A << 24) | (_markerColor.R << 16) |
-                               (_markerColor.G << 8) | _markerColor.B;
-                    _databaseHelper.AddWordHighlight(fullVerse, start, end, argb);
+                    if (overlapping.Count == 0) continue;
+                    foreach (var entry in overlapping)
+                    {
+                        _selectedWords.Remove(entry);
+                        _databaseHelper?.RemoveWordHighlight(fullVerse, entry.Start, entry.End);
+                    }
+                    anyChanged = true;
+                }
+                else
+                {
+                    if (overlapping.Count > 0) continue;
+                    _selectedWords.Add(new SelectedWord(verse.VerseNumber, start, end, _markerColor));
+                    anyChanged = true;
+
+                    if (_databaseHelper != null)
+                    {
+                        var argb = (_markerColor.A << 24) | (_markerColor.R << 16) |
+                                   (_markerColor.G << 8) | _markerColor.B;
+                        _databaseHelper.AddWordHighlight(fullVerse, start, end, argb);
+                    }
                 }
             }
 
@@ -761,7 +837,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             _isWordDragActive = false;
             ClearPreview();
 
-            if (!anyAdded) return;
+            if (!anyChanged) return;
 
             _groupedHighlights.Clear();
             foreach (var w in _selectedWords)
@@ -798,6 +874,44 @@ namespace FountOfHopeStudyBiblePC.Controls
             var inRange = new HashSet<Run>();
             for (int i = lo; i <= hi; i++) inRange.Add(runs[i]);
 
+            // ── Same majority + first-word tie-break as CommitWordDrag ─────
+            int highlightedCount = 0;
+            int totalCount = 0;
+            bool? firstWordHighlighted = null;
+
+            for (int i = lo; i <= hi; i++)
+            {
+                var r = runs[i];
+                if (!inRange.Contains(r)) continue;
+
+                var span = GetWordSpan(r);
+                if (span == null) continue;
+                var (verse, _, start, end) = span.Value;
+                if (end <= start) continue;
+
+                bool already = _selectedWords.Any(w =>
+                    w.VerseNumber == verse.VerseNumber
+                    && w.Start < end
+                    && w.End > start);
+
+                if (firstWordHighlighted == null)
+                    firstWordHighlighted = already;
+
+                totalCount++;
+                if (already) highlightedCount++;
+            }
+
+            bool clearBlock;
+            if (totalCount == 0)
+                clearBlock = false;
+            else if (highlightedCount * 2 > totalCount)
+                clearBlock = true;
+            else if (highlightedCount * 2 < totalCount)
+                clearBlock = false;
+            else
+                clearBlock = firstWordHighlighted == true;
+
+            // Restore runs that left the range.
             foreach (var r in _previewOriginals.Keys.ToList())
             {
                 if (!inRange.Contains(r))
@@ -807,14 +921,14 @@ namespace FountOfHopeStudyBiblePC.Controls
                 }
             }
 
-            var brush = new SolidColorBrush(_markerColor) { Opacity = 0.4 };
+            // Paint the block outcome over every run in range.
+            var addBrush = new SolidColorBrush(_markerColor) { Opacity = 0.4 };
             foreach (var r in inRange)
             {
                 if (!_previewOriginals.ContainsKey(r))
-                {
                     _previewOriginals[r] = r.Background;
-                    r.Background = brush;
-                }
+
+                r.Background = clearBlock ? null : addBrush;
             }
         }
 
@@ -834,7 +948,11 @@ namespace FountOfHopeStudyBiblePC.Controls
             while (current != null)
             {
                 if (current is TextBlock t && t.Tag is Verse) { tb = t; break; }
-                current = GetNodeParent(current);
+                // VisualTreeHelpers.GetParent handles Visuals, Visual3Ds,
+                // FrameworkContentElements (Run, Span, Hyperlink, …) and
+                // ContentElements without throwing, unlike calling
+                // VisualTreeHelper.GetParent directly.
+                current = VisualTreeHelpers.GetParent(current);
             }
             if (tb == null) return null;
 
@@ -848,16 +966,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             return run.Tag is VerseAnnotation { Tag: "word" } ? run : null;
         }
 
-        private static DependencyObject? GetNodeParent(DependencyObject node)
-        {
-            if (node is Visual || node is Visual3D)
-                return VisualTreeHelper.GetParent(node);
-
-            if (node is FrameworkContentElement fce)
-                return fce.Parent;
-
-            return null;
-        }
         private IEnumerable<Run> EnumerateAllWordRuns()
         {
             for (int i = 0; i < _content.Count; i++)

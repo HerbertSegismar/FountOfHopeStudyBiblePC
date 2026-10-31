@@ -1,4 +1,7 @@
-﻿using System.Windows;
+﻿// Controls/ReaderAppBar.cs
+using System;
+using System.Linq;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -112,6 +115,13 @@ namespace FountOfHopeStudyBiblePC.Controls
                     BuildActions();
                     UpdateTitleVisibility();
                     ApplyTitleButtonStyles();
+                    break;
+                case nameof(AppViewModel.IsDictionaryMode):
+                    // Rebuild the menu when the dictionary / highlight mode flips
+                    // so the "Dictionary Mode On" row and marker colour row
+                    // reflect the new state without the user reopening the popup.
+                    if (_menuPopup is { IsOpen: true })
+                        _menuPopup.Child = BuildReaderMenuContent;
                     break;
             }
         }
@@ -258,12 +268,12 @@ namespace FountOfHopeStudyBiblePC.Controls
 
         private Button BuildIconButton(
              PackIconMaterialKind kind, string tooltip, double iconScale, Action onClick)
-                {
-                    var fg = new SolidColorBrush(_viewModel.HeaderButtonsColor);
-                    return AppBarShared.BuildIconButton(
-                        kind, tooltip, IconButtonSize, IconButtonSize * iconScale,
-                        onClick, null, fg);
-                }
+        {
+            var fg = new SolidColorBrush(_viewModel.HeaderButtonsColor);
+            return AppBarShared.BuildIconButton(
+                kind, tooltip, IconButtonSize, IconButtonSize * iconScale,
+                onClick, null, fg);
+        }
 
         private Button BuildLayoutButton()
         {
@@ -294,7 +304,7 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             _layoutPopup = new Popup
             {
-                StaysOpen = true,     
+                StaysOpen = true,
                 AllowsTransparency = true,
                 Placement = PlacementMode.Bottom,
                 Child = BuildLayoutMenuContent(),
@@ -349,9 +359,9 @@ namespace FountOfHopeStudyBiblePC.Controls
         {
             if (_layoutPopup is null || !_layoutPopup.IsOpen) return;
 
+            var source = e.OriginalSource as DependencyObject;
             if (_layoutPopup.PlacementTarget is UIElement pt &&
-                (ReferenceEquals(e.OriginalSource, pt) ||
-                 IsDescendantOf(e.OriginalSource as DependencyObject, pt)))
+                (ReferenceEquals(source, pt) || VisualTreeHelpers.IsDescendantOf(source, pt)))
                 return;
 
             _layoutPopup.IsOpen = false;
@@ -619,9 +629,9 @@ namespace FountOfHopeStudyBiblePC.Controls
         {
             if (_menuPopup is null || !_menuPopup.IsOpen) return;
 
+            var source = e.OriginalSource as DependencyObject;
             if (_menuPopup.PlacementTarget is UIElement pt &&
-                (ReferenceEquals(e.OriginalSource, pt) ||
-                 IsDescendantOf(e.OriginalSource as DependencyObject, pt)))
+                (ReferenceEquals(source, pt) || VisualTreeHelpers.IsDescendantOf(source, pt)))
                 return;
 
             _menuPopup.IsOpen = false;
@@ -630,16 +640,6 @@ namespace FountOfHopeStudyBiblePC.Controls
         private void OnWindowDeactivated(object? sender, EventArgs e)
         {
             if (_menuPopup?.IsOpen == true) _menuPopup.IsOpen = false;
-        }
-
-        private static bool IsDescendantOf(DependencyObject? element, DependencyObject? ancestor)
-        {
-            while (element is not null)
-            {
-                if (ReferenceEquals(element, ancestor)) return true;
-                element = VisualTreeHelper.GetParent(element);
-            }
-            return false;
         }
 
         private void CommitPendingFontSize()
@@ -892,7 +892,23 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             return AppBarShared.BuildMenuRow(label, icon, () =>
             {
-                _viewModel.IsDictionaryMode = !_viewModel.IsDictionaryMode;
+                // Toggle the two modes as a pair so the AppViewModel's
+                // mutual-exclusion logic (IsDictionaryMode ↔ IsHighlightMode)
+                // always leaves us in a well-defined state, even if the user
+                // enters through this row rather than a toolbar button.
+                if (_viewModel.IsDictionaryMode)
+                {
+                    _viewModel.IsHighlightMode = true;      // clears IsDictionaryMode
+                }
+                else
+                {
+                    _viewModel.IsDictionaryMode = true;     // clears IsHighlightMode
+                }
+
+                // Keep the menu visually in sync; the handler above already
+                // triggered a rebuild via OnViewModelPropertyChanged, but
+                // setting the child again here is cheap and guarantees the
+                // right-hand column updates in landscape mode too.
                 _menuPopup?.Child = BuildReaderMenuContent;
             }, fg, isDarkTheme: _viewModel.DarkTheme);
         }

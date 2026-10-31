@@ -446,10 +446,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             var passage = page.Passage;
             if (passage == null || page.Verses == null) return;
 
-            const double BaseFontSize = 12;
-
-            // Single accent shared by the asterisk, cross-ref links, and the
-            // note/footnote markers so they all visually agree.
+            const double BaseFontSize = 14;
             var theme = GetThemeColor();
 
             var processor = new VerseTextProcessor();
@@ -459,7 +456,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     : _viewModel.LightThemeReaderFontColor,
                 VerseNumber: _viewModel.HeaderButtonsColor,
                 Primary: _viewModel.HeaderButtonsColor,
-                // Notes markers (footnote letters/numbers) use the accent.
                 TagColor: theme,
                 TagBg: Color.FromArgb(0x33, theme.R, theme.G, theme.B),
                 WordsOfJesus: _viewModel.WordsOfJesus,
@@ -532,7 +528,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     BodyText.Inlines.Add(new Run(" "));
                     var refLink = new Hyperlink(new Run($"[{refCount}]"))
                     {
-                        // Matches the asterisk's accent color.
                         Foreground = new SolidColorBrush(theme),
                         FontWeight = FontWeights.Bold,
                         TextDecorations = [],
@@ -560,26 +555,30 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     IsOldTestament = vIsOld,
                 };
 
-                var starBlock = new TextBlock
+                const double StarBoxScale = 1.00;   
+                const double StarStrokeScale = 0.15;
+
+                var starBoxSize = BaseFontSize * StarBoxScale;
+                var starStroke = BaseFontSize * StarStrokeScale;
+
+                var starBlock = new Border
                 {
-                    Text = "*",
-                    FontSize = BaseFontSize * 2.5,
-                    FontWeight = FontWeights.Bold,
-                    // Asterisk keeps its original accent color — this is the
-                    // reference color that every other hyperlink matches.
-                    Foreground = new SolidColorBrush(theme),
+                    Width = starBoxSize,
+                    Height = starBoxSize,
+                    Background = Brushes.Transparent, 
                     Cursor = Cursors.Hand,
                     ToolTip = "Open verse commentary",
-                    RenderTransform = new TranslateTransform(
-                        0, Math.Round(BaseFontSize)),
-                    Padding = new Thickness(2, 0, 2, 0),
-                    // Constrain the line box to the base font's line height so
-                    // the oversized glyph doesn't inflate the line height.
-                    // ClipToBounds is false by default, so the glyph renders
-                    // at its natural visual size, overflowing the layout slot.
-                    LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
-                    LineHeight = BaseFontSize * 1.2,
-                    Background = Brushes.Transparent,
+                    Child = new System.Windows.Shapes.Path
+                    {
+                        Data = BuildAsteriskGeometry(starBoxSize, starStroke),
+                        Stroke = new SolidColorBrush(theme),
+                        StrokeThickness = starStroke,
+                        StrokeStartLineCap = PenLineCap.Round,
+                        StrokeEndLineCap = PenLineCap.Round,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        IsHitTestVisible = false,
+                    },
                 };
 
                 starBlock.MouseLeftButtonUp += (_, args) =>
@@ -595,6 +594,33 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
                 BodyText.Inlines.Add(new LineBreak());
             }
+        }
+
+        private static Geometry BuildAsteriskGeometry(double boxSize, double strokeThickness)
+        {
+            var inset = strokeThickness / 2.0;
+            var radius = (boxSize / 2.0) - inset;
+            var centre = boxSize / 2.0;
+
+            var g = new StreamGeometry();
+            using (var ctx = g.Open())
+            {
+                for (var k = 0; k < 3; k++)
+                {
+                    var angle = -Math.PI / 2.0 + k * (Math.PI / 3.0);
+                    var dx = Math.Cos(angle) * radius;
+                    var dy = Math.Sin(angle) * radius;
+
+                    ctx.BeginFigure(
+                        new Point(centre - dx, centre - dy),
+                        isFilled: false, isClosed: false);
+                    ctx.LineTo(
+                        new Point(centre + dx, centre + dy),
+                        isStroked: true, isSmoothJoin: false);
+                }
+            }
+            g.Freeze();
+            return g;
         }
 
         private void BodyText_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
