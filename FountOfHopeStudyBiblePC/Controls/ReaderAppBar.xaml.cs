@@ -117,9 +117,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                     ApplyTitleButtonStyles();
                     break;
                 case nameof(AppViewModel.IsDictionaryMode):
-                    // Rebuild the menu when the dictionary / highlight mode flips
-                    // so the "Dictionary Mode On" row and marker colour row
-                    // reflect the new state without the user reopening the popup.
                     if (_menuPopup is { IsOpen: true })
                         _menuPopup.Child = BuildReaderMenuContent;
                     break;
@@ -198,10 +195,12 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             var isLandscape = IsLandscape;
 
-            bool showNavRow = (_viewModel.MultiVersion && !isLandscape)
-                           || (!_viewModel.MultiVersion && isLandscape)
-                           || (isLandscape && _viewModel.MultiVersion
-                               && _viewModel.MultiViewLayout == "horizontal");
+            // Nav row: shown in any multi-version layout, and in landscape single-version.
+            bool showNavRow = _viewModel.MultiVersion || isLandscape;
+
+            // Theme row: shown in every single-version layout, and in every portrait
+            // multi-version layout (i.e. any config that is not landscape multi-version).
+            bool showThemeRow = !_viewModel.MultiVersion || !isLandscape;
 
             if (showNavRow)
             {
@@ -229,9 +228,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                     PackIconMaterialKind.Cog, "Settings", 0.6,
                     () => ScreenRequested?.Invoke(new Screen.Settings())));
             }
-
-            bool showThemeRow = !_viewModel.MultiVersion
-                             || (!isLandscape && _viewModel.MultiViewLayout == "horizontal");
 
             if (showThemeRow)
             {
@@ -384,7 +380,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             _layoutRotation.BeginAnimation(RotateTransform.AngleProperty, anim);
         }
 
-        private FrameworkElement BuildLayoutMenuContent()
+        private Border BuildLayoutMenuContent()
         {
             var bg = _viewModel.DarkTheme
                 ? _viewModel.DarkModalBackgroundColor

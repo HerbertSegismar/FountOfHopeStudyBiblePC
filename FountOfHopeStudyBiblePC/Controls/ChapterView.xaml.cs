@@ -1,14 +1,18 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
 using FountOfHopeStudyBiblePC.ViewModels;
+using MahApps.Metro.IconPacks;
 
 namespace FountOfHopeStudyBiblePC.Controls
 {
@@ -49,6 +53,15 @@ namespace FountOfHopeStudyBiblePC.Controls
         private Run? _dragEndRun;
         private bool _isWordDragActive;
         private readonly Dictionary<Run, Brush?> _previewOriginals = [];
+
+        private const double InlineIconButtonSize = 35;
+
+        private Popup? _inlineLayoutPopup;
+        private Popup? _inlineMenuPopup;
+        private RotateTransform? _inlineLayoutRotation;
+        private RotateTransform? _inlineMenuRotation;
+        private TextBox? _fontSizeBox;
+        private Window? _hookedWindow;
 
         public ChapterView(
             PassageSelection passage,
@@ -99,16 +112,33 @@ namespace FountOfHopeStudyBiblePC.Controls
             _scrollSyncEnabled = scrollSyncEnabled;
             _markerColor = markerColor;
 
+            // ── Ported from ReaderAppBar: build the two inline popups in code ──
+            BuildInlinePopups();
+
             _viewModel.PropertyChanged += (_, e) => OnViewModelPropertyChanged(e);
             Loaded += OnLoaded;
+            Unloaded += OnUnloaded;
         }
+
+        // ── Orientation (mirrors Kotlin's LocalConfiguration.orientation) ──
+        private bool IsLandscape
+        {
+            get
+            {
+                var w = Window.GetWindow(this);
+                if (w is null || w.ActualWidth <= 0 || w.ActualHeight <= 0) return false;
+                return w.ActualWidth > w.ActualHeight;
+            }
+        }
+
+        private bool IsLandscapeVerticalMulti
+            => IsLandscape && _viewModel.MultiVersion
+                && _viewModel.MultiViewLayout == "vertical";
 
         private void OnViewModelPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
         {
             switch (e.PropertyName)
             {
-                // Background texture + overlay colour — need ApplyBackground,
-                // not just a text re-render.
                 case nameof(AppViewModel.BgImageIndex):
                 case nameof(AppViewModel.OverlayOpacity):
                 case nameof(AppViewModel.LightOverlayColor):
@@ -118,8 +148,23 @@ namespace FountOfHopeStudyBiblePC.Controls
                     break;
 
                 case nameof(AppViewModel.DarkTheme):
-                    ApplyBackground();     // DarkTheme also picks the overlay colour
+                    ApplyBackground();
                     RenderAll();
+                    UpdateInlineHeader();
+                    if (_inlineMenuPopup is { IsOpen: true })
+                        _inlineMenuPopup.Child = BuildReaderMenuContent;
+                    break;
+
+                case nameof(AppViewModel.MultiVersion):
+                case nameof(AppViewModel.MultiViewLayout):
+                    UpdateInlineHeader();
+                    if (_inlineLayoutPopup is { IsOpen: true })
+                        _inlineLayoutPopup.Child = BuildLayoutMenuContent();
+                    break;
+
+                case nameof(AppViewModel.ScrollSync):
+                case nameof(AppViewModel.HeaderButtonsColor):
+                    UpdateInlineHeader();
                     break;
 
                 case nameof(AppViewModel.FontSize):
@@ -132,6 +177,9 @@ namespace FountOfHopeStudyBiblePC.Controls
                 case nameof(AppViewModel.ShowStrongs):
                 case nameof(AppViewModel.IsDictionaryMode):
                     if (!_isWordDragActive) RenderAll();
+                    if (e.PropertyName == nameof(AppViewModel.IsDictionaryMode)
+                        && _inlineMenuPopup is { IsOpen: true })
+                        _inlineMenuPopup.Child = BuildReaderMenuContent;
                     break;
 
                 case nameof(AppViewModel.WordMarkerColor):
@@ -144,6 +192,8 @@ namespace FountOfHopeStudyBiblePC.Controls
         {
             LoadCrossRefCounts();
             LoadWordHighlights();
+
+            HookWindowSizeChanged();
 
             bool hasTarget = _isCurrentPage && _targetVerse.HasValue && _targetVerse.Value > 0;
             if (hasTarget)
@@ -168,13 +218,43 @@ namespace FountOfHopeStudyBiblePC.Controls
                     }
                     HighlightTargetVerse();
                     _onInitialScrollComplete();
-                }), System.Windows.Threading.DispatcherPriority.Loaded);
+                }), DispatcherPriority.Loaded);
             }
             else
             {
                 _onInitialScrollComplete();
             }
         }
+
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            if (_inlineLayoutPopup is { IsOpen: true }) _inlineLayoutPopup.IsOpen = false;
+            if (_inlineMenuPopup is { IsOpen: true }) _inlineMenuPopup.IsOpen = false;
+            UnhookWindowSizeChanged();
+        }
+
+        private void HookWindowSizeChanged()
+        {
+            var window = Window.GetWindow(this);
+            if (window is null || ReferenceEquals(window, _hookedWindow)) return;
+            UnhookWindowSizeChanged();
+            _hookedWindow = window;
+            _hookedWindow.SizeChanged += OnWindowSizeChanged;
+        }
+
+        private void UnhookWindowSizeChanged()
+        {
+            if (_hookedWindow is null) return;
+            _hookedWindow.SizeChanged -= OnWindowSizeChanged;
+            _hookedWindow = null;
+        }
+
+        private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
+            => UpdateInlineHeader();
+
+        // ═══════════════════════════════════════════════════════════════════
+        //  Background / header / verse rendering — unchanged from before
+        // ═══════════════════════════════════════════════════════════════════
 
         private void ApplyBackground()
         {
@@ -233,13 +313,50 @@ namespace FountOfHopeStudyBiblePC.Controls
 
         private void UpdateInlineHeader()
         {
+            var fg = new SolidColorBrush(_viewModel.HeaderButtonsColor);
+
             InlineBookText.Text = _passage.BookName;
+            InlineBookText.Foreground = fg;
+
             InlineChapterText.Text = _passage.Chapter.ToString();
+            InlineChapterText.Foreground = fg;
+
             InlineVersionText.Text = _versionAbbr;
+            InlineVersionText.Foreground = fg;
+
             InlineHeader.Visibility = _viewModel.MultiVersion
                 ? Visibility.Visible
                 : Visibility.Collapsed;
-            InlineThemeIcon.Text = _viewModel.DarkTheme ? "☀" : "☾";
+
+            InlineNavPanel.Visibility = IsLandscapeVerticalMulti
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            InlineHomeIcon.Foreground = fg;
+            InlineBookmarksIcon.Foreground = fg;
+            InlineNotesIcon.Foreground = fg;
+            InlineSearchIcon.Foreground = fg;
+            InlineSettingsIcon.Foreground = fg;
+
+            InlineThemeIcon.Kind = _viewModel.DarkTheme
+                ? PackIconMaterialKind.Brightness6
+                : PackIconMaterialKind.Brightness2;
+            InlineThemeIcon.Foreground = fg;
+
+            InlineColorIcon.Foreground = fg;
+
+            InlineScrollSyncBtn.Visibility = _viewModel.MultiVersion
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            InlineScrollSyncIcon.Kind = _viewModel.ScrollSync
+                ? PackIconMaterialKind.LinkVariant
+                : PackIconMaterialKind.LinkVariantOff;
+            InlineScrollSyncIcon.Foreground = fg;
+
+            // Kind on these two is owned by the popup lifecycle — only
+            // repaint the foreground here so an open popup keeps its Close icon.
+            InlineLayoutIcon.Foreground = fg;
+            InlineMenuIcon.Foreground = fg;
         }
 
         private void LoadCrossRefCounts()
@@ -356,8 +473,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                     ? new SolidColorBrush(Color.FromArgb(0x55, theme.R, theme.G, theme.B))
                     : Brushes.Transparent);
 
-            // The line height the surrounding body uses. Note markers and the
-            // asterisk are constrained to this so they don't inflate the row.
             var baseLineHeight = _viewModel.FontSize * 1.333;
 
             var tb = new TextBlock
@@ -492,10 +607,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                     RenderTransform = new TranslateTransform(
                         0, Math.Round(_viewModel.FontSize * 0.4)),
                     Padding = new Thickness(2, 0, 2, 0),
-                    // Constrain the line box to the surrounding body's line
-                    // height so the oversized glyph doesn't inflate the row.
-                    // ClipToBounds is false by default, so the glyph still
-                    // paints at its natural visual size, overflowing the slot.
                     LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
                     LineHeight = baseLineHeight,
                     Background = Brushes.Transparent,
@@ -747,8 +858,6 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             _highlightedVerse = null;
 
-            // ── Block decision: majority highlighted → clear; majority plain → add;
-            //    tie → first word's state decides. ─────────────────────────────
             int highlightedCount = 0;
             int totalCount = 0;
             bool? firstWordHighlighted = null;
@@ -780,11 +889,11 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             bool clearBlock;
             if (highlightedCount * 2 > totalCount)
-                clearBlock = true;                                  // strict majority highlighted
+                clearBlock = true;
             else if (highlightedCount * 2 < totalCount)
-                clearBlock = false;                                 // strict majority plain
+                clearBlock = false;
             else
-                clearBlock = firstWordHighlighted == true;          // tie → first word wins
+                clearBlock = firstWordHighlighted == true;
 
             bool anyChanged = false;
 
@@ -874,7 +983,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             var inRange = new HashSet<Run>();
             for (int i = lo; i <= hi; i++) inRange.Add(runs[i]);
 
-            // ── Same majority + first-word tie-break as CommitWordDrag ─────
             int highlightedCount = 0;
             int totalCount = 0;
             bool? firstWordHighlighted = null;
@@ -911,7 +1019,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             else
                 clearBlock = firstWordHighlighted == true;
 
-            // Restore runs that left the range.
             foreach (var r in _previewOriginals.Keys.ToList())
             {
                 if (!inRange.Contains(r))
@@ -921,7 +1028,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                 }
             }
 
-            // Paint the block outcome over every run in range.
             var addBrush = new SolidColorBrush(_markerColor) { Opacity = 0.4 };
             foreach (var r in inRange)
             {
@@ -948,10 +1054,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             while (current != null)
             {
                 if (current is TextBlock t && t.Tag is Verse) { tb = t; break; }
-                // VisualTreeHelpers.GetParent handles Visuals, Visual3Ds,
-                // FrameworkContentElements (Run, Span, Hyperlink, …) and
-                // ContentElements without throwing, unlike calling
-                // VisualTreeHelper.GetParent directly.
                 current = VisualTreeHelpers.GetParent(current);
             }
             if (tb == null) return null;
@@ -1051,7 +1153,8 @@ namespace FountOfHopeStudyBiblePC.Controls
             for (int i = 0; i < verseIndex && i < VerseItems.Items.Count; i++)
             {
                 if (VerseItems.ItemContainerGenerator
-                    .ContainerFromIndex(i) is FrameworkElement container) accumulated += container.ActualHeight;
+                    .ContainerFromIndex(i) is FrameworkElement container)
+                    accumulated += container.ActualHeight;
             }
 
             sv.ScrollToVerticalOffset(accumulated + offsetFromTop);
@@ -1072,6 +1175,10 @@ namespace FountOfHopeStudyBiblePC.Controls
             timer.Start();
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        //  Inline header button handlers — same wiring as ReaderAppBar
+        // ═══════════════════════════════════════════════════════════════════
+
         private void InlineBookChapterBtn_Click(object sender, RoutedEventArgs e)
         {
             if (_scrollSyncEnabled || _isPrimary)
@@ -1087,12 +1194,760 @@ namespace FountOfHopeStudyBiblePC.Controls
         }
 
         private void InlineThemeBtn_Click(object sender, RoutedEventArgs e)
-        {
-            _viewModel.DarkTheme = !_viewModel.DarkTheme;
-            _onThemeToggle();
-        }
+    => _onThemeToggle();
 
         private void InlineColorBtn_Click(object sender, RoutedEventArgs e)
             => _onColorLensClick();
+
+        // ── Nav row — matches ReaderAppBar's ScreenRequested?.Invoke(new Screen.X()) ──
+        private void InlineHomeBtn_Click(object sender, RoutedEventArgs e)
+            => _onScreenChange?.Invoke(new Screen.Home());
+
+        private void InlineBookmarksBtn_Click(object sender, RoutedEventArgs e)
+            => _onScreenChange?.Invoke(new Screen.Bookmarks());
+
+        private void InlineNotesBtn_Click(object sender, RoutedEventArgs e)
+            => _onScreenChange?.Invoke(new Screen.Notes());
+
+        private void InlineSearchBtn_Click(object sender, RoutedEventArgs e)
+            => _onScreenChange?.Invoke(new Screen.Search());
+
+        private void InlineSettingsBtn_Click(object sender, RoutedEventArgs e)
+            => _onScreenChange?.Invoke(new Screen.Settings());
+
+        private void InlineScrollSyncBtn_Click(object sender, RoutedEventArgs e)
+            => _viewModel.ScrollSync = !_viewModel.ScrollSync;
+
+        // ═══════════════════════════════════════════════════════════════════
+        //  Inline Layout / Menu — full ReaderAppBar popup port
+        // ═══════════════════════════════════════════════════════════════════
+
+        private void BuildInlinePopups()
+        {
+            // Rotation origins so the Open/Close animation pivots correctly.
+            _inlineLayoutRotation = new RotateTransform(0);
+            InlineLayoutIcon.RenderTransformOrigin = new Point(0.5, 0.5);
+            InlineLayoutIcon.RenderTransform = _inlineLayoutRotation;
+
+            _inlineMenuRotation = new RotateTransform(0);
+            InlineMenuIcon.RenderTransformOrigin = new Point(0.5, 0.5);
+            InlineMenuIcon.RenderTransform = _inlineMenuRotation;
+
+            _inlineLayoutPopup = new Popup
+            {
+                StaysOpen = true,
+                AllowsTransparency = true,
+                Placement = PlacementMode.Bottom,
+            };
+            _inlineLayoutPopup.Opened += (_, _) =>
+            {
+                InlineLayoutIcon.Kind = PackIconMaterialKind.Close;
+                AnimateRotation(_inlineLayoutRotation, 180);
+
+                var window = Window.GetWindow(this);
+                if (window is not null)
+                {
+                    window.PreviewMouseLeftButtonDown += OnInlineLayoutMouseDown;
+                    window.Deactivated += OnInlineLayoutDeactivated;
+                }
+            };
+            _inlineLayoutPopup.Closed += (_, _) =>
+            {
+                InlineLayoutIcon.Kind = PackIconMaterialKind.ViewGrid;
+                AnimateRotation(_inlineLayoutRotation, 0);
+
+                var window = Window.GetWindow(this);
+                if (window is not null)
+                {
+                    window.PreviewMouseLeftButtonDown -= OnInlineLayoutMouseDown;
+                    window.Deactivated -= OnInlineLayoutDeactivated;
+                }
+            };
+
+            _inlineMenuPopup = new Popup
+            {
+                StaysOpen = true,
+                AllowsTransparency = true,
+                Placement = PlacementMode.Bottom,
+            };
+            _inlineMenuPopup.Opened += (_, _) =>
+            {
+                InlineMenuIcon.Kind = PackIconMaterialKind.Close;
+                AnimateRotation(_inlineMenuRotation, 180);
+
+                var window = Window.GetWindow(this);
+                if (window is not null)
+                {
+                    window.PreviewMouseLeftButtonDown += OnInlineMenuMouseDown;
+                    window.Deactivated += OnInlineMenuDeactivated;
+                }
+            };
+            _inlineMenuPopup.Closed += (_, _) =>
+            {
+                CommitPendingFontSize();
+                _fontSizeBox = null;
+
+                InlineMenuIcon.Kind = PackIconMaterialKind.Menu;
+                AnimateRotation(_inlineMenuRotation, 0);
+
+                var window = Window.GetWindow(this);
+                if (window is not null)
+                {
+                    window.PreviewMouseLeftButtonDown -= OnInlineMenuMouseDown;
+                    window.Deactivated -= OnInlineMenuDeactivated;
+                }
+            };
+        }
+
+        private void InlineLayoutBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_inlineLayoutPopup is null || sender is not UIElement btn) return;
+
+            if (_inlineLayoutPopup.IsOpen)
+            {
+                _inlineLayoutPopup.IsOpen = false;
+                return;
+            }
+
+            _inlineLayoutPopup.Child = BuildLayoutMenuContent();
+            _inlineLayoutPopup.PlacementTarget = btn;
+            _inlineLayoutPopup.Placement = PlacementMode.Bottom;
+            _inlineLayoutPopup.IsOpen = true;
+        }
+
+        private void InlineMenuBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_inlineMenuPopup is null || sender is not UIElement btn) return;
+
+            if (_inlineMenuPopup.IsOpen)
+            {
+                _inlineMenuPopup.IsOpen = false;
+                return;
+            }
+
+            _inlineMenuPopup.Child = BuildReaderMenuContent;
+            _inlineMenuPopup.PlacementTarget = btn;
+            _inlineMenuPopup.Placement = PlacementMode.Bottom;
+            _inlineMenuPopup.IsOpen = true;
+        }
+
+        private void OnInlineLayoutMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (_inlineLayoutPopup is null || !_inlineLayoutPopup.IsOpen) return;
+
+            var source = e.OriginalSource as DependencyObject;
+            if (_inlineLayoutPopup.PlacementTarget is UIElement pt &&
+                (ReferenceEquals(source, pt) || VisualTreeHelpers.IsDescendantOf(source, pt)))
+                return;
+
+            _inlineLayoutPopup.IsOpen = false;
+        }
+
+        private void OnInlineLayoutDeactivated(object? sender, EventArgs e)
+        {
+            if (_inlineLayoutPopup?.IsOpen == true) _inlineLayoutPopup.IsOpen = false;
+        }
+
+        private void OnInlineMenuMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (_inlineMenuPopup is null || !_inlineMenuPopup.IsOpen) return;
+
+            var source = e.OriginalSource as DependencyObject;
+            if (_inlineMenuPopup.PlacementTarget is UIElement pt &&
+                (ReferenceEquals(source, pt) || VisualTreeHelpers.IsDescendantOf(source, pt)))
+                return;
+
+            _inlineMenuPopup.IsOpen = false;
+        }
+
+        private void OnInlineMenuDeactivated(object? sender, EventArgs e)
+        {
+            if (_inlineMenuPopup?.IsOpen == true) _inlineMenuPopup.IsOpen = false;
+        }
+
+        private static void AnimateRotation(RotateTransform? rotation, double angle)
+        {
+            if (rotation is null) return;
+            var anim = new DoubleAnimation
+            {
+                To = angle,
+                Duration = TimeSpan.FromMilliseconds(300),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut },
+            };
+            rotation.BeginAnimation(RotateTransform.AngleProperty, anim);
+        }
+
+        private void CommitPendingFontSize()
+        {
+            if (_fontSizeBox is null) return;
+            if (int.TryParse(_fontSizeBox.Text, out var value))
+                _viewModel.FontSize = Math.Clamp(value, 1, 100);
+            _fontSizeBox.Text = _viewModel.FontSize.ToString();
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        //  Layout popup content — verbatim port of ReaderAppBar
+        // ═══════════════════════════════════════════════════════════════════
+
+        private Border BuildLayoutMenuContent()
+        {
+            var bg = _viewModel.DarkTheme
+                ? _viewModel.DarkModalBackgroundColor
+                : _viewModel.LightModalBackgroundColor;
+            var fg = AppBarShared.MenuForegroundBrush(_viewModel.DarkTheme);
+            var primary = ThemeManager.PrimaryColor;
+
+            var container = new Border
+            {
+                Background = new SolidColorBrush(bg),
+                BorderBrush = AppBarShared.MenuBorderBrush(_viewModel.DarkTheme, 0x33),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(4),
+                MinWidth = 220,
+                MaxWidth = 340,
+                Effect = new DropShadowEffect
+                {
+                    BlurRadius = 14,
+                    ShadowDepth = 3,
+                    Direction = 270,
+                    Color = Colors.Black,
+                    Opacity = 0.4,
+                },
+            };
+
+            var stack = new StackPanel { Margin = new Thickness(4) };
+
+            stack.Children.Add(new Border
+            {
+                Height = 25,
+                Child = new TextBlock
+                {
+                    Text = _viewModel.MultiVersion ? "Parallel View" : "Single View",
+                    FontWeight = FontWeights.Bold,
+                    Foreground = new SolidColorBrush(primary),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextAlignment = TextAlignment.Center,
+                },
+            });
+            stack.Children.Add(AppBarShared.BuildSeparator());
+
+            var layouts = new (string Title, PackIconMaterialKind Icon, double Rotate)[]
+            {
+                ("Single",     PackIconMaterialKind.Numeric1,   0),
+                ("Horizontal", PackIconMaterialKind.ViewStream, 90),
+                ("Vertical",   PackIconMaterialKind.ViewStream, 0),
+            };
+
+            foreach (var (title, iconKind, rotate) in layouts)
+            {
+                var isActive = title switch
+                {
+                    "Single" => !_viewModel.MultiVersion,
+                    "Horizontal" => _viewModel.MultiVersion && _viewModel.MultiViewLayout == "horizontal",
+                    "Vertical" => _viewModel.MultiVersion && _viewModel.MultiViewLayout == "vertical",
+                    _ => false,
+                };
+
+                var icon = new PackIconMaterial
+                {
+                    Kind = iconKind,
+                    Width = 16,
+                    Height = 16,
+                    Foreground = fg,
+                };
+                if (rotate != 0)
+                {
+                    icon.RenderTransformOrigin = new Point(0.5, 0.5);
+                    icon.RenderTransform = new RotateTransform(rotate);
+                }
+
+                var capturedTitle = title;
+                stack.Children.Add(AppBarShared.BuildMenuRow(
+                    label: title,
+                    icon: icon,
+                    onClick: () =>
+                    {
+                        switch (capturedTitle)
+                        {
+                            case "Single":
+                                _viewModel.MultiVersion = false;
+                                break;
+                            case "Horizontal":
+                                _viewModel.SquareAspectViews = false;
+                                _viewModel.MultiVersion = true;
+                                _viewModel.MultiViewLayout = "horizontal";
+                                break;
+                            case "Vertical":
+                                _viewModel.SquareAspectViews = false;
+                                _viewModel.MultiVersion = true;
+                                _viewModel.MultiViewLayout = "vertical";
+                                break;
+                        }
+                        if (_inlineLayoutPopup is not null) _inlineLayoutPopup.IsOpen = false;
+                    },
+                    foreground: fg,
+                    isActive: isActive,
+                    isDarkTheme: _viewModel.DarkTheme));
+            }
+
+            if (_viewModel.MultiVersion)
+            {
+                stack.Children.Add(AppBarShared.BuildSeparator());
+
+                var rowGrid = new Grid();
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition
+                { Width = new GridLength(1, GridUnitType.Star) });
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var label = new TextBlock
+                {
+                    Text = "Square Aspect Ratio",
+                    Foreground = fg,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(8, 6, 8, 6),
+                };
+                Grid.SetColumn(label, 0);
+                rowGrid.Children.Add(label);
+
+                var check = new CheckBox
+                {
+                    IsChecked = _viewModel.SquareAspectViews,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 8, 0),
+                    IsHitTestVisible = false,
+                };
+                Grid.SetColumn(check, 1);
+                rowGrid.Children.Add(check);
+
+                var row = new Border
+                {
+                    CornerRadius = new CornerRadius(4),
+                    Cursor = Cursors.Hand,
+                    Child = rowGrid,
+                };
+
+                var hoverBg = new SolidColorBrush(_viewModel.DarkTheme
+                    ? Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)
+                    : Color.FromArgb(0x22, 0x00, 0x00, 0x00));
+                row.MouseEnter += (_, _) => row.Background = hoverBg;
+                row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+                row.MouseLeftButtonUp += (_, _) =>
+                {
+                    _viewModel.SquareAspectViews = !_viewModel.SquareAspectViews;
+                    check.IsChecked = _viewModel.SquareAspectViews;
+                };
+
+                stack.Children.Add(row);
+            }
+
+            container.Child = stack;
+            return container;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        //  Reader menu content — verbatim port of ReaderAppBar
+        // ═══════════════════════════════════════════════════════════════════
+
+        private FrameworkElement BuildReaderMenuContent
+        {
+            get
+            {
+                var isLandscape = IsLandscape;
+                var bg = _viewModel.DarkTheme
+                    ? _viewModel.DarkModalBackgroundColor
+                    : _viewModel.LightModalBackgroundColor;
+
+                var container = new Border
+                {
+                    Background = new SolidColorBrush(bg),
+                    BorderBrush = AppBarShared.MenuBorderBrush(_viewModel.DarkTheme, 0x33),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(6),
+                    Padding = new Thickness(4),
+                    MinWidth = 220,
+                    MaxWidth = isLandscape ? 900 : 340,
+                    Effect = new DropShadowEffect
+                    {
+                        BlurRadius = 14,
+                        ShadowDepth = 3,
+                        Direction = 270,
+                        Color = Colors.Black,
+                        Opacity = 0.4,
+                    },
+                };
+
+                if (isLandscape)
+                {
+                    var grid = new Grid();
+                    grid.ColumnDefinitions.Add(new ColumnDefinition
+                    { Width = new GridLength(1, GridUnitType.Star) });
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    grid.ColumnDefinitions.Add(new ColumnDefinition
+                    { Width = new GridLength(1, GridUnitType.Star) });
+
+                    var leftColumn = new StackPanel { Margin = new Thickness(4) };
+                    BuildCommonScreenItems(leftColumn);
+                    if (_viewModel.BgImageIndex != 0)
+                        leftColumn.Children.Add(BuildBackgroundTextureItem());
+                    Grid.SetColumn(leftColumn, 0);
+                    grid.Children.Add(leftColumn);
+
+                    var divider = new Border
+                    {
+                        Width = 1,
+                        Background = new SolidColorBrush(Color.FromArgb(0x33, 0x80, 0x80, 0x80)),
+                        Margin = new Thickness(4, 6, 4, 6),
+                    };
+                    Grid.SetColumn(divider, 1);
+                    grid.Children.Add(divider);
+
+                    var rightColumn = new StackPanel { Margin = new Thickness(4) };
+                    BuildExtraReaderControls(rightColumn);
+                    Grid.SetColumn(rightColumn, 2);
+                    grid.Children.Add(rightColumn);
+
+                    container.Child = grid;
+                }
+                else
+                {
+                    var stack = new StackPanel { Margin = new Thickness(4) };
+                    BuildCommonItems(stack);
+                    container.Child = stack;
+                }
+
+                return container;
+            }
+        }
+
+        private void BuildCommonScreenItems(Panel host)
+        {
+            var readerScreen = new Screen.Reader(_viewModel.PrimaryPassage);
+            var fg = AppBarShared.MenuForegroundBrush(_viewModel.DarkTheme);
+
+            foreach (var (title, screen, iconKind) in
+                     AppBarShared.GetNavigationItems(_viewModel.PrimaryPassage))
+            {
+                var icon = new PackIconMaterial
+                {
+                    Kind = iconKind,
+                    Width = 16,
+                    Height = 16,
+                    Foreground = fg,
+                };
+                var isActive = AppBarShared.ScreensMatch(readerScreen, screen);
+                var target = screen;
+
+                host.Children.Add(AppBarShared.BuildMenuRow(
+                    label: title,
+                    icon: icon,
+                    onClick: () =>
+                    {
+                        if (_inlineMenuPopup is not null) _inlineMenuPopup.IsOpen = false;
+                        _onScreenChange?.Invoke(target);
+                    },
+                    foreground: fg,
+                    isActive: isActive,
+                    isDarkTheme: _viewModel.DarkTheme));
+            }
+        }
+
+        private void BuildCommonItems(Panel host)
+        {
+            BuildCommonScreenItems(host);
+
+            host.Children.Add(AppBarShared.BuildSeparator());
+            host.Children.Add(BuildBackgroundTextureItem());
+            host.Children.Add(AppBarShared.BuildSeparator());
+
+            if (_viewModel.BgImageIndex != 0)
+            {
+                host.Children.Add(BuildOverlayOpacityItem());
+                host.Children.Add(AppBarShared.BuildSeparator());
+            }
+
+            host.Children.Add(BuildDictionaryModeItem());
+            host.Children.Add(AppBarShared.BuildSeparator());
+
+            host.Children.Add(_viewModel.IsDictionaryMode
+                ? BuildColorPickerItem("Verse Marker Color",
+                    _viewModel.VerseMarkerColor,
+                    () => _viewModel.ShowVerseMarkerColorWheelDialog = true)
+                : BuildColorPickerItem("Word Marker Color",
+                    _viewModel.WordMarkerColor,
+                    () => _viewModel.ShowWordMarkerColorWheelDialog = true));
+
+            host.Children.Add(AppBarShared.BuildSeparator());
+            host.Children.Add(BuildColorPickerItem("Jesus' Words Color",
+                _viewModel.WordsOfJesus,
+                () => _viewModel.ShowJesusWordsColorWheelDialog = true));
+
+            host.Children.Add(AppBarShared.BuildSeparator());
+
+            var fontColor = _viewModel.DarkTheme
+                ? _viewModel.DarkThemeReaderFontColor
+                : _viewModel.LightThemeReaderFontColor;
+            host.Children.Add(BuildColorPickerItem("Font Color", fontColor, () =>
+            {
+                if (_viewModel.DarkTheme) _viewModel.ShowDarkReaderFontColorWheelDialog = true;
+                else _viewModel.ShowLightReaderFontColorWheelDialog = true;
+            }));
+
+            host.Children.Add(AppBarShared.BuildSeparator());
+            host.Children.Add(BuildFontSizeItem());
+        }
+
+        private void BuildExtraReaderControls(Panel host)
+        {
+            if (_viewModel.BgImageIndex != 0)
+            {
+                host.Children.Add(BuildOverlayOpacityItem());
+                host.Children.Add(AppBarShared.BuildSeparator());
+            }
+
+            host.Children.Add(BuildDictionaryModeItem());
+            host.Children.Add(AppBarShared.BuildSeparator());
+
+            host.Children.Add(_viewModel.IsDictionaryMode
+                ? BuildColorPickerItem("Verse Marker Color",
+                    _viewModel.VerseMarkerColor,
+                    () => _viewModel.ShowVerseMarkerColorWheelDialog = true)
+                : BuildColorPickerItem("Word Marker Color",
+                    _viewModel.WordMarkerColor,
+                    () => _viewModel.ShowWordMarkerColorWheelDialog = true));
+
+            host.Children.Add(AppBarShared.BuildSeparator());
+            host.Children.Add(BuildColorPickerItem("Jesus' Words Color",
+                _viewModel.WordsOfJesus,
+                () => _viewModel.ShowJesusWordsColorWheelDialog = true));
+
+            host.Children.Add(AppBarShared.BuildSeparator());
+
+            var fontColor = _viewModel.DarkTheme
+                ? _viewModel.DarkThemeReaderFontColor
+                : _viewModel.LightThemeReaderFontColor;
+            host.Children.Add(BuildColorPickerItem("Font Color", fontColor, () =>
+            {
+                if (_viewModel.DarkTheme) _viewModel.ShowDarkReaderFontColorWheelDialog = true;
+                else _viewModel.ShowLightReaderFontColorWheelDialog = true;
+            }));
+
+            host.Children.Add(AppBarShared.BuildSeparator());
+            host.Children.Add(BuildFontSizeItem());
+        }
+
+        private Border BuildBackgroundTextureItem()
+        {
+            var fg = AppBarShared.MenuForegroundBrush(_viewModel.DarkTheme);
+            var icon = new PackIconMaterial
+            {
+                Kind = PackIconMaterialKind.TextureBox,
+                Width = 16,
+                Height = 16,
+                Foreground = fg,
+            };
+            return AppBarShared.BuildMenuRow("Background Texture", icon, () =>
+            {
+                if (_inlineMenuPopup is not null) _inlineMenuPopup.IsOpen = false;
+                _viewModel.ShowBgModal = true;
+            }, fg, isDarkTheme: _viewModel.DarkTheme);
+        }
+
+        private Border BuildDictionaryModeItem()
+        {
+            var fg = AppBarShared.MenuForegroundBrush(_viewModel.DarkTheme);
+            var icon = new PackIconMaterial
+            {
+                Kind = _viewModel.IsDictionaryMode
+                    ? PackIconMaterialKind.LabelVariant
+                    : PackIconMaterialKind.Fire,
+                Width = 16,
+                Height = 16,
+                Foreground = new SolidColorBrush(ThemeManager.PrimaryColor),
+            };
+            var label = _viewModel.IsDictionaryMode
+                ? "Dictionary Mode On"
+                : "Word Marker On";
+
+            return AppBarShared.BuildMenuRow(label, icon, () =>
+            {
+                if (_viewModel.IsDictionaryMode)
+                    _viewModel.IsHighlightMode = true;
+                else
+                    _viewModel.IsDictionaryMode = true;
+
+                if (_inlineMenuPopup is not null)
+                    _inlineMenuPopup.Child = BuildReaderMenuContent;
+            }, fg, isDarkTheme: _viewModel.DarkTheme);
+        }
+
+        private Border BuildColorPickerItem(string label, Color color, Action onClick)
+        {
+            var fg = AppBarShared.MenuForegroundBrush(_viewModel.DarkTheme);
+            var swatch = new Border
+            {
+                Width = 16,
+                Height = 16,
+                CornerRadius = new CornerRadius(4),
+                Background = new SolidColorBrush(color),
+                BorderBrush = AppBarShared.MenuBorderBrush(_viewModel.DarkTheme, 0x66),
+                BorderThickness = new Thickness(1),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            return AppBarShared.BuildMenuRow(label, swatch, () =>
+            {
+                if (_inlineMenuPopup is not null) _inlineMenuPopup.IsOpen = false;
+                onClick();
+            }, fg, isDarkTheme: _viewModel.DarkTheme);
+        }
+
+        private Border BuildOverlayOpacityItem()
+        {
+            var fg = AppBarShared.MenuForegroundBrush(_viewModel.DarkTheme);
+
+            var slider = new Slider
+            {
+                Width = 140,
+                Minimum = 0,
+                Maximum = 1,
+                Value = _viewModel.OverlayOpacity,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            slider.ValueChanged += (_, e) => _viewModel.OverlayOpacity = (float)e.NewValue;
+
+            var stack = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(24, 4, 8, 4),
+            };
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Overlay: ",
+                Foreground = fg,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 8, 0),
+            });
+            stack.Children.Add(slider);
+
+            return new Border
+            {
+                CornerRadius = new CornerRadius(4),
+                Child = stack,
+            };
+        }
+
+        private Border BuildFontSizeItem()
+        {
+            var fg = AppBarShared.MenuForegroundBrush(_viewModel.DarkTheme);
+            var borderBrush = AppBarShared.MenuBorderBrush(_viewModel.DarkTheme, 0x33);
+
+            var sizeBox = new TextBox
+            {
+                Text = _viewModel.FontSize.ToString(),
+                Foreground = fg,
+                CaretBrush = fg,
+                Background = Brushes.Transparent,
+                BorderBrush = borderBrush,
+                BorderThickness = new Thickness(1),
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                FontWeight = FontWeights.Bold,
+                Width = 44,
+                Height = 26,
+                Padding = new Thickness(0),
+                Margin = new Thickness(4, 0, 4, 0),
+            };
+            _fontSizeBox = sizeBox;
+
+            sizeBox.PreviewTextInput += (_, e) =>
+            {
+                e.Handled = e.Text.Any(c => !char.IsDigit(c));
+            };
+
+            DataObject.AddPastingHandler(sizeBox, (_, e) =>
+            {
+                if (e.DataObject.GetData(DataFormats.Text) is string pasted
+                    && pasted.Any(c => !char.IsDigit(c)))
+                {
+                    e.CancelCommand();
+                }
+            });
+
+            void CommitFontSize()
+            {
+                if (int.TryParse(sizeBox.Text, out var value))
+                    _viewModel.FontSize = Math.Clamp(value, 1, 100);
+
+                sizeBox.Text = _viewModel.FontSize.ToString();
+                sizeBox.CaretIndex = sizeBox.Text.Length;
+            }
+
+            sizeBox.KeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Enter)
+                {
+                    CommitFontSize();
+                    e.Handled = true;
+                }
+            };
+            sizeBox.LostFocus += (_, _) => CommitFontSize();
+
+            var minusBtn = MakeSmallButton("A-", () =>
+            {
+                CommitFontSize();
+                _viewModel.FontSize = Math.Max(1, _viewModel.FontSize - 1);
+                sizeBox.Text = _viewModel.FontSize.ToString();
+            });
+            var plusBtn = MakeSmallButton("A+", () =>
+            {
+                CommitFontSize();
+                _viewModel.FontSize = Math.Min(100, _viewModel.FontSize + 1);
+                sizeBox.Text = _viewModel.FontSize.ToString();
+            });
+
+            var stack = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(24, 4, 8, 4),
+            };
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Font Size: ",
+                Foreground = fg,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 8, 0),
+            });
+            stack.Children.Add(minusBtn);
+            stack.Children.Add(sizeBox);
+            stack.Children.Add(plusBtn);
+
+            return new Border
+            {
+                CornerRadius = new CornerRadius(4),
+                Child = stack,
+            };
+        }
+
+        private Button MakeSmallButton(string text, Action onClick)
+        {
+            var fg = AppBarShared.MenuForegroundBrush(_viewModel.DarkTheme);
+
+            var btn = new Button
+            {
+                Content = text,
+                Width = 32,
+                Height = 26,
+                Margin = new Thickness(4, 0, 4, 0),
+                Background = Brushes.Transparent,
+                BorderBrush = AppBarShared.MenuBorderBrush(_viewModel.DarkTheme, 0x33),
+                BorderThickness = new Thickness(1),
+                Foreground = fg,
+                Cursor = Cursors.Hand,
+            };
+            btn.Click += (_, _) => onClick();
+            return btn;
+        }
     }
 }
