@@ -285,8 +285,22 @@ namespace FountOfHopeStudyBiblePC.Controls
             {
                 if (ReferenceEquals(current, _primaryView)) return _primaryView;
                 if (ReferenceEquals(current, _secondaryView)) return _secondaryView;
-                current = VisualTreeHelper.GetParent(current);
+                current = GetSafeParent(current);
             }
+            return null;
+        }
+
+        private static DependencyObject? GetSafeParent(DependencyObject current)
+        {
+            if (current is Visual || current is System.Windows.Media.Media3D.Visual3D)
+                return VisualTreeHelper.GetParent(current);
+
+            if (current is FrameworkContentElement fce)
+                return fce.Parent;
+
+            if (current is ContentElement ce)
+                return ContentOperations.GetParent(ce);
+
             return null;
         }
     }
