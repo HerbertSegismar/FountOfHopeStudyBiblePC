@@ -429,8 +429,64 @@ namespace FountOfHopeStudyBiblePC.Controls
             }
         }
 
-        private Color GetThemeColor()
-            => _viewModel.SelectedColor ?? (Color)ColorConverter.ConvertFromString("#FF7FB2FF");
+        private Color GetThemeColor() => _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor;
+
+        private static (double h, double s, double l) RgbToHsl(Color c)
+        {
+            double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
+            double max = Math.Max(r, Math.Max(g, b));
+            double min = Math.Min(r, Math.Min(g, b));
+            double l = (max + min) / 2.0;
+            double h = 0, s = 0;
+
+            if (max != min)
+            {
+                var d = max - min;
+                s = l > 0.5 ? d / (2.0 - max - min) : d / (max + min);
+
+                if (max == r) h = (g - b) / d + (g < b ? 6 : 0);
+                else if (max == g) h = (b - r) / d + 2;
+                else h = (r - g) / d + 4;
+
+                h /= 6;
+            }
+
+            return (h, s, l);
+        }
+
+        private static Color HslToRgb(double h, double s, double l)
+        {
+            double r, g, b;
+
+            if (s == 0)
+            {
+                r = g = b = l;
+            }
+            else
+            {
+                static double Hue(double p, double q, double t)
+                {
+                    if (t < 0) t += 1;
+                    if (t > 1) t -= 1;
+                    if (t < 1.0 / 6.0) return p + (q - p) * 6 * t;
+                    if (t < 0.5) return q;
+                    if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6;
+                    return p;
+                }
+
+                var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                var p = 2 * l - q;
+
+                r = Hue(p, q, h + 1.0 / 3.0);
+                g = Hue(p, q, h);
+                b = Hue(p, q, h - 1.0 / 3.0);
+            }
+
+            return Color.FromRgb(
+                (byte)Math.Round(Math.Clamp(r, 0, 1) * 255),
+                (byte)Math.Round(Math.Clamp(g, 0, 1) * 255),
+                (byte)Math.Round(Math.Clamp(b, 0, 1) * 255));
+        }
 
         private TextBlock BuildSubheadingBlock(Subheading sub)
         {
@@ -466,6 +522,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             var isTempHl = verse.VerseNumber == _highlightedVerse;
 
             var theme = GetThemeColor();
+            var secondary = ColorHelpers.DeriveSecondary(theme);
 
             var bg = persistColor != null
                 ? new SolidColorBrush(persistColor.Value)
@@ -488,7 +545,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             tb.Inlines.Add(new Run($"{verse.VerseNumber} ")
             {
                 FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(theme),
+                Foreground = new SolidColorBrush(secondary),
                 FontSize = _viewModel.FontSize * 0.9,
             });
 
@@ -496,7 +553,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                 TextColor: _viewModel.DarkTheme
                     ? _viewModel.DarkThemeReaderFontColor
                     : _viewModel.LightThemeReaderFontColor,
-                VerseNumber: theme,
+                VerseNumber: secondary,
                 Primary: theme,
                 TagColor: theme,
                 TagBg: Color.FromArgb(0x33, theme.R, theme.G, theme.B),
@@ -1384,10 +1441,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                 _viewModel.FontSize = Math.Clamp(value, 1, 100);
             _fontSizeBox.Text = _viewModel.FontSize.ToString();
         }
-
-        // ═══════════════════════════════════════════════════════════════════
-        //  Layout popup content — verbatim port of ReaderAppBar
-        // ═══════════════════════════════════════════════════════════════════
 
         private Border BuildLayoutMenuContent()
         {

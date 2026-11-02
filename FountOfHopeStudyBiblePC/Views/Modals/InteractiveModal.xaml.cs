@@ -32,10 +32,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         private readonly Dictionary<int, int> _crossRefCounts = [];
 
-        // ─────────────────────────────────────────────────────────────
-        //  Source-generated regexes (SYSLIB1045)
-        // ─────────────────────────────────────────────────────────────
-
         [GeneratedRegex("\\bhref\\s*=\\s*[\"']([^\"']+)[\"']", RegexOptions.IgnoreCase)]
         private static partial Regex HrefAttrRegex();
 
@@ -158,7 +154,12 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
             var fg = _viewModel.DarkTheme ? Colors.White : Colors.Black;
             BodyText.Foreground = new SolidColorBrush(fg);
-            TitleText.Foreground = new SolidColorBrush(_viewModel.HeaderButtonsColor);
+
+            // HeaderButtonsColor is tuned for the dark modal background. On the light
+            // theme it's too pale for a title, so use the same high-contrast color as
+            // the body text to keep the title legible.
+            TitleText.Foreground = new SolidColorBrush(
+                _viewModel.DarkTheme ? _viewModel.HeaderButtonsColor : fg);
 
             // The clickable title word matches the same accent used by every
             // other hyperlink in the modal (the asterisk's color).
@@ -437,9 +438,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             RenderInlineHtml(page.Content);
         }
 
-
-        private Color GetThemeColor()
-            => _viewModel.SelectedColor ?? (Color)ColorConverter.ConvertFromString("#FF7FB2FF");
+        private Color GetThemeColor() => _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor;
 
         private void RenderVerseList(ModalPage page)
         {
@@ -448,6 +447,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
             const double BaseFontSize = 14;
             var theme = GetThemeColor();
+            var verseNumberColor = ThemeManager.SecondaryColor;
 
             var processor = new VerseTextProcessor();
             var themeColors = new ThemeColors(
@@ -490,7 +490,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 BodyText.Inlines.Add(new Run($" {verse.VerseNumber} ")
                 {
                     FontWeight = FontWeights.Bold,
-                    Foreground = new SolidColorBrush(theme),
+                    Foreground = new SolidColorBrush(verseNumberColor),
                 });
 
                 int vBook = passage.BookNumber is int pb && pb > 0 ? pb : 1;
@@ -517,9 +517,9 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     onTagPress: marker =>
                         OpenFootnoteCommentary(marker, vBook, vChapter, vVerse, vIsOld),
                     onWordPress: w =>
-                        OnWordPressInVerse(w, vBook, vChapter, vVerse, vIsOld),
+                        OnWordPressInVerse(w, vIsOld),
                     onStrongsPress: num =>
-                        OnStrongsPressInVerse(num, vBook, vChapter, vVerse, vIsOld));
+                        OnStrongsPressInVerse(num, vIsOld));
 
                 foreach (var inline in processed.Body) BodyText.Inlines.Add(inline);
 
@@ -554,23 +554,21 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     VerseNumber = vVerse,
                     IsOldTestament = vIsOld,
                 };
-
-                const double StarBoxScale = 1.00;   
+ 
                 const double StarStrokeScale = 0.15;
 
-                var starBoxSize = BaseFontSize * StarBoxScale;
                 var starStroke = BaseFontSize * StarStrokeScale;
 
                 var starBlock = new Border
                 {
-                    Width = starBoxSize,
-                    Height = starBoxSize,
+                    Width = BaseFontSize,
+                    Height = BaseFontSize,
                     Background = Brushes.Transparent, 
                     Cursor = Cursors.Hand,
                     ToolTip = "Open verse commentary",
                     Child = new System.Windows.Shapes.Path
                     {
-                        Data = BuildAsteriskGeometry(starBoxSize, starStroke),
+                        Data = BuildAsteriskGeometry(BaseFontSize, starStroke),
                         Stroke = new SolidColorBrush(theme),
                         StrokeThickness = starStroke,
                         StrokeStartLineCap = PenLineCap.Round,
@@ -596,7 +594,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        private static Geometry BuildAsteriskGeometry(double boxSize, double strokeThickness)
+        private static StreamGeometry BuildAsteriskGeometry(double boxSize, double strokeThickness)
         {
             var inset = strokeThickness / 2.0;
             var radius = (boxSize / 2.0) - inset;
@@ -642,18 +640,18 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             if (run.Tag is not VerseAnnotation ann) return;
 
             var passage = page.Passage;
-            int book = passage?.BookNumber is int b && b > 0 ? b : 1;
-            int chapter = passage?.Chapter is int c && c > 0 ? c : 1;
+            _ = passage?.BookNumber is int b && b > 0 ? b : 1;
+            _ = passage?.Chapter is int c && c > 0 ? c : 1;
 
             switch (ann.Tag)
             {
                 case "word":
-                    OnWordPressInVerse(ann.Value, book, chapter, 1, page.IsOldTestament);
+                    OnWordPressInVerse(ann.Value, page.IsOldTestament);
                     e.Handled = true;
                     break;
 
                 case "strong":
-                    OnStrongsPressInVerse(ann.Value, book, chapter, 1, page.IsOldTestament);
+                    OnStrongsPressInVerse(ann.Value, page.IsOldTestament);
                     e.Handled = true;
                     break;
             }
@@ -765,13 +763,13 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     var rawTag = content.Substring(i + 1, end - i - 1).Trim();
                     Flush();
 
-                    var closing = rawTag.StartsWith("/");
+                    var closing = rawTag.StartsWith('/');
                     if (closing) rawTag = rawTag.Substring(1).TrimStart();
-                    var selfClosing = rawTag.EndsWith("/");
-                    if (selfClosing) rawTag = rawTag.Substring(0, rawTag.Length - 1).TrimEnd();
-                    var sp = rawTag.IndexOfAny(new[] { ' ', '\t', '\n', '\r' });
-                    var name = (sp >= 0 ? rawTag.Substring(0, sp) : rawTag).ToLowerInvariant();
-                    var attrs = sp >= 0 ? rawTag.Substring(sp) : "";
+                    var selfClosing = rawTag.EndsWith('/');
+                    if (selfClosing) rawTag = rawTag[..^1].TrimEnd();
+                    var sp = rawTag.IndexOfAny([' ', '\t', '\n', '\r']);
+                    var name = (sp >= 0 ? rawTag[..sp] : rawTag).ToLowerInvariant();
+                    var attrs = sp >= 0 ? rawTag[sp..] : "";
 
                     switch (name)
                     {
@@ -787,8 +785,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                                 {
                                     link = new Hyperlink
                                     {
-                                        // Match the asterisk's accent color so
-                                        // all hyperlinks in the modal agree.
                                         Foreground = new SolidColorBrush(GetThemeColor()),
                                         Tag = DecodeEntities(m.Groups[1].Value),
                                         TextDecorations = TextDecorations.Underline,
@@ -979,7 +975,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
 
             var refs = _crossRefDb.GetCrossReferences(
-                tag.BookNumber, tag.Chapter, tag.VerseNumber) ?? new List<CrossReference>();
+                tag.BookNumber, tag.Chapter, tag.VerseNumber) ?? [];
             var bookName = BibleData.GetBookByCustomNumber(tag.BookNumber)?.Name ?? "Book";
 
             var html = refs.Count == 0
@@ -1040,7 +1036,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         private void HandleSeeLink(string href, string linkText)
         {
-            var seeContent = href.Substring(2).Trim();
+            var seeContent = href[2..].Trim();
 
             if (seeContent.StartsWith("B:"))
             {
@@ -1066,7 +1062,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             UpdateView();
         }
 
-        private void OnWordPressInVerse(string word, int book, int chapter, int verse, bool isOldTestament)
+        private void OnWordPressInVerse(string word, bool isOldTestament)
         {
             var trimmed = (word ?? "").Trim();
             if (string.IsNullOrEmpty(trimmed) || ContainsDigitRegex().IsMatch(trimmed)) return;
@@ -1075,7 +1071,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             UpdateView();
         }
 
-        private void OnStrongsPressInVerse(string strongNumber, int book, int chapter, int verse, bool isOldTestament)
+        private void OnStrongsPressInVerse(string strongNumber, bool isOldTestament)
         {
             var trimmed = (strongNumber ?? "").Trim();
             if (string.IsNullOrEmpty(trimmed)) return;
@@ -1093,7 +1089,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         private void ShowStrongDefinition(string strongNumber)
         {
-            var isOld = strongNumber.StartsWith("H");
+            var isOld = strongNumber.StartsWith('H');
             var definition = _strongDb?.GetStrongDefinition(strongNumber)
                 ?? "Strong's definition not found.";
             _stack.Add(new ModalPage
@@ -1279,7 +1275,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                             ? _viewModel.SelectedSecondaryDictLanguage
                             : _viewModel.SelectedPrimaryDictLanguage;
                         var dicts = InteractiveModalUtils.DictionariesByLanguage
-                            .GetValueOrDefault(lang, new List<string>());
+                            .GetValueOrDefault(lang, []);
                         foreach (var key in dicts)
                         {
                             var item = new MenuItem

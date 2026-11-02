@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 
 namespace FountOfHopeStudyBiblePC.Views.Modals
@@ -31,6 +32,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
             _overlay = new ModalOverlayController(this);
 
+            SyncWheelPreview();
             BuildPresets();
         }
 
@@ -43,6 +45,16 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
             => _overlay.HandleKeyDown(sender, e);
+
+        // ═══════════════════════════════════════════════════════════
+        //  Wheel preview — mirrors ColorWheelDialog's init order:
+        //  Brightness first, then SelectedColor.
+        // ═══════════════════════════════════════════════════════════
+        private void SyncWheelPreview()
+        {
+            CustomWheelPreview.Brightness = ColorHelpers.GetBrightness(_currentColor);
+            CustomWheelPreview.SelectedColor = _currentColor;
+        }
 
         // ═══════════════════════════════════════════════════════════
         //  Presets
@@ -104,13 +116,10 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private static bool ColorsEqual(Color a, Color b)
             => a.R == b.R && a.G == b.G && a.B == b.B;
 
-        // ═══════════════════════════════════════════════════════════
-        //  Handlers
-        // ═══════════════════════════════════════════════════════════
         private void CustomCard_Click(object sender, MouseButtonEventArgs e)
         {
             _onCustomColorClick();
-            Close();   // navigate to color wheel → immediate
+            Close();   
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
@@ -118,7 +127,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         protected override void OnClosed(EventArgs e)
         {
-            base.OnClosed(e);   // raises Closed → controller detaches owner handlers
+            base.OnClosed(e); 
             _onDismiss();
         }
     }

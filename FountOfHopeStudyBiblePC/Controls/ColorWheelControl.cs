@@ -7,6 +7,9 @@ namespace FountOfHopeStudyBiblePC.Controls
 {
     public class ColorWheelControl : FrameworkElement
     {
+        private const int SegmentCount = 360;
+        private const double SegmentOverlap = 2.0;
+
         public static readonly DependencyProperty SelectedColorProperty =
             DependencyProperty.Register(
                 nameof(SelectedColor),
@@ -25,6 +28,17 @@ namespace FountOfHopeStudyBiblePC.Controls
                     0.8f,
                     FrameworkPropertyMetadataOptions.AffectsRender));
 
+        public static readonly DependencyProperty ShowThumbProperty =
+            DependencyProperty.Register(
+                nameof(ShowThumb),
+                typeof(bool),
+                typeof(ColorWheelControl),
+                new FrameworkPropertyMetadata(
+                    true,
+                    FrameworkPropertyMetadataOptions.AffectsRender,
+                    OnShowThumbChanged));
+
+        // ── CLR wrappers ────────────────────────────────────────────
         public Color SelectedColor
         {
             get => (Color)GetValue(SelectedColorProperty);
@@ -37,6 +51,18 @@ namespace FountOfHopeStudyBiblePC.Controls
             set => SetValue(BrightnessProperty, value);
         }
 
+        /// <summary>
+        /// Whether the draggable selector (line, ring, fill dot, centre
+        /// marker) is drawn. Set to <c>false</c> for a decorative preview.
+        /// Does not change interaction hit-testing — bind
+        /// <c>IsHitTestVisible="False"</c> on the element for that.
+        /// </summary>
+        public bool ShowThumb
+        {
+            get => (bool)GetValue(ShowThumbProperty);
+            set => SetValue(ShowThumbProperty, value);
+        }
+
         public event EventHandler<Color>? ColorSelected;
 
         private bool _isDragging;
@@ -45,6 +71,13 @@ namespace FountOfHopeStudyBiblePC.Controls
         {
             Focusable = true;
             Cursor = Cursors.Hand;
+        }
+
+        private static void OnShowThumbChanged(
+            DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is ColorWheelControl wheel)
+                wheel.Cursor = (bool)e.NewValue ? Cursors.Hand : Cursors.Arrow;
         }
 
         protected override void OnRender(DrawingContext dc)
@@ -59,18 +92,37 @@ namespace FountOfHopeStudyBiblePC.Controls
             Point center = new(w / 2.0, h / 2.0);
             double brightness = Brightness;
 
-            for (int i = 0; i < 90; i++)
+            // ── Solid backing disc ─────────────────────────────────
+            // Slightly larger than the wedges so the wheel's outer
+            // anti-aliased rim blends with a saturated hue instead of
+            // the card background. Color doesn't matter much because
+            // only a sub-pixel sliver of it is ever visible — a bright
+            // red at hue 0 matches the seam between the last and first
+            // wedges, so any showing-through looks continuous.
+            var backingBrush = new SolidColorBrush(
+                ColorHelpers.FromHsv(0, 1, brightness));
+            backingBrush.Freeze();
+            dc.DrawEllipse(backingBrush, null, center, radius + 0.5, radius + 0.5);
+
+            // ── Hue ring ────────────────────────────────────────────
+            // Hues centred on each step's midpoint (start + step/2),
+            // with each wedge sweeping step × SegmentOverlap degrees.
+            // 100% overlap hides every inter-wedge AA seam behind the
+            // next wedge's solid fill.
+            double step = 360.0 / SegmentCount;
+            double sweep = step * SegmentOverlap;
+            for (int i = 0; i < SegmentCount; i++)
             {
-                double startAngle = i * 4.0;
-                double sweepAngle = 4.5;
-                double hue = startAngle + sweepAngle / 2.0;
+                double startAngle = i * step;
+                double hue = startAngle + step / 2.0;
                 var color = ColorHelpers.FromHsv(hue, 1, brightness);
                 var brush = new SolidColorBrush(color);
                 brush.Freeze();
 
-                DrawArc(dc, center, radius, startAngle, sweepAngle, brush);
+                DrawArc(dc, center, radius, startAngle, sweep, brush);
             }
 
+            // ── Saturation overlay (white at centre → transparent at rim) ──
             var overlayBrush = new RadialGradientBrush(
                 Color.FromArgb(0xB3, 0xFF, 0xFF, 0xFF),
                 Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF))
@@ -83,6 +135,9 @@ namespace FountOfHopeStudyBiblePC.Controls
             overlayBrush.Freeze();
             dc.DrawEllipse(overlayBrush, null, center, radius, radius);
 
+            if (!ShowThumb) return;
+
+            // ── Selected-colour thumb ───────────────────────────────
             var (hueNow, satNow, _) = ColorHelpers.ToHsv(SelectedColor);
             double rad = hueNow * Math.PI / 180.0;
             double indicatorRadius = satNow * radius;
@@ -144,6 +199,7 @@ namespace FountOfHopeStudyBiblePC.Controls
         {
             base.OnMouseDown(e);
             if (e.ChangedButton != MouseButton.Left) return;
+            if (!ShowThumb) return;
 
             _isDragging = true;
             CaptureMouse();

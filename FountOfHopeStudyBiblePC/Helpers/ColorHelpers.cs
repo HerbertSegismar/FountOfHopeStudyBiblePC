@@ -1,16 +1,10 @@
-﻿// Helpers/ColorHelpers.cs
-using System;
-using System.Globalization;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Media;
 
 namespace FountOfHopeStudyBiblePC.Helpers
 {
     public static class ColorHelpers
     {
-        // ═══════════════════════════════════════════════════════════
-        //  HSV
-        // ═══════════════════════════════════════════════════════════
         public static (double Hue, double Sat, double Val) ToHsv(Color c)
         {
             double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
@@ -78,9 +72,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
                                   c.R, c.G, c.B);
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Hex
-        // ═══════════════════════════════════════════════════════════
         public static string ToHexString(Color c)
         {
             return c.A == 255
@@ -117,7 +108,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
                         (byte)Convert.ToInt32(input.Substring(3, 2), 16),
                         (byte)Convert.ToInt32(input.Substring(5, 2), 16));
                 }
-                else // length 9
+                else
                 {
                     color = Color.FromArgb(
                         (byte)Convert.ToInt32(input.Substring(1, 2), 16),
@@ -133,10 +124,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
             }
         }
 
-        /// <summary>
-        /// Filters a raw user-typed string into a valid hex prefix.
-        /// Ensures leading '#' and only [0-9A-F] chars, max 9 chars (#AARRGGBB).
-        /// </summary>
         public static string SanitizeHexInput(string input)
         {
             if (string.IsNullOrEmpty(input)) return "#";
@@ -154,9 +141,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
             return sb.ToString();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Wheel interaction — convert pointer offset to color
-        // ═══════════════════════════════════════════════════════════
         public static Color UpdateFromOffset(Point offset, Size size, float brightness)
         {
             double radius = Math.Min(size.Width, size.Height) / 2.0;
@@ -171,6 +155,16 @@ namespace FountOfHopeStudyBiblePC.Helpers
             double sat = Math.Clamp(dist / radius, 0, 1);
 
             return FromHsv(hue, sat, brightness);
+        }
+
+        public static readonly Color DefaultPrimaryColor = Color.FromRgb(0x67, 0x50, 0xA4);
+
+        public static Color DeriveSecondary(Color primary)
+        {
+            var (h, s, v) = ToHsv(primary);
+            h = (h + 240.0) % 360.0;
+            s = Math.Clamp(s * 0.70, 0.10, 1.00);
+            return FromHsv(h, s, v, primary.A);
         }
     }
 }

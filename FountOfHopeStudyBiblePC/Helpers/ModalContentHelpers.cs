@@ -8,9 +8,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
 {
     public static partial class ModalContentHelpers
     {
-        // ═══════════════════════════════════════════════════════════
-        //  Regexes
-        // ═══════════════════════════════════════════════════════════
         [GeneratedRegex(@"<script[\s\S]*?</script>", RegexOptions.IgnoreCase)]
         private static partial Regex ScriptRegex();
 
@@ -50,21 +47,16 @@ namespace FountOfHopeStudyBiblePC.Helpers
         [GeneratedRegex(@"\r\n|\r|\n")]
         private static partial Regex NewlineRegex();
 
-        // ═══════════════════════════════════════════════════════════
-        //  HTML sanitization
-        // ═══════════════════════════════════════════════════════════
         public static string SanitizeHtmlContent(string? html)
         {
             if (string.IsNullOrEmpty(html)) return "";
 
             var sanitized = html;
 
-            // 1. Truncate at first </pp> — drops DB-specific tail content
             var ppEnd = sanitized.IndexOf("</pp>", System.StringComparison.Ordinal);
             if (ppEnd != -1)
-                sanitized = sanitized.Substring(0, ppEnd + "</pp>".Length);
+                sanitized = sanitized[..(ppEnd + "</pp>".Length)];
 
-            // 2. Remove dangerous constructs
             sanitized = ScriptRegex().Replace(sanitized, "");
             sanitized = OnAttrDoubleQuoteRegex().Replace(sanitized, "");
             sanitized = OnAttrSingleQuoteRegex().Replace(sanitized, "");
@@ -73,12 +65,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
             sanitized = HtmlCommentRegex().Replace(sanitized, "");
             sanitized = StyleRegex().Replace(sanitized, "");
             sanitized = MetaRefreshRegex().Replace(sanitized, "");
-
-            // 3. Separate inline formatting glued to following text
-            //    <b>Header</b>Body  →  <b>Header</b> Body
             sanitized = GluedInlineTagRegex().Replace(sanitized, "</$1> $2");
-
-            // 4. Normalise hard newlines to <br> so WPF renders them like Android
             sanitized = NewlineRegex().Replace(sanitized, "<br>");
 
             return sanitized.Trim();
@@ -87,9 +74,9 @@ namespace FountOfHopeStudyBiblePC.Helpers
         public static string PrepareStrongContent(string? rawDefinition)
         {
             var sanitized = SanitizeHtmlContent(rawDefinition);
-            var index = sanitized.IndexOf("Derivation", System.StringComparison.OrdinalIgnoreCase);
+            var index = sanitized.IndexOf("Derivation", StringComparison.OrdinalIgnoreCase);
             if (index != -1)
-                return sanitized.Substring(0, index) + "<br><br>" + sanitized.Substring(index);
+                return sanitized[..index] + "<br><br>" + sanitized[index..];
             return sanitized;
         }
 
@@ -103,23 +90,23 @@ namespace FountOfHopeStudyBiblePC.Helpers
             var cleaned = sanitized;
             foreach (var start in possibleStarts)
             {
-                if (cleaned.StartsWith(start, System.StringComparison.OrdinalIgnoreCase))
+                if (cleaned.StartsWith(start, StringComparison.OrdinalIgnoreCase))
                 {
                     cleaned = LeadingPunctRegex()
-                        .Replace(cleaned.Substring(start.Length), "").Trim();
+                        .Replace(cleaned[start.Length..], "").Trim();
                     break;
                 }
             }
 
-            if (cleaned.StartsWith("<", System.StringComparison.Ordinal))
+            if (cleaned.StartsWith("<", StringComparison.Ordinal))
             {
                 var m = WrapperTagRegex().Match(cleaned);
                 if (m.Success)
                 {
                     var content = m.Groups[2].Value.Trim();
-                    if (possibleStarts.Any(s => content.Equals(s, System.StringComparison.OrdinalIgnoreCase)))
+                    if (possibleStarts.Any(s => content.Equals(s, StringComparison.OrdinalIgnoreCase)))
                         cleaned = LeadingPunctRegex()
-                            .Replace(cleaned.Substring(m.Value.Length), "").Trim();
+                            .Replace(cleaned[m.Value.Length..], "").Trim();
                 }
             }
 
@@ -166,9 +153,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
             return rawContent;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Dictionary lookup
-        // ═══════════════════════════════════════════════════════════
         public static List<(string topic, string definition)>? GetDefinitionOrClosest(
             DatabaseHelper? db, string word)
         {
@@ -176,22 +160,19 @@ namespace FountOfHopeStudyBiblePC.Helpers
 
             var exact = db.GetWordDefinition(word);
             if (!string.IsNullOrWhiteSpace(exact))
-                return new List<(string, string)> { (word, exact) };
+                return [(word, exact)];
 
             if (word.Length >= 4)
             {
-                var prefix = word.Substring(0, 4);
+                var prefix = word[..4];
                 var hit = db.GetWordDefinitionStartingWith(prefix);
                 if (hit.HasValue)
-                    return new List<(string, string)> { hit.Value };
+                    return [hit.Value];
             }
 
             return null;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Verse commentary
-        // ═══════════════════════════════════════════════════════════
         public static List<VerseCommentary>? GetVerseCommentaries(
             DatabaseHelper? dbHelper, int bookNumber, int chapter, int verse)
         {
@@ -200,26 +181,22 @@ namespace FountOfHopeStudyBiblePC.Helpers
             {
                 return dbHelper.GetCommentariesForVerse(bookNumber, chapter, verse);
             }
-            catch (System.Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"[Commentary] {ex.Message}");
                 return null;
             }
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Fetch verses for cross-reference targets
-        // ═══════════════════════════════════════════════════════════
         public static List<Verse> FetchVerses(PassageSelection passage, DatabaseHelper? db)
         {
-            if (db == null) return new List<Verse>();
+            if (db == null) return [];
 
             var result = new List<Verse>();
 
             var startCh = passage.Chapter;
             var endCh = passage.ChapterEnd ?? passage.Chapter;
             var maxChapters = BibleData.GetBookByCustomNumber(passage.BookNumber)?.Chapters ?? endCh;
-            endCh = System.Math.Min(endCh, maxChapters);
+            endCh = Math.Min(endCh, maxChapters);
 
             var startV = passage.Verse ?? 1;
             var spanningChapters = passage.ChapterEnd.HasValue;
@@ -252,13 +229,10 @@ namespace FountOfHopeStudyBiblePC.Helpers
             return result;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Parse "B:<book> <chapter>:<verse>[-<verseEnd>]" href
-        // ═══════════════════════════════════════════════════════════
         public static PassageSelection? ParseVerseLink(string href, string linkText)
         {
-            if (!href.StartsWith("B:", System.StringComparison.OrdinalIgnoreCase)) return null;
-            var body = href.Substring(2).Trim();
+            if (!href.StartsWith("B:", StringComparison.OrdinalIgnoreCase)) return null;
+            var body = href[2..].Trim();
 
             var m = VerseLinkRegex().Match(body);
             if (!m.Success) return null;
@@ -268,7 +242,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
             var vStart = int.Parse(m.Groups[3].Value);
             int? vEnd = m.Groups[4].Success ? int.Parse(m.Groups[4].Value) : null;
 
-            // If href has no range, try to extract it from the visible link text
             if (vEnd == null)
             {
                 var textParts = linkText.Split(':');

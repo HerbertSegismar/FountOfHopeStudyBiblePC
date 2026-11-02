@@ -1,13 +1,10 @@
-﻿// MainWindow.xaml.cs
-using FountOfHopeStudyBiblePC.Controls;
+﻿using FountOfHopeStudyBiblePC.Controls;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
 using FountOfHopeStudyBiblePC.ViewModels;
 using FountOfHopeStudyBiblePC.Views;
 using FountOfHopeStudyBiblePC.Views.Modals;
-using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -22,7 +19,6 @@ namespace FountOfHopeStudyBiblePC
         private readonly PreferencesService _prefs = new();
         private DatabaseHelper _databaseHelper;
 
-        // ── ADDED: app-wide fullscreen chrome manager ────────────────
         private readonly FullScreenManager _fullScreenManager;
 
         private Uri? _pendingTemplateUri;
@@ -30,34 +26,20 @@ namespace FountOfHopeStudyBiblePC
 
         public MainWindow()
         {
-            App.Log("MainWindow ctor - enter");
             InitializeComponent();
-            App.Log("MainWindow ctor - after InitializeComponent");
-
-            // ═══ Install theme resources BEFORE any view is created ═══
             ThemeResources.Install();
 
             Loaded += (_, _) => App.Log("MainWindow.Loaded - event fired");
 
             _viewModel = new AppViewModel();
-            ViewModels.AppViewModelAccessor.Current = _viewModel;
-            App.Log("MainWindow ctor - after AppViewModel");
-
-            // ── ADDED: create the fullscreen manager before any
-            //    PropertyChanged handler is wired, so it's always live.
+            AppViewModelAccessor.Current = _viewModel;
             _fullScreenManager = new FullScreenManager(this);
 
             LoadPreferences();
-            App.Log("MainWindow ctor - after LoadPreferences");
-
             HookPreferenceSaving();
-            App.Log("MainWindow ctor - after HookPreferenceSaving");
-
             HookViewModelEvents();
-            App.Log("MainWindow ctor - after HookViewModelEvents");
 
             _databaseHelper = new DatabaseHelper(_viewModel.CurrentDbName);
-            App.Log("MainWindow ctor - after DatabaseHelper");
 
             _viewModel.PropertyChanged += (_, e) =>
             {
@@ -68,8 +50,6 @@ namespace FountOfHopeStudyBiblePC
                         break;
 
                     case nameof(AppViewModel.SecondaryDbName):
-                        App.Log($"MainWindow: SecondaryDbName changed → " +
-                                $"{_viewModel.SecondaryDbName} (delegated to ReaderScreen)");
                         break;
 
                     case nameof(AppViewModel.CurrentVersionAbbr):
@@ -83,10 +63,6 @@ namespace FountOfHopeStudyBiblePC
                         ApplyTheme();
                         break;
 
-                    // ── ADDED: app-wide fullscreen — the only place
-                    //    the window chrome is ever touched. Any screen
-                    //    that toggles the flag gets fullscreen, and the
-                    //    state survives navigation between screens.
                     case nameof(AppViewModel.IsReaderFullScreen):
                         _fullScreenManager.Apply(_viewModel.IsReaderFullScreen);
                         break;
@@ -118,9 +94,6 @@ namespace FountOfHopeStudyBiblePC
                         }
                         break;
 
-                    // ═══════════════════════════════════════════════════
-                    //  Color picker triggers
-                    // ═══════════════════════════════════════════════════
                     case nameof(AppViewModel.ShowColorThemeDialog):
                         if (_viewModel.ShowColorThemeDialog)
                         {
@@ -134,7 +107,7 @@ namespace FountOfHopeStudyBiblePC
                         if (_viewModel.ShowColorWheelDialog)
                         {
                             _viewModel.ShowColorWheelDialog = false;
-                            var initial = _viewModel.SelectedColor ?? DefaultPrimaryColor;
+                            var initial = _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor;
                             Dispatcher.BeginInvoke(new Action(() =>
                                 OpenColorWheel(initial, c =>
                                 {
@@ -277,30 +250,17 @@ namespace FountOfHopeStudyBiblePC
                         break;
                 }
             };
-            App.Log("MainWindow ctor - after PropertyChanged hookup");
-
-            // ── ADDED: global keyboard shortcuts (F11 toggles fullscreen
-            //    from any screen; Esc exits fullscreen). Window-level
-            //    PreviewKeyDown fires before any child control sees the
-            //    key, so it works regardless of which screen is active.
-            //    Modals that use ShowDialog disable the owner window, so
-            //    they naturally take priority.
             PreviewKeyDown += OnMainWindowPreviewKeyDown;
 
             NavigateToCurrentScreen();
-            App.Log("MainWindow ctor - after NavigateToCurrentScreen");
 
             HandleIntent(_pendingTemplateUri);
-            App.Log("MainWindow ctor - COMPLETE");
         }
 
-        // ── ADDED: global keyboard shortcuts ─────────────────────────
         private void OnMainWindowPreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.F11)
             {
-                // Toggle from any screen — MainWindow's property handler
-                // applies the chrome change immediately.
                 _viewModel.IsReaderFullScreen = !_viewModel.IsReaderFullScreen;
                 e.Handled = true;
             }
@@ -311,40 +271,27 @@ namespace FountOfHopeStudyBiblePC
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Database swap
-        // ═══════════════════════════════════════════════════════════════
         private void RefreshPrimaryDatabase()
         {
             var name = _viewModel.CurrentDbName;
-            App.Log($"MainWindow: RefreshPrimaryDatabase → {name}");
 
             try
             {
                 _databaseHelper?.Dispose();
                 _databaseHelper = new DatabaseHelper(name);
 
-                if (_databaseHelper.IsEmpty())
-                    App.Log($"!!! RefreshPrimaryDatabase: '{name}' failed to open " +
-                            $"(missing file? check Assets\\databases\\{name})");
-
                 var onReader = _viewModel.NavigationStack.Count > 0
                                && _viewModel.NavigationStack[^1] is Screen.Reader;
                 if (onReader)
                 {
-                    App.Log("MainWindow: RefreshPrimaryDatabase — recreating ReaderScreen");
                     NavigateToCurrentScreen();
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                App.Log($"!!! RefreshPrimaryDatabase FAILED: {ex}");
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  App bar
-        // ═══════════════════════════════════════════════════════════════
         private void UpdateAppBar()
         {
             if (_viewModel.NavigationStack.Count == 0)
@@ -411,18 +358,11 @@ namespace FountOfHopeStudyBiblePC
 
                 modal.Show();
             }
-            catch (Exception ex)
-            {
-                App.Log("!!! OpenNavigationModal FAILED: " + ex);
-            }
+            catch (Exception) { }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Version pickers
-        // ═══════════════════════════════════════════════════════════════
         private void OpenPrimaryVersionModal()
         {
-            App.Log("MainWindow: OpenPrimaryVersionModal — enter");
             try
             {
                 var modal = new VersionSelectionModal(
@@ -431,8 +371,6 @@ namespace FountOfHopeStudyBiblePC
                     isSecondary: false,
                     onVersionSelected: file =>
                     {
-                        App.Log($"MainWindow: primary version picked: {file}");
-
                         _viewModel.CurrentVersionAbbr =
                             BibleVersionUtils.VersionMap.GetValueOrDefault(file, "Bible");
                         _viewModel.CurrentDbName = file;
@@ -444,15 +382,13 @@ namespace FountOfHopeStudyBiblePC
 
                 modal.Show();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                App.Log("!!! OpenPrimaryVersionModal FAILED: " + ex);
             }
         }
 
         private void OpenSecondaryVersionModal()
         {
-            App.Log("MainWindow: OpenSecondaryVersionModal — enter");
             try
             {
                 var modal = new VersionSelectionModal(
@@ -461,8 +397,6 @@ namespace FountOfHopeStudyBiblePC
                     isSecondary: true,
                     onVersionSelected: file =>
                     {
-                        App.Log($"MainWindow: secondary version picked: {file}");
-
                         _viewModel.SecondaryVersionAbbr =
                             BibleVersionUtils.VersionMap.GetValueOrDefault(file, "Bible");
                         _viewModel.SecondaryDbName = file;
@@ -473,22 +407,17 @@ namespace FountOfHopeStudyBiblePC
                 };
 
                 modal.Show();
-                App.Log("MainWindow: SecondaryVersionModal closed");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                App.Log("!!! OpenSecondaryVersionModal FAILED: " + ex);
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Color pickers
-        // ═══════════════════════════════════════════════════════════════
         private void OpenColorWheel(Color initial, Action<Color> onSelected, string title = "Color Picker")
         {
             try
             {
-                var dialog = new Views.Modals.ColorWheelDialog(
+                var dialog = new ColorWheelDialog(
                     initialColor: initial,
                     onColorSelected: c =>
                     {
@@ -500,9 +429,8 @@ namespace FountOfHopeStudyBiblePC
                 };
                 dialog.Show();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                App.Log("!!! OpenColorWheel FAILED: " + ex);
             }
         }
 
@@ -511,10 +439,9 @@ namespace FountOfHopeStudyBiblePC
             try
             {
                 var dialog = new Views.Modals.ColorThemeDialog(
-                    currentColor: _viewModel.SelectedColor ?? DefaultPrimaryColor,
-                    onColorSelected: c =>
+                    currentColor: _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor,
+                    onColorSelected: c =>       
                     {
-                        App.Log($"MainWindow: theme preset selected = {ColorHelpers.ToHexString(c)}");
                         _viewModel.SelectedColor = c;
                         _viewModel.IsCustomColor = false;
                         _viewModel.CustomColor = null;
@@ -524,7 +451,7 @@ namespace FountOfHopeStudyBiblePC
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
                             OpenColorWheel(
-                                _viewModel.SelectedColor ?? DefaultPrimaryColor,
+                                _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor,
                                 c =>
                                 {
                                     _viewModel.SelectedColor = c;
@@ -540,55 +467,40 @@ namespace FountOfHopeStudyBiblePC
                 };
                 dialog.Show();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                App.Log("!!! OpenColorThemeDialog FAILED: " + ex);
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Window lifecycle
-        // ═══════════════════════════════════════════════════════════════
         protected override void OnSourceInitialized(EventArgs e)
         {
-            App.Log("MainWindow.OnSourceInitialized");
             base.OnSourceInitialized(e);
-
-            // ── ADDED: apply any persisted fullscreen state before
-            //    the window is fully shown, so a user who left the
-            //    app in fullscreen gets it back on relaunch with no
-            //    flash of the windowed chrome.
             if (_viewModel.IsReaderFullScreen)
                 _fullScreenManager.Apply(true);
         }
 
         protected override void OnContentRendered(EventArgs e)
         {
-            App.Log("MainWindow.OnContentRendered - window is on screen");
             base.OnContentRendered(e);
         }
 
         protected override void OnActivated(EventArgs e)
         {
-            App.Log("MainWindow.OnActivated");
             base.OnActivated(e);
         }
 
         protected override void OnDeactivated(EventArgs e)
         {
-            App.Log("MainWindow.OnDeactivated");
             base.OnDeactivated(e);
         }
 
         protected override void OnStateChanged(EventArgs e)
         {
-            App.Log("MainWindow.OnStateChanged - WindowState=" + WindowState);
             base.OnStateChanged(e);
         }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
-            App.Log("!!! MainWindow.OnClosing - Cancel=" + e.Cancel);
             base.OnClosing(e);
         }
 
@@ -599,7 +511,6 @@ namespace FountOfHopeStudyBiblePC
             _databaseHelper?.Dispose();
         }
 
-        // ── Intent / deep-link handling ──────────────────────────────
         public void HandleIncomingUri(Uri uri) => HandleIntent(uri);
 
         private void HandleIntent(Uri? uri)
@@ -618,7 +529,6 @@ namespace FountOfHopeStudyBiblePC
             NavigateToCurrentScreen();
         }
 
-        // ── Preference loading ───────────────────────────────────────
         private void LoadPreferences()
         {
             _viewModel.CustomWidth = _prefs.GetInt(PrefKeys.CustomWidth, 1920);
@@ -629,9 +539,9 @@ namespace FountOfHopeStudyBiblePC
             _viewModel.DarkThemeReaderFontColor = _prefs.GetColor(PrefKeys.DarkThemeReaderFontColor, Colors.White);
 
             _viewModel.DarkTheme = _prefs.GetBool(PrefKeys.DarkTheme, true);
-            _viewModel.SelectedColor = _prefs.GetColor(PrefKeys.SelectedColor, DefaultPrimaryColor);
+            _viewModel.SelectedColor = _prefs.GetColor(PrefKeys.SelectedColor, ColorHelpers.DefaultPrimaryColor);
             _viewModel.IsCustomColor = _prefs.GetBool(PrefKeys.IsCustomColor, false);
-            _viewModel.CustomColor = _prefs.GetColor(PrefKeys.CustomColor, DefaultPrimaryColor);
+            _viewModel.CustomColor = _prefs.GetColor(PrefKeys.CustomColor, ColorHelpers.DefaultPrimaryColor);
 
             _viewModel.SelectedFontFamily = _prefs.GetString(PrefKeys.FontFamily, "system");
 
@@ -674,7 +584,6 @@ namespace FountOfHopeStudyBiblePC
             _viewModel.RenderOrbs = _prefs.GetBool(PrefKeys.RenderOrbs, false);
             _viewModel.OrbsCount = _prefs.GetInt(PrefKeys.OrbsCount, 3);
 
-            // ── ADDED: restore last session's fullscreen state ──
             _viewModel.IsReaderFullScreen = _prefs.GetBool(PrefKeys.IsReaderFullScreen, false);
 
             _viewModel.PrimaryPassage = new PassageSelection(
@@ -704,11 +613,10 @@ namespace FountOfHopeStudyBiblePC
 
             var disabled = _prefs.GetString(PrefKeys.DisabledVersions, "");
             _viewModel.DisabledVersions = string.IsNullOrWhiteSpace(disabled)
-                ? new HashSet<string>()
-                : new HashSet<string>(disabled.Split(',', StringSplitOptions.RemoveEmptyEntries));
+                ? []
+                : [.. disabled.Split(',', StringSplitOptions.RemoveEmptyEntries)];
         }
 
-        // ── Reactive preference saving ───────────────────────────────
         private void HookPreferenceSaving()
         {
             _viewModel.PropertyChanged += (_, e) =>
@@ -728,10 +636,10 @@ namespace FountOfHopeStudyBiblePC
                     case nameof(AppViewModel.CustomHeight): _prefs.Set(PrefKeys.CustomHeight, _viewModel.CustomHeight); break;
                     case nameof(AppViewModel.DarkTheme): _prefs.Set(PrefKeys.DarkTheme, _viewModel.DarkTheme); break;
                     case nameof(AppViewModel.SelectedColor):
-                        _prefs.SetColor(PrefKeys.SelectedColor, _viewModel.SelectedColor ?? DefaultPrimaryColor); break;
+                        _prefs.SetColor(PrefKeys.SelectedColor, _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor); break;
                     case nameof(AppViewModel.IsCustomColor): _prefs.Set(PrefKeys.IsCustomColor, _viewModel.IsCustomColor); break;
                     case nameof(AppViewModel.CustomColor):
-                        _prefs.SetColor(PrefKeys.CustomColor, _viewModel.CustomColor ?? DefaultPrimaryColor); break;
+                        _prefs.SetColor(PrefKeys.CustomColor, _viewModel.CustomColor ?? ColorHelpers.DefaultPrimaryColor); break;
                     case nameof(AppViewModel.SelectedFontFamily): _prefs.Set(PrefKeys.FontFamily, _viewModel.SelectedFontFamily); break;
                     case nameof(AppViewModel.CurrentDbName): _prefs.Set(PrefKeys.PrimaryDb, _viewModel.CurrentDbName); break;
                     case nameof(AppViewModel.CurrentVersionAbbr): _prefs.Set(PrefKeys.PrimaryAbbr, _viewModel.CurrentVersionAbbr); break;
@@ -760,8 +668,6 @@ namespace FountOfHopeStudyBiblePC
                     case nameof(AppViewModel.SelectedVerseCommentary): _prefs.Set(PrefKeys.SelectedVerseCommentary, _viewModel.SelectedVerseCommentary); break;
                     case nameof(AppViewModel.SelectedCrossReferenceDatabase): _prefs.Set(PrefKeys.SelectedCrossRefDb, _viewModel.SelectedCrossReferenceDatabase); break;
                     case nameof(AppViewModel.CustomTextureUri): _prefs.Set(PrefKeys.CustomTexture, _viewModel.CustomTextureUri); break;
-
-                    // ── ADDED: persist fullscreen so it survives restart ──
                     case nameof(AppViewModel.IsReaderFullScreen):
                         _prefs.Set(PrefKeys.IsReaderFullScreen, _viewModel.IsReaderFullScreen);
                         break;
@@ -794,36 +700,19 @@ namespace FountOfHopeStudyBiblePC
             };
         }
 
-        // ── Theme wiring ─────────────────────────────────────────────
-        private static readonly Color DefaultPrimaryColor = Color.FromRgb(0x67, 0x50, 0xA4);
-
         private void HookViewModelEvents()
         {
             ApplyTheme();
         }
-
-        /// <summary>
-        /// Pushes the current view-model theme into <see cref="ThemeManager"/>,
-        /// then asks <see cref="ThemeResources"/> to refresh <c>App.Resources</c>.
-        /// Every <c>{DynamicResource …}</c> in the app repaints; every view that
-        /// subscribes to <c>ThemeManager.Changed</c> (HomeScreen, FountRain, …)
-        /// gets its own callback via the earlier subscription.
-        /// </summary>
         private void ApplyTheme()
         {
-            var primary = _viewModel.SelectedColor ?? DefaultPrimaryColor;
-            App.Log($"ApplyTheme: dark={_viewModel.DarkTheme}, primary={primary}");
+            var primary = _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor;
+            var secondary = ColorHelpers.DeriveSecondary(primary);
 
-            ThemeManager.Apply(primary, _viewModel.DarkTheme, _viewModel.IsCustomColor);
-
-            // Belt-and-braces: if the values happened to match ThemeManager's
-            // existing ones, no Changed event fires — so push the brushes
-            // directly once. Also covers the very first call from
-            // HookViewModelEvents() before any UI has subscribed.
+            ThemeManager.Apply(primary, secondary, _viewModel.DarkTheme, _viewModel.IsCustomColor);
             ThemeResources.Refresh();
         }
 
-        // ── Navigation ───────────────────────────────────────────────
         private void NavigateToCurrentScreen()
         {
             try
@@ -935,7 +824,6 @@ namespace FountOfHopeStudyBiblePC
             }
             catch (Exception ex)
             {
-                App.Log($"!!! NavigateToCurrentScreen FAILED: {ex}");
 
                 RootContent.Content = new Border
                 {
@@ -969,7 +857,6 @@ namespace FountOfHopeStudyBiblePC
             RootContent.Content = home;
         }
 
-        // ── Navigation callbacks ─────────────────────────────────────
         private void NavigateToReader(PassageSelection selection)
         {
             _viewModel.PrimaryPassage = selection;
@@ -988,7 +875,6 @@ namespace FountOfHopeStudyBiblePC
             NavigateToCurrentScreen();
         }
 
-        // ── Image picker ─────────────────────────────────────────────
         public void PickCustomBackground()
         {
             var dlg = new Microsoft.Win32.OpenFileDialog
