@@ -1,12 +1,8 @@
-﻿// Views/SettingsScreen.xaml.cs
-using FountOfHopeStudyBiblePC.Helpers;
+﻿using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.ViewModels;
 using FountOfHopeStudyBiblePC.Views.Modals;
-using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -38,17 +34,14 @@ namespace FountOfHopeStudyBiblePC.Views
                 case nameof(AppViewModel.SelectedFontFamily):
                 case nameof(AppViewModel.IsDictionaryMode):
                 case nameof(AppViewModel.BgImageIndex):
-                // ── Version changes — rebuild so the version cards refresh ──
                 case nameof(AppViewModel.CurrentDbName):
                 case nameof(AppViewModel.CurrentVersionAbbr):
                 case nameof(AppViewModel.SecondaryDbName):
                 case nameof(AppViewModel.SecondaryVersionAbbr):
-                // ── Mode flips that affect which controls are visible ──
                 case nameof(AppViewModel.IsStudyMode):
                 case nameof(AppViewModel.ShowStrongs):
                 case nameof(AppViewModel.ScrollSync):
                 case nameof(AppViewModel.SquareAspectViews):
-                // ── Color changes — refresh swatches + selected presets ──
                 case nameof(AppViewModel.HeaderButtonsColor):
                 case nameof(AppViewModel.SelectedColor):
                 case nameof(AppViewModel.IsCustomColor):
@@ -62,7 +55,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 case nameof(AppViewModel.LightThemeReaderFontColor):
                 case nameof(AppViewModel.DarkOverlayColor):
                 case nameof(AppViewModel.LightOverlayColor):
-                // ── Numeric values edited outside the settings screen ──
                 case nameof(AppViewModel.FontSize):
                 case nameof(AppViewModel.OrbsCount):
                 case nameof(AppViewModel.OverlayOpacity):
@@ -85,9 +77,6 @@ namespace FountOfHopeStudyBiblePC.Views
             SettingsRootPanel.Children.Add(BuildQuickActionsSection());
         }
 
-        // -----------------------------------------------------------
-        //  SECTION BUILDERS
-        // -----------------------------------------------------------
         private Border BuildAppSettingsSection()
         {
             var content = new StackPanel();
@@ -466,9 +455,6 @@ namespace FountOfHopeStudyBiblePC.Views
             return BuildSectionBorder("Quick Actions", "Common tasks", content);
         }
 
-        // -----------------------------------------------------------
-        //  UI BUILDING BLOCKS
-        // -----------------------------------------------------------
         private Border BuildSectionBorder(string title, string? subtitle, UIElement content)
         {
             var stack = new StackPanel();
@@ -505,7 +491,7 @@ namespace FountOfHopeStudyBiblePC.Views
             };
         }
 
-        private FrameworkElement BuildLabel(string text)
+        private TextBlock BuildLabel(string text)
         {
             return new TextBlock
             {
@@ -517,7 +503,7 @@ namespace FountOfHopeStudyBiblePC.Views
             };
         }
 
-        private FrameworkElement BuildDivider()
+        private Border BuildDivider()
         {
             return new Border
             {
@@ -527,7 +513,7 @@ namespace FountOfHopeStudyBiblePC.Views
             };
         }
 
-        private FrameworkElement BuildSwitchRow(string title, string subtitle, bool value, Action<bool> onChange)
+        private Grid BuildSwitchRow(string title, string subtitle, bool value, Action<bool> onChange)
         {
             var grid = new Grid { Margin = new Thickness(0, 8, 0, 8) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -566,7 +552,7 @@ namespace FountOfHopeStudyBiblePC.Views
             return grid;
         }
 
-        private FrameworkElement BuildClickRow(string title, string subtitle, Action onClick, FrameworkElement trailing)
+        private Grid BuildClickRow(string title, string subtitle, Action onClick, FrameworkElement trailing)
         {
             var grid = new Grid { Margin = new Thickness(0, 8, 0, 8), Cursor = Cursors.Hand };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -598,7 +584,7 @@ namespace FountOfHopeStudyBiblePC.Views
             return grid;
         }
 
-        private FrameworkElement BuildStepperRow(string title, string subtitle, int value, Action onMinus, Action onPlus)
+        private Grid BuildStepperRow(string title, string subtitle, int value, Action onMinus, Action onPlus)
         {
             var grid = new Grid { Margin = new Thickness(0, 8, 0, 8) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -648,7 +634,7 @@ namespace FountOfHopeStudyBiblePC.Views
             return grid;
         }
 
-        private FrameworkElement BuildEditableStepperRow(
+        private Grid BuildEditableStepperRow(
             string title,
             string subtitle,
             Func<int> getValue,
@@ -779,7 +765,7 @@ namespace FountOfHopeStudyBiblePC.Views
             return grid;
         }
 
-        private FrameworkElement BuildColorRow(string title, string subtitle, Color color, Action onClick)
+        private Grid BuildColorRow(string title, string subtitle, Color color, Action onClick)
         {
             var grid = new Grid { Margin = new Thickness(0, 8, 0, 8) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -819,7 +805,7 @@ namespace FountOfHopeStudyBiblePC.Views
             return grid;
         }
 
-        private FrameworkElement BuildVersionCard(string title, string abbr, string description, Action onClick, Action onInfoClick)
+        private Border BuildVersionCard(string title, string abbr, string description, Action onClick, Action onInfoClick)
         {
             var grid = new Grid { Margin = new Thickness(0, 6, 0, 6) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -877,7 +863,7 @@ namespace FountOfHopeStudyBiblePC.Views
             };
         }
 
-        private FrameworkElement BuildLayoutToggleRow(string current, Action<string> onChange)
+        private Grid BuildLayoutToggleRow(string current, Action<string> onChange)
         {
             var grid = new Grid { Margin = new Thickness(0, 8, 0, 8) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -927,7 +913,7 @@ namespace FountOfHopeStudyBiblePC.Views
             return grid;
         }
 
-        private FrameworkElement BuildOverlaySliderRow()
+        private StackPanel BuildOverlaySliderRow()
         {
             var stack = new StackPanel { Margin = new Thickness(0, 8, 0, 8) };
             var header = new Grid();
@@ -996,7 +982,7 @@ namespace FountOfHopeStudyBiblePC.Views
             return stack;
         }
 
-        private FrameworkElement BuildColorButton(string name, Color color, bool isSelected, Action onClick)
+        private Border BuildColorButton(string name, Color color, bool isSelected, Action onClick)
         {
             var border = new Border
             {
@@ -1034,7 +1020,7 @@ namespace FountOfHopeStudyBiblePC.Views
             return border;
         }
 
-        private FrameworkElement BuildFontButton(string family, bool isSelected, Action onClick)
+        private Button BuildFontButton(string family, bool isSelected, Action onClick)
         {
             var btn = new Button
             {
@@ -1073,7 +1059,7 @@ namespace FountOfHopeStudyBiblePC.Views
             return btn;
         }
 
-        private FrameworkElement BuildTextButton(string text, Action onClick)
+        private Button BuildTextButton(string text, Action onClick)
         {
             var btn = new Button
             {
@@ -1090,9 +1076,6 @@ namespace FountOfHopeStudyBiblePC.Views
             return btn;
         }
 
-        // -----------------------------------------------------------
-        //  Dialog triggers
-        // -----------------------------------------------------------
         private void ConfirmResetHighlightColors()
         {
             var result = MessageBox.Show(
@@ -1113,7 +1096,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 "Refresh All Databases", MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (result != MessageBoxResult.Yes) return;
 
-            var assetsRoot = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets");
+            var assetsRoot = Path.Combine(AppContext.BaseDirectory, "Assets");
             _ = _viewModel.RefreshDatabasesAsync(assetsRoot);
 
             MessageBox.Show(
@@ -1184,9 +1167,6 @@ namespace FountOfHopeStudyBiblePC.Views
             _viewModel.SelectedCrossReferenceDatabase = "obx";
         }
 
-        // -----------------------------------------------------------
-        //  Helpers
-        // -----------------------------------------------------------
         private static bool ColorsEqual(Color a, Color b)
             => a.A == b.A && a.R == b.R && a.G == b.G && a.B == b.B;
     }

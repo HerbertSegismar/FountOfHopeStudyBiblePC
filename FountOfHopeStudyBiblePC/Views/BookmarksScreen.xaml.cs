@@ -1,12 +1,8 @@
-﻿// Views/BookmarksScreen.xaml.cs
-using FountOfHopeStudyBiblePC.Helpers;
+﻿using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
 using FountOfHopeStudyBiblePC.ViewModels;
 using FountOfHopeStudyBiblePC.Views.Modals;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -18,35 +14,28 @@ namespace FountOfHopeStudyBiblePC.Views
 {
     public partial class BookmarksScreen : UserControl
     {
-        // ── Dependencies ──────────────────────────────────────────
         private readonly Action<PassageSelection> _onNavigateToReader;
         private readonly AppViewModel _viewModel;
 
-        // ── Local DB (per selected version) ────────────────────────
         private string _selectedDbName;
         private DatabaseHelper? _db;
 
-        // ── State ─────────────────────────────────────────────────
-        private List<Verse> _bookmarks = new();
-        private readonly List<Verse> _selectedVerses = new();
+        private List<Verse> _bookmarks = [];
+        private readonly List<Verse> _selectedVerses = [];
         private bool _multiSelectMode;
         private bool _searchActive;
         private string _searchQuery = "";
         private BookmarkSortOrder _sortOrder = BookmarkSortOrder.RecentlyAdded;
 
-        // ── Undo ──────────────────────────────────────────────────
         private List<Verse>? _lastDeleted;
         private DispatcherTimer? _undoTimer;
 
-        // ═══════════════════════════════════════════════════════════
-        //  Constructor
-        // ═══════════════════════════════════════════════════════════
         public BookmarksScreen(Action<PassageSelection> onNavigateToReader)
         {
             InitializeComponent();
 
             _onNavigateToReader = onNavigateToReader ?? (_ => { });
-            _viewModel = ViewModels.AppViewModelAccessor.Current
+            _viewModel = AppViewModelAccessor.Current
                          ?? new AppViewModel();
 
             _selectedDbName = _viewModel.CurrentDbName;
@@ -57,12 +46,8 @@ namespace FountOfHopeStudyBiblePC.Views
             Unloaded += OnUnloaded;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Lifecycle
-        // ═══════════════════════════════════════════════════════════
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            App.Log("BookmarksScreen: Loaded");
             RebuildDb();
             RefreshBookmarks();
             UpdateTopBar();
@@ -96,19 +81,14 @@ namespace FountOfHopeStudyBiblePC.Views
 
             if (e.PropertyName == nameof(AppViewModel.SelectedColor))
             {
-                // Just relabel the top bar; underlying list uses cached colors
                 UpdateTopBar();
             }
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  DB / data
-        // ═══════════════════════════════════════════════════════════
         private void RebuildDb()
         {
             _db?.Dispose();
             _db = new DatabaseHelper(_selectedDbName);
-            App.Log($"BookmarksScreen: DB rebuilt for {_selectedDbName}");
         }
 
         private void RefreshBookmarks()
@@ -123,16 +103,14 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             return order switch
             {
-                BookmarkSortOrder.ByBook => verses
+                BookmarkSortOrder.ByBook => [.. verses
                     .OrderBy(v => BibleData.GetBookByName(v.BookName ?? "")?.CustomNumber ?? 0)
                     .ThenBy(v => v.Chapter ?? 0)
-                    .ThenBy(v => v.VerseNumber)
-                    .ToList(),
-                BookmarkSortOrder.ByChapter => verses
+                    .ThenBy(v => v.VerseNumber)],
+                BookmarkSortOrder.ByChapter => [.. verses
                     .OrderBy(v => v.Chapter ?? 0)
                     .ThenBy(v => BibleData.GetBookByName(v.BookName ?? "")?.CustomNumber ?? 0)
-                    .ThenBy(v => v.VerseNumber)
-                    .ToList(),
+                    .ThenBy(v => v.VerseNumber)],
                 BookmarkSortOrder.RecentlyAdded => verses,
                 _ => verses
             };
@@ -142,17 +120,14 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             if (string.IsNullOrWhiteSpace(_searchQuery)) return _bookmarks;
             var q = _searchQuery;
-            return _bookmarks.Where(v =>
+            return [.. _bookmarks.Where(v =>
                 (v.Text ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
                 (v.BookName ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
                 v.VerseNumber.ToString().Contains(q) ||
                 (v.Chapter?.ToString() ?? "").Contains(q)
-            ).ToList();
+            )];
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Top bar state
-        // ═══════════════════════════════════════════════════════════
         private void UpdateTopBar()
         {
             NormalTitleText.Text = $"Bookmarks ({_bookmarks.Count})";
@@ -168,7 +143,6 @@ namespace FountOfHopeStudyBiblePC.Views
 
             VersionCard.Visibility = _searchActive ? Visibility.Collapsed : Visibility.Visible;
 
-            // Sort badge indicator — small dot on SortBtn when non-default sort is active
             SortBtn.Opacity = _sortOrder == BookmarkSortOrder.RecentlyAdded ? 1.0 : 0.8;
         }
 
@@ -179,9 +153,6 @@ namespace FountOfHopeStudyBiblePC.Views
             VersionDescriptionText.Text = $"{abbr} — {desc}";
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Bookmarks list rendering
-        // ═══════════════════════════════════════════════════════════
         private void RebuildBookmarksList()
         {
             BookmarksPanel.Children.Clear();
@@ -210,14 +181,14 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void UpdateEmptyState() => RebuildBookmarksList();
 
-        private FrameworkElement BuildBookmarkCard(Verse verse)
+        private Border BuildBookmarkCard(Verse verse)
         {
             var isSelected = _selectedVerses.Contains(verse);
             var primary = _viewModel.SelectedColor
                           ?? (Color)ColorConverter.ConvertFromString("#FF7FB2FF");
 
             var cardBg = isSelected
-                ? Color.FromArgb(0x4D, primary.R, primary.G, primary.B) // 30% primary
+                ? Color.FromArgb(0x4D, primary.R, primary.G, primary.B)
                 : (_viewModel.DarkTheme
                     ? Color.FromRgb(0x23, 0x2A, 0x33)
                     : Color.FromRgb(0xEA, 0xE7, 0xE3));
@@ -226,7 +197,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 ? Colors.White
                 : Color.FromRgb(0x1A, 0x1A, 0x1A);
 
-            // Card container
             var card = new Border
             {
                 Background = new SolidColorBrush(cardBg),
@@ -242,7 +212,6 @@ namespace FountOfHopeStudyBiblePC.Views
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            // Header row: [checkbox] title ......... [delete icon]
             var header = new Grid();
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -284,13 +253,13 @@ namespace FountOfHopeStudyBiblePC.Views
                     BorderThickness = new Thickness(0),
                     Cursor = Cursors.Hand,
                     ToolTip = "Remove bookmark",
-                };
-                delBtn.Content = new TextBlock
-                {
-                    Text = "🗑",
-                    FontSize = 14,
-                    Foreground = new SolidColorBrush(
-                        (Color)ColorConverter.ConvertFromString("#FFEB4E4E")),
+                    Content = new TextBlock
+                    {
+                        Text = "🗑",
+                        FontSize = 14,
+                        Foreground = new SolidColorBrush(
+                            (Color)ColorConverter.ConvertFromString("#FFEB4E4E")),
+                    }
                 };
                 delBtn.Click += (_, _) => DeleteSingleBookmark(verse);
                 Grid.SetColumn(delBtn, 2);
@@ -300,7 +269,6 @@ namespace FountOfHopeStudyBiblePC.Views
             Grid.SetRow(header, 0);
             grid.Children.Add(header);
 
-            // Body: bold verse number + stripped verse text
             var body = new TextBlock
             {
                 TextWrapping = TextWrapping.Wrap,
@@ -322,7 +290,6 @@ namespace FountOfHopeStudyBiblePC.Views
             Grid.SetRow(body, 1);
             grid.Children.Add(body);
 
-            // Footer: book chip + chapter chip
             var footer = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
@@ -340,10 +307,8 @@ namespace FountOfHopeStudyBiblePC.Views
 
             card.Child = grid;
 
-            // Click / long-press handling
             card.MouseLeftButtonUp += (_, e) =>
             {
-                // Ignore if a child button was clicked
                 if (e.OriginalSource is Button) return;
 
                 if (_multiSelectMode)
@@ -367,7 +332,7 @@ namespace FountOfHopeStudyBiblePC.Views
             return card;
         }
 
-        private FrameworkElement BuildChip(string text, Color baseColor, byte alphaPercent)
+        private static Border BuildChip(string text, Color baseColor, byte alphaPercent)
         {
             return new Border
             {
@@ -386,14 +351,9 @@ namespace FountOfHopeStudyBiblePC.Views
             };
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Selection
-        // ═══════════════════════════════════════════════════════════
         private void ToggleSelection(Verse verse)
         {
-            if (_selectedVerses.Contains(verse))
-                _selectedVerses.Remove(verse);
-            else
+            if (!_selectedVerses.Remove(verse))
                 _selectedVerses.Add(verse);
 
             if (_selectedVerses.Count == 0)
@@ -403,19 +363,14 @@ namespace FountOfHopeStudyBiblePC.Views
             RebuildBookmarksList();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Actions
-        // ═══════════════════════════════════════════════════════════
         private void NavigateToBookmark(Verse verse)
         {
             var book = BibleData.GetBookByName(verse.BookName ?? "");
             if (book == null)
             {
-                App.Log($"BookmarksScreen: unknown book '{verse.BookName}'");
                 return;
             }
 
-            // Sync the view model to the version we're reading from
             _viewModel.CurrentDbName = _selectedDbName;
 
             _onNavigateToReader(new PassageSelection(
@@ -494,9 +449,6 @@ namespace FountOfHopeStudyBiblePC.Views
             RebuildBookmarksList();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Undo
-        // ═══════════════════════════════════════════════════════════
         private void ShowUndoBar(int count)
         {
             UndoText.Text = $"{count} bookmark{(count == 1 ? "" : "s")} removed";
@@ -530,9 +482,6 @@ namespace FountOfHopeStudyBiblePC.Views
             UpdateTopBar();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Top-bar button handlers
-        // ═══════════════════════════════════════════════════════════
         private void SearchToggleBtn_Click(object sender, RoutedEventArgs e)
         {
             _searchActive = !_searchActive;
@@ -620,7 +569,6 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void VersionCard_Click(object sender, MouseButtonEventArgs e)
         {
-            // Ignore click if it came from the info button
             if (e.OriginalSource is Button) return;
 
             var modal = new VersionSelectionModal(
@@ -629,7 +577,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 isSecondary: false,
                 onVersionSelected: file =>
                 {
-                    App.Log($"BookmarksScreen: version picked: {file}");
                     _selectedDbName = file;
                     _viewModel.CurrentDbName = file;
                     _viewModel.CurrentVersionAbbr =
@@ -646,9 +593,6 @@ namespace FountOfHopeStudyBiblePC.Views
             modal.Show();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Back to top
-        // ═══════════════════════════════════════════════════════════
         private void BookmarksScroller_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
             BackToTopBtn.Visibility = BookmarksScroller.VerticalOffset > 300

@@ -1,8 +1,4 @@
-﻿// Views/ReaderScreen.xaml.cs
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -18,73 +14,59 @@ namespace FountOfHopeStudyBiblePC.Views
 {
     public partial class ReaderScreen : UserControl
     {
-        // ── Dependencies ─────────────────────────────────────────────────
         private readonly PassageSelection _passage;
         private readonly DatabaseHelper? _databaseHelper;
         private readonly Action<PassageSelection> _onPassageChange;
         private readonly AppViewModel _viewModel;
-        private bool _hasAppliedInitialScroll;
+        private readonly bool _hasAppliedInitialScroll;
 
-        // ── Passage state ───────────────────────────────────────────────
         private PassageSelection _primaryCurrent;
         private PassageSelection _secondaryCurrent;
         private int? _targetVerse;
         private int? _secondaryTargetVerse;
 
-        // ── Loaded verse caches (book/chapter → content) ────────────────
         private readonly Dictionary<(int book, int chapter), List<VerseContent>> _primaryLoadedVerses = new();
         private readonly Dictionary<(int book, int chapter), List<VerseContent>> _secondaryLoadedVerses = new();
 
-        // ── Secondary DB (multi-version) ────────────────────────────────
         private DatabaseHelper? _secondaryDatabaseHelper;
 
-        // ── Dictionary / commentary DBs ─────────────────────────────────
         private DatabaseHelper? _crossRefHelper;
         private DatabaseHelper? _primaryDictionaryDbHelper;
         private DatabaseHelper? _secondaryDictionaryDbHelper;
         private DatabaseHelper? _strongDbHelper;
-        private DatabaseHelper? _commentaryDbHelper;            // footnotes for primary version
-        private DatabaseHelper? _secondaryCommentaryDbHelper;   // footnotes for secondary version
+        private DatabaseHelper? _commentaryDbHelper;           
+        private DatabaseHelper? _secondaryCommentaryDbHelper;  
         private readonly DatabaseHelper? _subheadingsDbHelper;
 
-        // ── FAB / palette state ─────────────────────────────────────────
         private bool _isButtonVisible = true;
-        private bool _isPaletteVisible;                                 // ← 5 s auto-hide window
-        private System.Windows.Threading.DispatcherTimer? _fadeTimer;
-        private System.Windows.Threading.DispatcherTimer? _paletteTimer;
+        private bool _isPaletteVisible;
+        private readonly System.Windows.Threading.DispatcherTimer? _fadeTimer;
+        private readonly System.Windows.Threading.DispatcherTimer? _paletteTimer;
 
-        // ── Word drag-selection state ───────────────────────────────────
         private const double WordDragThresholdPixels = 3.0;
         private bool _isWordDragActive;
         private bool _wordDragHasMoved;
         private Point _wordDragStartPoint;
-        private TextBlock? _wordDragStartBlock;      // fallback only
-        private TextBlock? _wordDragEndBlock;        // fallback only
+        private TextBlock? _wordDragStartBlock; 
+        private TextBlock? _wordDragEndBlock;   
         private IWordHighlightHost? _wordHighlightHost;
-        private readonly Dictionary<TextBlock, Brush?> _dragPreviewOriginals = new();
+        private readonly Dictionary<TextBlock, Brush?> _dragPreviewOriginals = [];
 
-        // ── Modal state ─────────────────────────────────────────────────
         private ReaderModalState _modalState = new ReaderModalState.None();
-        private List<Verse> _selectedVersesForNote = new();   // dead — kept for parity
+        private readonly List<Verse> _selectedVersesForNote = [];  
 
-        // ── Verse options state ─────────────────────────────────────────
         private Verse? _selectedVerse;
         private PassageSelection? _selectedPassage;
         private bool _selectedIsPrimary;
 
-        // ── Cross-ref state (dead — kept for parity with Kotlin) ────────
         private int _crossRefBook;
         private int _crossRefChapter;
         private int _crossRefVerse;
 
-        // ── Commentary context (dead — kept for parity with Kotlin) ─────
         private int _verseCommentaryBook;
         private int _verseCommentaryChapter;
         private int _verseCommentaryVerse;
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Constructors
-        // ═══════════════════════════════════════════════════════════════
         public ReaderScreen(
             PassageSelection passage,
             DatabaseHelper? databaseHelper,
@@ -122,8 +104,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 _fadeTimer!.Stop();
             };
 
-            // Palette-only timer. It does not touch IsHighlightMode — it
-            // just fades the colour bar out after 5 s of no gesture.
             _paletteTimer = new System.Windows.Threading.DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(5)
@@ -135,11 +115,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 _paletteTimer!.Stop();
             };
 
-            // ── Drag-to-highlight preview hooks ─────────────────────────
-            // Drag ALWAYS paints highlights. Once movement passes the
-            // threshold, we explicitly promote the app to highlight mode
-            // so click routing, palette visibility, and mode flags all
-            // stay coherent for the rest of the interaction.
             ReaderHost.PreviewMouseLeftButtonDown += ReaderHost_PreviewMouseLeftButtonDown;
             ReaderHost.PreviewMouseMove += ReaderHost_PreviewMouseMove;
             ReaderHost.PreviewMouseLeftButtonUp += ReaderHost_PreviewMouseLeftButtonUp;
@@ -166,9 +141,6 @@ namespace FountOfHopeStudyBiblePC.Views
         {
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Lifecycle
-        // ═══════════════════════════════════════════════════════════════
         private void ReaderScreen_Loaded(object sender, RoutedEventArgs e)
         {
             _isButtonVisible = true;
@@ -204,7 +176,6 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             switch (e.PropertyName)
             {
-                // ── Data-source changes → must rebuild ────────────────────────
                 case nameof(AppViewModel.SelectedCrossReferenceDatabase):
                     ReloadCrossRefHelper();
                     break;
@@ -240,10 +211,6 @@ namespace FountOfHopeStudyBiblePC.Views
                     }
                     break;
 
-                // ── Mode state ────────────────────────────────────────────────
-                // Entering highlight mode reveals the palette + starts its
-                // 5-second timer. Leaving it hides the palette immediately.
-                // The mode itself is user-controlled and never expires.
                 case nameof(AppViewModel.IsHighlightMode):
                     if (_viewModel.IsHighlightMode)
                         ShowPalette();
@@ -256,7 +223,6 @@ namespace FountOfHopeStudyBiblePC.Views
                         HidePalette();
                     break;
 
-                // ── Word-marker palette ───────────────────────────────────────
                 case nameof(AppViewModel.WordMarkerColor):
                     BuildHighlightColorBar();
                     break;
@@ -265,7 +231,6 @@ namespace FountOfHopeStudyBiblePC.Views
                     BuildHighlightColorBar();
                     break;
 
-                // ── Appearance-only changes → handled by ChapterView ─────────
                 case nameof(AppViewModel.DarkTheme):
                 case nameof(AppViewModel.WordsOfJesus):
                 case nameof(AppViewModel.FontSize):
@@ -315,7 +280,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 _secondaryDatabaseHelper?.DatabaseName);
         }
 
-        // ── FIXED: footnote DB is "<version>com.sqlite3", NOT ".commentaries.sqlite3" ──
         private static DatabaseHelper? CreateCommentaryHelperIfExists(string? bibleDbName)
         {
             if (string.IsNullOrWhiteSpace(bibleDbName)) return null;
@@ -335,8 +299,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 if (System.IO.File.Exists(asset))
                     return new DatabaseHelper(comDbName);
 
-            System.Diagnostics.Debug.WriteLine(
-                $"[Reader.CreateCommentaryHelper] '{comDbName}' not found. Footnotes disabled.");
             return null;
         }
 
@@ -353,9 +315,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 _secondaryDatabaseHelper?.DatabaseName);
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  FAB / fade
-        // ═══════════════════════════════════════════════════════════════
         private void ScheduleFade()
         {
             _fadeTimer?.Stop();
@@ -366,7 +325,7 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             var target = _isButtonVisible ? 1.0 : 0.2;
             var anim = new DoubleAnimation(target, TimeSpan.FromMilliseconds(200));
-            FullscreenFab.BeginAnimation(UIElement.OpacityProperty, anim);
+            FullscreenFab.BeginAnimation(OpacityProperty, anim);
         }
 
         private void FullscreenFab_Click(object sender, RoutedEventArgs e)
@@ -378,9 +337,6 @@ namespace FountOfHopeStudyBiblePC.Views
             ScheduleFade();
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Highlight palette (colour bar)
-        // ═══════════════════════════════════════════════════════════════
         private void BuildHighlightColorBar()
         {
             HighlightColorList.Children.Clear();
@@ -408,7 +364,6 @@ namespace FountOfHopeStudyBiblePC.Views
                     bool wasSameColor = c == _viewModel.WordMarkerColor;
                     _viewModel.WordMarkerColor = c;
 
-                    // Tap-again on the active swatch exits highlight mode.
                     if (_viewModel.IsHighlightMode && wasSameColor)
                     {
                         _viewModel.IsHighlightMode = false;
@@ -418,7 +373,7 @@ namespace FountOfHopeStudyBiblePC.Views
                     {
                         _viewModel.IsHighlightMode = true;
                         _viewModel.IsDictionaryMode = false;
-                        ShowPalette();          // bump the 5 s timer
+                        ShowPalette();  
                     }
 
                     BuildHighlightColorBar();
@@ -427,22 +382,12 @@ namespace FountOfHopeStudyBiblePC.Views
             }
         }
 
-        /// <summary>
-        /// Called from ChapterView after a single word click in highlight
-        /// mode (via `onWordHighlightAction`). Re-reveals the palette but
-        /// leaves the mode state untouched.
-        /// </summary>
         private void ActivateWordHighlightMode()
         {
-            if (!_viewModel.IsHighlightMode) return;   // dictionary mode → ignore
+            if (!_viewModel.IsHighlightMode) return; 
             ShowPalette();
         }
 
-        /// <summary>
-        /// Reveal the palette and (re)start its auto-hide timer. Public so
-        /// a toolbar button / keyboard shortcut can bring it back without
-        /// toggling the mode off and on again.
-        /// </summary>
         public void ShowPalette()
         {
             _isPaletteVisible = true;
@@ -451,9 +396,6 @@ namespace FountOfHopeStudyBiblePC.Views
             _paletteTimer?.Start();
         }
 
-        /// <summary>
-        /// Hide the palette immediately. Does not change IsHighlightMode.
-        /// </summary>
         public void HidePalette()
         {
             _isPaletteVisible = false;
@@ -500,9 +442,6 @@ namespace FountOfHopeStudyBiblePC.Views
             _wordDragHasMoved = false;
 
             _fadeTimer?.Stop();
-            // Do not show the palette or touch the mode flags here — this
-            // might turn out to be a plain click (dictionary lookup), which
-            // must not flip modes or pop the palette.
         }
 
         private void ReaderHost_PreviewMouseMove(object sender, MouseEventArgs e)
@@ -523,18 +462,10 @@ namespace FountOfHopeStudyBiblePC.Views
             {
                 _wordDragHasMoved = true;
 
-                // A drag is an explicit highlight gesture. Promote the app
-                // to highlight mode the moment the gesture is proven to be
-                // a drag, so the palette, the mode flags, and per-word click
-                // routing are all consistent for the rest of the interaction.
                 if (!_viewModel.IsHighlightMode)
                 {
                     _viewModel.IsDictionaryMode = false;
                     _viewModel.IsHighlightMode = true;
-                    // The IsHighlightMode setter fires PropertyChanged, and
-                    // our handler already calls ShowPalette(); calling it
-                    // again below is idempotent and also covers the "already
-                    // in highlight mode" path where no property change fires.
                 }
                 ShowPalette();
             }
@@ -564,11 +495,10 @@ namespace FountOfHopeStudyBiblePC.Views
                 if (_wordDragHasMoved)
                 {
                     _wordHighlightHost.CommitWordDrag();
-                    e.Handled = true;   // suppress the child's per-word click handler
+                    e.Handled = true; 
                 }
                 else
                 {
-                    // Single-click → let the normal word-click logic fire.
                     _wordHighlightHost.CancelWordDrag();
                 }
             }
@@ -602,8 +532,6 @@ namespace FountOfHopeStudyBiblePC.Views
             _wordDragStartBlock = null;
             _wordDragEndBlock = null;
             ScheduleFade();
-            // No palette-timer restart — the palette auto-hides on its own
-            // schedule; the mode itself never expires.
         }
 
         private void AbortWordDrag()
@@ -615,7 +543,6 @@ namespace FountOfHopeStudyBiblePC.Views
             EndWordDrag();
         }
 
-        // ── Fallback: word-element detection & range application ───────
         private static TextBlock? FindWordElementAt(DependencyObject? source)
         {
             var current = source;
@@ -623,11 +550,6 @@ namespace FountOfHopeStudyBiblePC.Views
             {
                 if (current is TextBlock tb)
                     return IsWordElement(tb) ? tb : null;
-                // VisualTreeHelpers.GetParent handles Run / Span / Hyperlink
-                // / Paragraph as well as visuals. Direct VisualTreeHelper
-                // .GetParent would throw on any FrameworkContentElement,
-                // which is exactly what OriginalSource often is when the
-                // user clicks on text inside a TextBlock.
                 current = VisualTreeHelpers.GetParent(current);
             }
             return null;
@@ -733,9 +655,6 @@ namespace FountOfHopeStudyBiblePC.Views
             _dragPreviewOriginals.Clear();
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Menu (top-end popup)
-        // ═══════════════════════════════════════════════════════════════
         public void OpenOptionsMenu()
         {
             OptionsMenuBorder.Background =
@@ -842,9 +761,6 @@ namespace FountOfHopeStudyBiblePC.Views
             _wordHighlightHost = ReaderHost.Content as IWordHighlightHost;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Passage change handlers
-        // ═══════════════════════════════════════════════════════════════
         private void OnPrimaryPassageChanged(PassageSelection newPassage)
         {
             _primaryCurrent = newPassage;
@@ -868,9 +784,6 @@ namespace FountOfHopeStudyBiblePC.Views
             _viewModel.SecondaryPassage = newPassage;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Word / Strong / Tag / Commentary handlers
-        // ═══════════════════════════════════════════════════════════════
         private void OnPrimaryWordPress(string word)
         {
             var trimmed = word.Trim();
@@ -938,7 +851,7 @@ namespace FountOfHopeStudyBiblePC.Views
         private void OnCrossRefClick(int book, int chapter, int verse, bool isPrimary)
         {
             var refs = _crossRefHelper?.GetCrossReferences(book, chapter, verse)
-                       ?? new List<CrossReference>();
+                       ?? [];
             var bookName = BibleData.GetBookByCustomNumber(book)?.Name ?? book.ToString();
             var source = $"References for {bookName} {chapter}:{verse}";
 
@@ -976,7 +889,7 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             if (_modalState is ReaderModalState.None) return;
 
-            var modal = new Views.Modals.InteractiveModal(
+            var modal = new InteractiveModal(
                 viewModel: _viewModel,
                 bibleDb: _databaseHelper,
                 onNavigateToReader: (p) =>
@@ -1079,7 +992,7 @@ namespace FountOfHopeStudyBiblePC.Views
             var db = _selectedIsPrimary ? _databaseHelper : _secondaryDatabaseHelper;
             var chapterVerses = GetChapterVerses(cache, _selectedPassage);
 
-            await System.Threading.Tasks.Task.Delay(120);
+            await Task.Delay(120);
 
             var modal = new Views.Modals.VerseOptionsModal(
                 viewModel: _viewModel,
@@ -1105,16 +1018,15 @@ namespace FountOfHopeStudyBiblePC.Views
             PassageSelection passage)
         {
             var key = (passage.BookNumber, passage.Chapter);
-            if (!cache.TryGetValue(key, out var content)) return new List<Verse>();
+            if (!cache.TryGetValue(key, out var content)) return [];
 
-            return content
+            return [.. content
                 .OfType<VerseContent.VerseVal>()
                 .Select(v => v.Verse with
                 {
                     BookName = passage.BookName,
                     Chapter = passage.Chapter,
-                })
-                .ToList();
+                })];
         }
 
         private void ShareVersesFromModal(List<Verse> verses)
@@ -1136,14 +1048,12 @@ namespace FountOfHopeStudyBiblePC.Views
                 MessageBox.Show("Verses copied to clipboard.", "Share",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
-            catch { /* clipboard may fail if no access */ }
+            catch {  }
         }
 
         private async void OpenNotesModal(List<Verse> verses)
         {
             if (verses == null || verses.Count == 0) return;
-
-            App.Log($"Reader: OpenNotesModal with {verses.Count} verse(s)");
 
             await Task.Delay(120);
 
@@ -1158,7 +1068,6 @@ namespace FountOfHopeStudyBiblePC.Views
             if (owner != null) modal.Owner = owner;
 
             modal.Show();
-            App.Log("Reader: NotesModal closed — refreshing chapter");
 
             RenderCurrentMode();
         }

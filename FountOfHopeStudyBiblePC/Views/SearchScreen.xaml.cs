@@ -1,10 +1,5 @@
-﻿// Views/SearchScreen.xaml.cs
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -18,31 +13,27 @@ namespace FountOfHopeStudyBiblePC.Views
 {
     public partial class SearchScreen : UserControl
     {
-        // ── Dependencies ──────────────────────────────────────────
         private readonly Action<PassageSelection> _onPassageSelected;
         private readonly Action<string> _onVersionChange;
         private readonly AppViewModel _viewModel;
         private readonly PreferencesService _prefs = new();
         private readonly VerseTextProcessor _processor = new();
 
-        // ── Own DB instance ───────────────────────────────────────
         private DatabaseHelper? _db;
 
-        // ── State ─────────────────────────────────────────────────
         private string _query = "";
         private string _scope = SearchScopes.Whole;
         private bool _hasSearched;
         private bool _loading;
-        private List<SearchVerse> _results = new();
+        private List<SearchVerse> _results = [];
 
         private const int MaxRenderResults = 500;
 
-        // ── Colors ────────────────────────────────────────────────
+        private int _renderedCount;
+        private TextBlock? _limitNotice;
+
         private SearchColors _colors = null!;
 
-        // ═══════════════════════════════════════════════════════════
-        //  Constructor
-        // ═══════════════════════════════════════════════════════════
         public SearchScreen(
             DatabaseHelper? databaseHelper,
             Action<PassageSelection> onPassageSelected,
@@ -51,7 +42,7 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             InitializeComponent();
 
-            _viewModel = ViewModels.AppViewModelAccessor.Current
+            _viewModel = AppViewModelAccessor.Current
                                  ?? new AppViewModel();
             _onPassageSelected = onPassageSelected ?? (_ => { });
             _onVersionChange = onVersionChange ?? (_ => { });
@@ -66,12 +57,8 @@ namespace FountOfHopeStudyBiblePC.Views
             Unloaded += OnUnloaded;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Lifecycle
-        // ═══════════════════════════════════════════════════════════
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            App.Log("SearchScreen: Loaded");
             RebuildDb();
             RebuildColors();
             RefreshScopeCard();
@@ -81,9 +68,8 @@ namespace FountOfHopeStudyBiblePC.Views
             UpdateEmptyState();
             UpdateSearchButtonLabel();
 
-            // ── NEW: re-apply the label after WPF has applied the template ──
             Dispatcher.BeginInvoke(new Action(UpdateSearchButtonLabel),
-                System.Windows.Threading.DispatcherPriority.Loaded);
+               DispatcherPriority.Loaded);
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -115,14 +101,10 @@ namespace FountOfHopeStudyBiblePC.Views
             }
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  DB / Colors
-        // ═══════════════════════════════════════════════════════════
         private void RebuildDb()
         {
             _db?.Dispose();
             _db = new DatabaseHelper(_viewModel.CurrentDbName);
-            App.Log($"SearchScreen: DB rebuilt for {_viewModel.CurrentDbName}");
         }
 
         private void RebuildColors()
@@ -139,9 +121,6 @@ namespace FountOfHopeStudyBiblePC.Views
             ScopeCard.Background = new SolidColorBrush(_colors.Primary);
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Refresh labels
-        // ═══════════════════════════════════════════════════════════
         private void RefreshScopeCard()
         {
             var config = SearchScopes.GetScopeConfig(_scope);
@@ -156,7 +135,6 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void UpdateSearchButtonLabel()
         {
-            // ═══ FIX 2: removed unused `mode` variable ═══
             var scopeConfig = SearchScopes.GetScopeConfig(_scope);
 
             string label;
@@ -197,15 +175,10 @@ namespace FountOfHopeStudyBiblePC.Views
                 label = $"{found}{term}{scopeStr}";
             }
 
-            // ═══ FIX 3: use SetSearchButtonLabel which finds the template TextBlock ═══
             SetSearchButtonLabel(label);
             SearchBtn.IsEnabled = _query.Trim().Length > 0;
         }
 
-        /// <summary>
-        /// Updates the label inside the SearchBtn's ControlTemplate.
-        /// The template has a TextBlock x:Name="Label" — we reach in via FindName.
-        /// </summary>
         private void SetSearchButtonLabel(string text)
         {
             if (SearchBtn.Template == null) return;
@@ -213,9 +186,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 tb.Text = text;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Search
-        // ═══════════════════════════════════════════════════════════
         private async void RunSearch()
         {
             _hasSearched = true;
@@ -245,9 +215,8 @@ namespace FountOfHopeStudyBiblePC.Views
                 UpdateSearchButtonLabel();
                 ResultsScroller.ScrollToTop();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                App.Log($"SearchScreen: search failed — {ex.Message}");
                 _loading = false;
                 _results.Clear();
                 ShowError("Failed to search. Please try again.");
@@ -278,12 +247,11 @@ namespace FountOfHopeStudyBiblePC.Views
             ErrorState.Visibility = Visibility.Collapsed;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Results rendering
-        // ═══════════════════════════════════════════════════════════
         private void RebuildResults()
         {
             ResultsPanel.Children.Clear();
+            _limitNotice = null;
+            _renderedCount = 0;
 
             if (_results.Count == 0)
             {
@@ -292,28 +260,40 @@ namespace FountOfHopeStudyBiblePC.Views
             }
 
             ResultsScroller.Visibility = Visibility.Visible;
+            RenderNextBatch();
+        }
 
-            var toRender = _results.Count > MaxRenderResults
-                ? _results.Take(MaxRenderResults).ToList()
-                : _results;
+        private void RenderNextBatch()
+        {
+            var end = Math.Min(_renderedCount + MaxRenderResults, _results.Count);
 
-            foreach (var verse in toRender)
-                ResultsPanel.Children.Add(BuildResultCard(verse));
-
-            if (_results.Count > MaxRenderResults)
+            // Remove the "showing X of Y" notice before appending more cards.
+            if (_limitNotice != null)
             {
-                ResultsPanel.Children.Add(new TextBlock
+                ResultsPanel.Children.Remove(_limitNotice);
+                _limitNotice = null;
+            }
+
+            for (var i = _renderedCount; i < end; i++)
+                ResultsPanel.Children.Add(BuildResultCard(_results[i]));
+
+            _renderedCount = end;
+
+            if (_renderedCount < _results.Count)
+            {
+                _limitNotice = new TextBlock
                 {
-                    Text = $"Showing first {MaxRenderResults} of {_results.Count} results",
+                    Text = $"Showing {_renderedCount} of {_results.Count} results — scroll for more",
                     FontSize = 12,
                     Foreground = new SolidColorBrush(_colors.Muted),
                     HorizontalAlignment = HorizontalAlignment.Center,
                     Margin = new Thickness(0, 12, 0, 0),
-                });
+                };
+                ResultsPanel.Children.Add(_limitNotice);
             }
         }
 
-        private FrameworkElement BuildResultCard(SearchVerse verse)
+        private Border BuildResultCard(SearchVerse verse)
         {
             var bookName = verse.BookName ?? "Unknown";
             var bookColorStr = verse.BookColor
@@ -392,9 +372,6 @@ namespace FountOfHopeStudyBiblePC.Views
             return card;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Empty state
-        // ═══════════════════════════════════════════════════════════
         private void UpdateEmptyState()
         {
             if (_results.Count > 0)
@@ -442,7 +419,7 @@ namespace FountOfHopeStudyBiblePC.Views
             EmptyState.Children.Add(BuildPopularTermsCard());
         }
 
-        private FrameworkElement BuildPopularTermsCard()
+        private Border BuildPopularTermsCard()
         {
             var stack = new StackPanel();
 
@@ -474,12 +451,12 @@ namespace FountOfHopeStudyBiblePC.Views
                     Margin = new Thickness(3),
                     Cursor = Cursors.Hand,
                     Tag = term,
-                };
-                chip.Child = new TextBlock
-                {
-                    Text = term,
-                    FontSize = 12,
-                    Foreground = new SolidColorBrush(_colors.Primary),
+                    Child = new TextBlock
+                    {
+                        Text = term,
+                        FontSize = 12,
+                        Foreground = new SolidColorBrush(_colors.Primary),
+                    }
                 };
                 chip.MouseLeftButtonUp += (_, _) =>
                 {
@@ -495,7 +472,6 @@ namespace FountOfHopeStudyBiblePC.Views
 
             stack.Children.Add(chips);
 
-            // ═══ FIX 1: was broken — `{ Child = stack };` dangling after the object initializer ═══
             return new Border
             {
                 Background = new SolidColorBrush(Color.FromArgb(
@@ -503,7 +479,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(16),
                 Margin = new Thickness(0, 0, 0, 8),
-                Child = stack,   // ← Child now set inside the initializer
+                Child = stack,
             };
         }
 
@@ -573,9 +549,6 @@ namespace FountOfHopeStudyBiblePC.Views
             });
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Event handlers
-        // ═══════════════════════════════════════════════════════════
         private void ScopeCard_Click(object sender, MouseButtonEventArgs e)
         {
             var dialog = new SearchScopeDialog(
@@ -677,6 +650,14 @@ namespace FountOfHopeStudyBiblePC.Views
             BackToTopBtn.Visibility = ResultsScroller.VerticalOffset > 300
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+
+            if (_loading || _results.Count == 0 || _renderedCount >= _results.Count)
+                return;
+
+            const double threshold = 400;
+            var distanceFromBottom = ResultsScroller.ScrollableHeight - ResultsScroller.VerticalOffset;
+            if (distanceFromBottom < threshold)
+                RenderNextBatch();
         }
     }
 }

@@ -1,16 +1,11 @@
-﻿// Views/HomeScreen.xaml.cs
-using FountOfHopeStudyBiblePC.Controls;
+﻿using FountOfHopeStudyBiblePC.Controls;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
 using FountOfHopeStudyBiblePC.ViewModels;
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -37,22 +32,17 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private readonly Random _rng = new();
 
-        // ── State ───────────────────────────────────────────────────────────
         private List<Verse>? _dailyVerses;
         private bool _isBookmarked;
 
-        /// <summary>Set once we're subscribed, so we can un-subscribe cleanly.</summary>
         private bool _themeHooked;
 
-        /// <summary>Guards against re-entry while ApplyTheme is running.</summary>
         private bool _applyingTheme;
 
-        /// <summary>Bound from XAML via ElementName=HomeRoot.</summary>
-        public ObservableCollection<QuickAction> QuickActions { get; } = new();
+        public ObservableCollection<QuickAction> QuickActions { get; } = [];
 
-        public ObservableCollection<PopularDevotional> PopularDevotionals { get; } = new();
+        public ObservableCollection<PopularDevotional> PopularDevotionals { get; } = [];
 
-        // ── Constructor ─────────────────────────────────────────────────────
         public HomeScreen(
             AppViewModel viewModel,
             Action<PassageSelection> onNavigateToReader,
@@ -66,10 +56,8 @@ namespace FountOfHopeStudyBiblePC.Views
             Action? onOpenGenerationsClick = null)
         {
             var sw = Stopwatch.StartNew();
-            App.Log("HomeScreen ctor - enter");
 
             InitializeComponent();
-            App.Log($"HomeScreen ctor - InitializeComponent took {sw.ElapsedMilliseconds}ms");
 
             _viewModel = viewModel;
             _onNavigateToReader = onNavigateToReader;
@@ -84,12 +72,10 @@ namespace FountOfHopeStudyBiblePC.Views
             _onOpenGenerationsClick = onOpenGenerationsClick ?? (() => { });
 
             BuildQuickActions();
-            App.Log($"HomeScreen ctor - BuildQuickActions took {sw.ElapsedMilliseconds}ms");
 
             LoadPopularDevotionals();
             HookImageSection();
 
-            // React to theme changes from BOTH sources of truth.
             ThemeManager.Changed += OnThemeChanged;
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
             _themeHooked = true;
@@ -97,12 +83,9 @@ namespace FountOfHopeStudyBiblePC.Views
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
 
-            // Apply the current palette once so items created before
-            // subscription still pick up the right colors.
             Loaded += (_, __) => ApplyTheme();
 
             sw.Stop();
-            App.Log($"HomeScreen ctor - COMPLETE, total {sw.ElapsedMilliseconds}ms");
         }
 
         private void SetRandomBackgroundImage()
@@ -128,9 +111,7 @@ namespace FountOfHopeStudyBiblePC.Views
             Dispatcher.BeginInvoke(new Action(async () =>
             {
                 var sw = Stopwatch.StartNew();
-                App.Log("HomeScreen refresh - start");
                 await RefreshDailyVerseAsync();
-                App.Log($"HomeScreen refresh - took {sw.ElapsedMilliseconds}ms");
             }), System.Windows.Threading.DispatcherPriority.Background);
         }
 
@@ -142,7 +123,6 @@ namespace FountOfHopeStudyBiblePC.Views
             _themeHooked = false;
         }
 
-        // ── Theme reactivity ────────────────────────────────────────────────
         private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(AppViewModel.DarkTheme) ||
@@ -168,7 +148,6 @@ namespace FountOfHopeStudyBiblePC.Views
             _applyingTheme = true;
             try
             {
-                // (1) Swap DynamicResource brushes.
                 ThemeResources.Refresh();
 
                 var isDark = ThemeManager.DarkTheme;
@@ -178,7 +157,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 var secondaryBrush = GetBrush(ThemeResources.SecondaryText);
                 var primaryBrush = GetBrush(ThemeResources.Primary);
 
-                // (3) Item sweep — bold tile labels and icon glyphs use primary.
                 foreach (var ic in FindVisualChildren<ItemsControl>(this))
                 {
                     if (ic.ItemsSource is null) continue;
@@ -190,7 +168,6 @@ namespace FountOfHopeStudyBiblePC.Views
                     }
                 }
 
-                // (4) Custom controls with their own theme DPs.
                 if (FindDescendant<FountRain>(this) is { } rain)
                 {
                     rain.MatrixColor = primary;
@@ -200,12 +177,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 }
 
                 TrySetIsDarkTheme(ImageSectionControl, isDark);
-
-                // (5) Recolor any originally non-white, non-theme-surface
-                //     element (background / border) to the primary color.
                 RecolorAccents(this, primary);
-
-                // (6) Root background.
                 if (Background is SolidColorBrush || Background == null)
                     Background = GetBrush(ThemeResources.PageBackground);
             }
@@ -215,7 +187,6 @@ namespace FountOfHopeStudyBiblePC.Views
             }
         }
 
-        // ── Theme helpers ───────────────────────────────────────────────────
         private static Brush GetBrush(string key)
         {
             if (Application.Current?.Resources[key] is Brush b)
@@ -223,11 +194,6 @@ namespace FountOfHopeStudyBiblePC.Views
             return Brushes.Transparent;
         }
 
-        /// <summary>
-        /// Walk every realised container of an ItemsControl and repaint the
-        /// TextBlocks and Controls inside it. Bold text → primary; regular
-        /// text → secondary. Opt-out: set <c>Tag="NoTheme"</c>.
-        /// </summary>
         private static void RefreshItemsControl(
             ItemsControl? control, Brush primaryText, Brush secondaryText, Brush icon)
         {
@@ -292,10 +258,8 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private static bool IsThemeNeutral(Color c)
         {
-            // Opaque grayscale → white, black, or any gray (theme surfaces).
             if (c.A == 255 && c.R == c.G && c.G == c.B) return true;
 
-            // The three opaque dark-theme surfaces MainWindow installs.
             if (c.A == 255)
             {
                 if (c == Color.FromRgb(0x10, 0x14, 0x18)) return true;
@@ -303,13 +267,12 @@ namespace FountOfHopeStudyBiblePC.Views
                 if (c == Color.FromRgb(0x23, 0x2A, 0x33)) return true;
             }
 
-            // Low-alpha grayscale → subtle overlays (dividers, hover tints).
             if (c.A < 0x80 && c.R == c.G && c.G == c.B) return true;
 
             return false;
         }
 
-        private static Brush FrozenBrush(Color c)
+        private static SolidColorBrush FrozenBrush(Color c)
         {
             var b = new SolidColorBrush(c);
             b.Freeze();
@@ -347,7 +310,6 @@ namespace FountOfHopeStudyBiblePC.Views
             }
         }
 
-        /// <summary>Reflection-free DP setter — uses a virtual call, not reflection.</summary>
         private static void TrySetIsDarkTheme(DependencyObject? target, bool isDark)
         {
             if (target == null) return;
@@ -356,7 +318,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 prop.SetValue(target, isDark);
         }
 
-        // ── Image section ───────────────────────────────────────────────────
         private void HookImageSection()
         {
             ImageSectionControl.ViewModel = _viewModel;
@@ -367,7 +328,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 _onNavigateToReader(selection);
         }
 
-        // ── Quick actions ───────────────────────────────────────────────────
         private void BuildQuickActions()
         {
             App.Log($"BuildQuickActions: Textures.Count={_viewModel.Textures.Count}");
@@ -414,7 +374,6 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             if (string.IsNullOrEmpty(pathOrUri))
             {
-                App.Log("LoadThumbnail: → null (empty input)");
                 return null;
             }
 
@@ -424,18 +383,11 @@ namespace FountOfHopeStudyBiblePC.Views
 
                 if (pathOrUri.StartsWith("pack://", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (Uri.TryCreate(pathOrUri, UriKind.Absolute, out uri))
-                        App.Log($"LoadThumbnail: pack URI '{uri}'");
-                    else
-                    {
-                        App.Log($"LoadThumbnail: → null (invalid pack URI '{pathOrUri}')");
-                        return null;
-                    }
+                    return null;
                 }
                 else if (File.Exists(pathOrUri))
                 {
                     uri = new Uri(pathOrUri, UriKind.Absolute);
-                    App.Log($"LoadThumbnail: file path '{uri}'");
                 }
                 else
                 {
@@ -443,13 +395,11 @@ namespace FountOfHopeStudyBiblePC.Views
                     if (File.Exists(candidate))
                     {
                         uri = new Uri(candidate, UriKind.Absolute);
-                        App.Log($"LoadThumbnail: resolved relative '{uri}'");
                     }
                 }
 
                 if (uri == null)
                 {
-                    App.Log($"LoadThumbnail: → null (could not resolve '{pathOrUri}')");
                     return null;
                 }
 
@@ -461,12 +411,10 @@ namespace FountOfHopeStudyBiblePC.Views
                 bmp.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
                 bmp.EndInit();
                 bmp.Freeze();
-                App.Log($"LoadThumbnail: → loaded {bmp.PixelWidth}x{bmp.PixelHeight}");
                 return bmp;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                App.Log($"LoadThumbnail: → EXCEPTION {ex.Message}");
                 return null;
             }
         }
@@ -486,7 +434,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 return;
             }
 
-            // Show skeleton while loading.
             _dailyVerses = null;
             RenderDailyVerse();
 
@@ -519,7 +466,6 @@ namespace FountOfHopeStudyBiblePC.Views
             {
                 var verse = _dailyVerses[i];
 
-                // Bold verse number (15pt) – matches Kotlin SpanStyle
                 DailyVerseText.Inlines.Add(new Run($"{verse.VerseNumber} ")
                 {
                     FontSize = 15,
@@ -527,7 +473,6 @@ namespace FountOfHopeStudyBiblePC.Views
                     Foreground = Brushes.White
                 });
 
-                // Body text
                 DailyVerseText.Inlines.Add(new Run(SimpleVerseProcessor.StripXmlTags(verse.Text)));
 
                 if (i < _dailyVerses.Count - 1)
@@ -544,7 +489,6 @@ namespace FountOfHopeStudyBiblePC.Views
             try
             {
                 await RefreshDailyVerseAsync();
-                // Kotlin uses a 500 ms minimum so the spinner is visible.
                 await Task.Delay(500);
             }
             finally
@@ -615,7 +559,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 VerseShareHelper.ShareVerses(owner, _dailyVerses);
         }
 
-        // ── Popular devotionals ─────────────────────────────────────────────
         private void LoadPopularDevotionals()
         {
             foreach (var devotional in GetRandomDevotionals())
@@ -631,7 +574,6 @@ namespace FountOfHopeStudyBiblePC.Views
             }
         }
 
-        /// <summary>Direct port of getRandomDevotionals().</summary>
         private List<PopularDevotional> GetRandomDevotionals()
         {
             var allDevotionals = new List<PopularDevotional>
@@ -695,13 +637,11 @@ namespace FountOfHopeStudyBiblePC.Views
                 new("The Bronze Serpent", "So Moses made a bronze serpent and put it up on a pole...", "Numbers", 21, 9)
             };
 
-            return allDevotionals
+            return [.. allDevotionals
                 .OrderBy(_ => _rng.Next())
-                .Take(5)
-                .ToList();
+                .Take(5)];
         }
 
-        // ── Useful Space grid handlers ──────────────────────────────────────
         private void TakeBibleQuiz_Click(object sender, RoutedEventArgs e) => _onTakeBibleQuizClick();
         private void LearnHebrew_Click(object sender, RoutedEventArgs e) => _onLearnHebrewClick();
         private void LearnGreek_Click(object sender, RoutedEventArgs e) => _onLearnGreekClick();

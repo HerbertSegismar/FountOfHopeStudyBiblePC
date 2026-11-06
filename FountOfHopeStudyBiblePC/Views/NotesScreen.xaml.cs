@@ -1,9 +1,4 @@
-﻿// Views/NotesScreen.xaml.cs
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -16,25 +11,21 @@ namespace FountOfHopeStudyBiblePC.Views
 {
     public partial class NotesScreen : UserControl
     {
-        // ── Dependencies ────────────────────────────────────────────
         private readonly Action<PassageSelection> _onNavigateToReader;
         private readonly AppViewModel _viewModel;
         private DatabaseHelper? _db;
 
-        // ── State ───────────────────────────────────────────────────
-        private List<Note> _notes = new();
-        private readonly List<Note> _selectedNotes = new();
+        private List<Note> _notes = [];
+        private readonly List<Note> _selectedNotes = [];
         private bool _multiSelectMode;
         private bool _searchActive;
         private string _searchQuery = "";
         private NoteSortOrder _sortOrder = NoteSortOrder.DateNewest;
         private string _selectedDbName;
 
-        // ── Undo state ──────────────────────────────────────────────
         private List<Note>? _lastDeleted;
         private System.Windows.Threading.DispatcherTimer? _undoTimer;
 
-        // ── Constructor ─────────────────────────────────────────────
         public NotesScreen(
             Action<PassageSelection> onNavigateToReader,
             AppViewModel viewModel,
@@ -54,12 +45,8 @@ namespace FountOfHopeStudyBiblePC.Views
             App.Log("NotesScreen: constructed");
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Lifecycle
-        // ═══════════════════════════════════════════════════════════
         private void NotesScreen_Loaded(object sender, RoutedEventArgs e)
         {
-            App.Log("NotesScreen: Loaded, opening DB");
             _db = new DatabaseHelper(_selectedDbName);
             RefreshNotes();
             UpdateTopBar();
@@ -89,9 +76,6 @@ namespace FountOfHopeStudyBiblePC.Views
             }
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Data loading
-        // ═══════════════════════════════════════════════════════════
         private void RefreshNotes()
         {
             if (_db == null) return;
@@ -105,18 +89,17 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             return order switch
             {
-                NoteSortOrder.DateNewest => notes.OrderByDescending(n => n.Timestamp).ToList(),
-                NoteSortOrder.DateOldest => notes.OrderBy(n => n.Timestamp).ToList(),
+                NoteSortOrder.DateNewest => [.. notes.OrderByDescending(n => n.Timestamp)],
+                NoteSortOrder.DateOldest => [.. notes.OrderBy(n => n.Timestamp)],
                 NoteSortOrder.Book => notes
                     .OrderBy(n => BibleData.GetBookByName(n.BookName)?.CustomNumber ?? 0)
                     .ThenBy(n => n.Chapter)
                     .ThenBy(n => n.StartVerse)
                     .ToList(),
-                NoteSortOrder.Chapter => notes
+                NoteSortOrder.Chapter => [.. notes
                     .OrderBy(n => n.Chapter)
                     .ThenBy(n => BibleData.GetBookByName(n.BookName)?.CustomNumber ?? 0)
-                    .ThenBy(n => n.StartVerse)
-                    .ToList(),
+                    .ThenBy(n => n.StartVerse)],
                 _ => notes
             };
         }
@@ -125,18 +108,15 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             if (string.IsNullOrWhiteSpace(_searchQuery)) return _notes;
             var q = _searchQuery;
-            return _notes.Where(n =>
+            return [.. _notes.Where(n =>
                 n.NoteText.Contains(q, StringComparison.OrdinalIgnoreCase) ||
                 n.BookName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
                 n.Chapter.ToString().Contains(q) ||
                 n.StartVerse.ToString().Contains(q) ||
                 n.EndVerse.ToString().Contains(q)
-            ).ToList();
+            )];
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  UI refresh
-        // ═══════════════════════════════════════════════════════════
         private void UpdateTopBar()
         {
             TopBarTitle.Text = $"Notes ({_notes.Count})";
@@ -185,14 +165,13 @@ namespace FountOfHopeStudyBiblePC.Views
                 NotesListPanel.Children.Add(BuildNoteCard(note));
         }
 
-        private FrameworkElement BuildNoteCard(Note note)
+        private Border BuildNoteCard(Note note)
         {
             var isSelected = _selectedNotes.Contains(note);
             var rangeStr = note.StartVerse == note.EndVerse
                 ? $"{note.StartVerse}"
                 : $"{note.StartVerse}-{note.EndVerse}";
 
-            // Accent color for selected state
             var bg = isSelected
                 ? Color.FromArgb(0x55, 0x7F, 0xB2, 0xFF)
                 : (_viewModel.DarkTheme
@@ -214,13 +193,11 @@ namespace FountOfHopeStudyBiblePC.Views
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            // Header row: title + buttons / checkbox
             var headerGrid = new Grid();
             headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            // Checkbox (visible in multi-select)
             if (_multiSelectMode)
             {
                 var cb = new CheckBox
@@ -235,7 +212,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 headerGrid.Children.Add(cb);
             }
 
-            // Title
             var title = new TextBlock
             {
                 Text = $"{note.BookName} {note.Chapter}:{rangeStr}",
@@ -248,7 +224,6 @@ namespace FountOfHopeStudyBiblePC.Views
             Grid.SetColumn(title, 1);
             headerGrid.Children.Add(title);
 
-            // Action buttons (hidden in multi-select)
             if (!_multiSelectMode)
             {
                 var actions = new StackPanel
@@ -275,7 +250,6 @@ namespace FountOfHopeStudyBiblePC.Views
             Grid.SetRow(headerGrid, 0);
             grid.Children.Add(headerGrid);
 
-            // Body
             var body = new TextBlock
             {
                 Text = note.NoteText,
@@ -292,7 +266,6 @@ namespace FountOfHopeStudyBiblePC.Views
             Grid.SetRow(body, 1);
             grid.Children.Add(body);
 
-            // Footer: chips + timestamp
             var footer = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
@@ -301,7 +274,7 @@ namespace FountOfHopeStudyBiblePC.Views
             };
 
             footer.Children.Add(BuildChip(
-                note.BookName.Length >= 3 ? note.BookName.Substring(0, 3).ToUpperInvariant() : note.BookName.ToUpperInvariant(),
+                note.BookName.Length >= 3 ? note.BookName[..3].ToUpperInvariant() : note.BookName.ToUpperInvariant(),
                 Color.FromArgb(0x33, 0x7F, 0xB2, 0xFF), Colors.White));
             footer.Children.Add(BuildChip(
                 $"Ch {note.Chapter}",
@@ -323,10 +296,8 @@ namespace FountOfHopeStudyBiblePC.Views
 
             border.Child = grid;
 
-            // ── Click handling ──
             border.MouseLeftButtonUp += (_, e) =>
             {
-                // Ignore if a child button was clicked
                 if (e.OriginalSource is Button) return;
                 if (_multiSelectMode)
                     ToggleNoteSelection(note);
@@ -348,7 +319,7 @@ namespace FountOfHopeStudyBiblePC.Views
             return border;
         }
 
-        private Button BuildIconButton(string glyph, string hexColor, string tooltip)
+        private static Button BuildIconButton(string glyph, string hexColor, string tooltip)
         {
             var btn = new Button
             {
@@ -358,17 +329,17 @@ namespace FountOfHopeStudyBiblePC.Views
                 BorderThickness = new Thickness(0),
                 Cursor = Cursors.Hand,
                 ToolTip = tooltip,
-            };
-            btn.Content = new TextBlock
-            {
-                Text = glyph,
-                FontSize = 14,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hexColor)),
+                Content = new TextBlock
+                {
+                    Text = glyph,
+                    FontSize = 14,
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hexColor)),
+                }
             };
             return btn;
         }
 
-        private FrameworkElement BuildChip(string text, Color bg, Color fg)
+        private static Border BuildChip(string text, Color bg, Color fg)
         {
             return new Border
             {
@@ -386,9 +357,6 @@ namespace FountOfHopeStudyBiblePC.Views
             };
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Selection
-        // ═══════════════════════════════════════════════════════════
         private void ToggleNoteSelection(Note note)
         {
             if (_selectedNotes.Contains(note))
@@ -403,15 +371,11 @@ namespace FountOfHopeStudyBiblePC.Views
             RebuildNotesList();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Actions
-        // ═══════════════════════════════════════════════════════════
         private void NavigateToNote(Note note)
         {
             var book = BibleData.GetBookByName(note.BookName);
             if (book == null)
             {
-                App.Log($"NotesScreen: unknown book '{note.BookName}'");
                 return;
             }
 
@@ -430,14 +394,16 @@ namespace FountOfHopeStudyBiblePC.Views
                 .Where(v => v.VerseNumber >= note.StartVerse && v.VerseNumber <= note.EndVerse)
                 .ToList();
 
-            var modal = new Views.Modals.NotesModal(
+            var modal = new Modals.NotesModal(
                 viewModel: _viewModel,
                 verses: verses,
                 passage: new PassageSelection(book.CustomNumber, note.BookName,
                                                      note.Chapter, note.StartVerse),
                 databaseHelper: _db,
-                onSave: () => RefreshNotes());
-            modal.Owner = Window.GetWindow(this);
+                onSave: () => RefreshNotes())
+            {
+                Owner = Window.GetWindow(this)
+            };
             modal.Show();
 
             RefreshNotes();
@@ -474,7 +440,6 @@ namespace FountOfHopeStudyBiblePC.Views
             foreach (var n in toDelete)
                 _db.DeleteNote(n.BookName, n.Chapter, n.StartVerse, n.EndVerse);
 
-            // Stash for undo
             _lastDeleted = toDelete;
             ShowUndoBar(count);
             _selectedNotes.Clear();
@@ -512,9 +477,6 @@ namespace FountOfHopeStudyBiblePC.Views
             RebuildNotesList();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Undo bar
-        // ═══════════════════════════════════════════════════════════
         private void ShowUndoBar(int count)
         {
             UndoText.Text = $"{count} note{(count == 1 ? "" : "s")} removed";
@@ -547,9 +509,6 @@ namespace FountOfHopeStudyBiblePC.Views
             RefreshNotes();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Top bar buttons
-        // ═══════════════════════════════════════════════════════════
         private void SearchToggleBtn_Click(object sender, RoutedEventArgs e)
         {
             _searchActive = !_searchActive;
@@ -582,7 +541,7 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void SortBtn_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new Views.Modals.NoteSortDialog(_sortOrder)
+            var dlg = new Modals.NoteSortDialog(_sortOrder)
             {
                 Owner = Window.GetWindow(this)
             };
