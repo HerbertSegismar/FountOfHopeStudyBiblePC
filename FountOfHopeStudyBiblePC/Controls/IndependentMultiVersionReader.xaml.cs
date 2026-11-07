@@ -11,8 +11,8 @@ namespace FountOfHopeStudyBiblePC.Controls
 {
     public partial class IndependentMultiVersionReader : UserControl, IWordHighlightHost
     {
-        private readonly PassageSelection _primaryCurrent;
-        private readonly PassageSelection _secondaryCurrent;
+        private PassageSelection _primaryCurrent;
+        private PassageSelection _secondaryCurrent;
         private readonly int? _targetVerse;
         private readonly int? _secondaryTargetVerse;
         private readonly DatabaseHelper? _databaseHelper;
@@ -91,8 +91,8 @@ namespace FountOfHopeStudyBiblePC.Controls
             _onVerseCommentaryClick = onVerseCommentaryClick;
             _onWordHighlightAction = onWordHighlightAction;
 
-            Preload(primaryCurrent, primaryLoadedVerses, databaseHelper);
-            Preload(secondaryCurrent, secondaryLoadedVerses, secondaryDatabaseHelper);
+            Preload(_primaryCurrent, primaryLoadedVerses, databaseHelper);
+            Preload(_secondaryCurrent, secondaryLoadedVerses, secondaryDatabaseHelper);
 
             BuildLayout();
 
@@ -102,6 +102,22 @@ namespace FountOfHopeStudyBiblePC.Controls
                     Dispatcher.BeginInvoke(new Action(BuildLayout),
                         DispatcherPriority.Background);
             };
+        }
+
+        /// <summary>
+        /// Rebuilds only the secondary pane in place — used when the user
+        /// clicks the secondary column's chapter chevrons. The primary pane
+        /// is left untouched, so its scroll position is preserved.
+        /// </summary>
+        public void SetSecondaryPassage(PassageSelection passage)
+        {
+            _secondaryCurrent = passage;
+            Preload(passage, _secondaryLoadedVerses, _secondaryDatabaseHelper);
+
+            if (_secondaryView != null)
+                RootGrid.Children.Remove(_secondaryView);
+
+            BuildSecondaryPane();
         }
 
         private void Preload(
@@ -151,21 +167,42 @@ namespace FountOfHopeStudyBiblePC.Controls
             RootGrid.ColumnDefinitions.Clear();
             RootGrid.RowDefinitions.Clear();
 
+            var dividerBrush = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
+
+            if (_viewModel.MultiViewLayout == "horizontal")
+            {
+                RootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                RootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1) });
+                RootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                var divider = new Border { Background = dividerBrush };
+                Grid.SetColumn(divider, 1);
+                RootGrid.Children.Add(divider);
+            }
+            else
+            {
+                RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+                RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1) });
+                RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+                var divider = new Border { Background = dividerBrush };
+                Grid.SetRow(divider, 1);
+                RootGrid.Children.Add(divider);
+            }
+
+            BuildPrimaryPane();
+            BuildSecondaryPane();
+        }
+
+        private void BuildPrimaryPane()
+        {
             var pk = (_primaryCurrent.BookNumber, _primaryCurrent.Chapter);
-            var sk = (_secondaryCurrent.BookNumber, _secondaryCurrent.Chapter);
-
-            _primaryLoadedVerses.TryGetValue(pk, out var primaryContent);
-            _secondaryLoadedVerses.TryGetValue(sk, out var secondaryContent);
-
-            primaryContent ??= [];
-            secondaryContent ??= [];
-
-            var dividerBrush = new SolidColorBrush(
-                Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF));
+            _primaryLoadedVerses.TryGetValue(pk, out var content);
+            content ??= [];
 
             _primaryView = new ChapterView(
                 passage: _primaryCurrent,
-                content: primaryContent,
+                content: content,
                 viewModel: _viewModel,
                 isCurrentPage: true,
                 targetVerse: _targetVerse,
@@ -185,11 +222,24 @@ namespace FountOfHopeStudyBiblePC.Controls
                 onColorLensClick: () => _viewModel.ShowColorThemeDialog = true,
                 onScreenChange: _ => { },
                 scrollSyncEnabled: _viewModel.ScrollSync,
-                markerColor: _viewModel.WordMarkerColor);
+                markerColor: _viewModel.WordMarkerColor,
+                onPassageChange: _onPrimaryPassageChange);
+
+            if (_viewModel.MultiViewLayout == "horizontal") Grid.SetColumn(_primaryView, 0);
+            else Grid.SetRow(_primaryView, 0);
+
+            RootGrid.Children.Add(_primaryView);
+        }
+
+        private void BuildSecondaryPane()
+        {
+            var sk = (_secondaryCurrent.BookNumber, _secondaryCurrent.Chapter);
+            _secondaryLoadedVerses.TryGetValue(sk, out var content);
+            content ??= [];
 
             _secondaryView = new ChapterView(
                 passage: _secondaryCurrent,
-                content: secondaryContent,
+                content: content,
                 viewModel: _viewModel,
                 isCurrentPage: true,
                 targetVerse: _secondaryTargetVerse,
@@ -209,40 +259,13 @@ namespace FountOfHopeStudyBiblePC.Controls
                 onColorLensClick: () => _viewModel.ShowColorThemeDialog = true,
                 onScreenChange: _ => { },
                 scrollSyncEnabled: _viewModel.ScrollSync,
-                markerColor: _viewModel.WordMarkerColor);
+                markerColor: _viewModel.WordMarkerColor,
+                onPassageChange: _onSecondaryPassageChange);
 
-            if (_viewModel.MultiViewLayout == "horizontal")
-            {
-                RootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                RootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1) });
-                RootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            if (_viewModel.MultiViewLayout == "horizontal") Grid.SetColumn(_secondaryView, 2);
+            else Grid.SetRow(_secondaryView, 2);
 
-                Grid.SetColumn(_primaryView, 0);
-                Grid.SetColumn(_secondaryView, 2);
-
-                var divider = new Border { Background = dividerBrush };
-                Grid.SetColumn(divider, 1);
-
-                RootGrid.Children.Add(_primaryView);
-                RootGrid.Children.Add(divider);
-                RootGrid.Children.Add(_secondaryView);
-            }
-            else
-            {
-                RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-                RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1) });
-                RootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-
-                Grid.SetRow(_primaryView, 0);
-                Grid.SetRow(_secondaryView, 2);
-
-                var divider = new Border { Background = dividerBrush };
-                Grid.SetRow(divider, 1);
-
-                RootGrid.Children.Add(_primaryView);
-                RootGrid.Children.Add(divider);
-                RootGrid.Children.Add(_secondaryView);
-            }
+            RootGrid.Children.Add(_secondaryView);
         }
 
         public bool BeginWordDrag(Point positionInHost)

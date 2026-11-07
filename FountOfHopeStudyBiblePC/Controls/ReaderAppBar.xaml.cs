@@ -29,6 +29,7 @@ namespace FountOfHopeStudyBiblePC.Controls
         public event Action? ColorLensClicked;
         public event Action? BackRequested;
         public event Action<Screen>? ScreenRequested;
+        public event Action<PassageSelection>? PassageChangeRequested;
 
         private PackIconMaterial? _themeIcon;
 
@@ -86,6 +87,13 @@ namespace FountOfHopeStudyBiblePC.Controls
             BookText.Text = passage.BookName;
             ChapterText.Text = $" {passage.Chapter}";
             VersionText.Text = versionAbbr;
+
+            int totalChapters = BibleData.GetBookByCustomNumber(passage.BookNumber)?.Chapters ?? 1;
+            bool canCycle = totalChapters > 1;
+            PrevChapterButton.IsEnabled = canCycle;
+            NextChapterButton.IsEnabled = canCycle;
+            PrevChapterButton.Opacity = canCycle ? 1.0 : 0.35;
+            NextChapterButton.Opacity = canCycle ? 1.0 : 0.35;
         }
 
         public void SetBackVisible(bool visible)
@@ -167,13 +175,20 @@ namespace FountOfHopeStudyBiblePC.Controls
             BookText.Foreground = fg;
             ChapterText.Foreground = fg;
             VersionText.Foreground = fg;
+            PrevChapterIcon.Foreground = fg;
+            NextChapterIcon.Foreground = fg;
         }
 
         private void UpdateTitleVisibility()
         {
+            // In MultiVersion the per-pane InlineHeader shows book/version AND
+            // the chapter-cycle chevrons; in single-version the app bar is the
+            // only header, so it shows book/version/chevrons.
             var v = _viewModel.MultiVersion ? Visibility.Collapsed : Visibility.Visible;
             BookChapterButton.Visibility = v;
             VersionButton.Visibility = v;
+            PrevChapterButton.Visibility = v;
+            NextChapterButton.Visibility = v;
             TitleRow.Visibility = v;
         }
 
@@ -888,23 +903,11 @@ namespace FountOfHopeStudyBiblePC.Controls
 
             return AppBarShared.BuildMenuRow(label, icon, () =>
             {
-                // Toggle the two modes as a pair so the AppViewModel's
-                // mutual-exclusion logic (IsDictionaryMode ↔ IsHighlightMode)
-                // always leaves us in a well-defined state, even if the user
-                // enters through this row rather than a toolbar button.
                 if (_viewModel.IsDictionaryMode)
-                {
-                    _viewModel.IsHighlightMode = true;      // clears IsDictionaryMode
-                }
+                    _viewModel.IsHighlightMode = true;
                 else
-                {
-                    _viewModel.IsDictionaryMode = true;     // clears IsHighlightMode
-                }
+                    _viewModel.IsDictionaryMode = true;
 
-                // Keep the menu visually in sync; the handler above already
-                // triggered a rebuild via OnViewModelPropertyChanged, but
-                // setting the child again here is cheap and guarantees the
-                // right-hand column updates in landscape mode too.
                 _menuPopup?.Child = BuildReaderMenuContent;
             }, fg, isDarkTheme: _viewModel.DarkTheme);
         }
@@ -1086,6 +1089,27 @@ namespace FountOfHopeStudyBiblePC.Controls
         private void VersionButton_Click(object sender, RoutedEventArgs e)
         {
             _viewModel.ShowPrimaryVersionDropdown = true;
+        }
+
+        private void PrevChapterButton_Click(object sender, RoutedEventArgs e)
+            => NavigateChapter(-1);
+
+        private void NextChapterButton_Click(object sender, RoutedEventArgs e)
+            => NavigateChapter(+1);
+
+        private void NavigateChapter(int direction)
+        {
+            if (_currentPassage is null) return;
+
+            int totalChapters = BibleData.GetBookByCustomNumber(_currentPassage.BookNumber)?.Chapters ?? 1;
+            if (totalChapters <= 1) return;
+
+            int current = _currentPassage.Chapter;
+            int target = direction > 0
+                ? (current >= totalChapters ? 1 : current + 1)
+                : (current <= 1 ? totalChapters : current - 1);
+
+            PassageChangeRequested?.Invoke(_currentPassage.With(chapter: target, verse: 1));
         }
     }
 }

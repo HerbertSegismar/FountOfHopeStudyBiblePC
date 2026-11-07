@@ -184,7 +184,8 @@ namespace FountOfHopeStudyBiblePC.Controls
                 onColorLensClick: () => _viewModel.ShowColorThemeDialog = true,
                 onScreenChange: _ => { },
                 scrollSyncEnabled: _viewModel.ScrollSync,
-                markerColor: _viewModel.WordMarkerColor);
+                markerColor: _viewModel.WordMarkerColor,
+                onPassageChange: _onPassageChange);
 
             _secondaryView = new ChapterView(
                 passage: _primaryCurrent,
@@ -208,7 +209,8 @@ namespace FountOfHopeStudyBiblePC.Controls
                 onColorLensClick: () => _viewModel.ShowColorThemeDialog = true,
                 onScreenChange: _ => { },
                 scrollSyncEnabled: _viewModel.ScrollSync,
-                markerColor: _viewModel.WordMarkerColor);
+                markerColor: _viewModel.WordMarkerColor,
+                onPassageChange: _onPassageChange);
 
             if (_viewModel.MultiViewLayout == "horizontal")
             {
@@ -356,12 +358,9 @@ namespace FountOfHopeStudyBiblePC.Controls
         /// </summary>
         private static DependencyObject? GetSafeParent(DependencyObject current)
         {
-            // Real Visual / Visual3D → use the visual tree.
             if (current is Visual || current is System.Windows.Media.Media3D.Visual3D)
                 return VisualTreeHelper.GetParent(current);
 
-            // Content tree (Run, Paragraph, etc.) → use logical parent.
-            // e.g. Run → TextBlock.
             if (current is FrameworkContentElement fce)
                 return fce.Parent;
 

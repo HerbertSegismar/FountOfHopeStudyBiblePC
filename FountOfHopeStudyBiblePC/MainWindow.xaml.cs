@@ -315,6 +315,7 @@ namespace FountOfHopeStudyBiblePC
                 appBar.ColorLensClicked += () => _viewModel.ShowColorThemeDialog = true;
                 appBar.BackRequested += () => { _viewModel.GoBack(); NavigateToCurrentScreen(); };
                 appBar.ScreenRequested += screen => { _viewModel.NavigateTo(screen); NavigateToCurrentScreen(); };
+                appBar.PassageChangeRequested += OnReaderPassageChanged;
 
                 AppBarHost.Content = appBar;
             }
@@ -440,7 +441,7 @@ namespace FountOfHopeStudyBiblePC
             {
                 var dialog = new Views.Modals.ColorThemeDialog(
                     currentColor: _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor,
-                    onColorSelected: c =>       
+                    onColorSelected: c =>
                     {
                         _viewModel.SelectedColor = c;
                         _viewModel.IsCustomColor = false;
@@ -737,13 +738,7 @@ namespace FountOfHopeStudyBiblePC
                         RootContent.Content = new ReaderScreen(
                             passage: passage,
                             databaseHelper: _databaseHelper,
-                            onPassageChange: newPassage =>
-                            {
-                                _viewModel.NavigationStack[^1] = new Screen.Reader(newPassage);
-                                _viewModel.PrimaryPassage = newPassage;
-                                if (_viewModel.ScrollSync) _viewModel.SecondaryPassage = newPassage;
-                                NavigateToCurrentScreen();
-                            });
+                            onPassageChange: OnReaderPassageChanged);
                         break;
 
                     case Screen.Bookmarks:
@@ -838,6 +833,25 @@ namespace FountOfHopeStudyBiblePC
                     },
                 };
             }
+        }
+
+        /// <summary>
+        /// Handles a chapter (or passage) change initiated from the reader — whether
+        /// from the in-page InlineHeader chevrons or from the app bar chevrons. It
+        /// replaces the current Screen.Reader entry instead of pushing a new one, so
+        /// Back returns to whatever was before the reader, not to every chapter the
+        /// user cycled through.
+        /// </summary>
+        private void OnReaderPassageChanged(PassageSelection newPassage)
+        {
+            if (_viewModel.NavigationStack.Count == 0) return;
+            if (_viewModel.NavigationStack[^1] is not Screen.Reader) return;
+
+            _viewModel.NavigationStack[^1] = new Screen.Reader(newPassage);
+            _viewModel.PrimaryPassage = newPassage;
+            if (_viewModel.ScrollSync) _viewModel.SecondaryPassage = newPassage;
+
+            NavigateToCurrentScreen();
         }
 
         private void ShowHome()

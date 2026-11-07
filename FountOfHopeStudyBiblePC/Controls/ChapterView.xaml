@@ -21,7 +21,7 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- ── Inline header (multi-version only, mirrors Kotlin ChapterHeader) -->
+            <!-- ── Inline header (multi-version only) ──────────────── -->
             <Border x:Name="InlineHeader"
                     Grid.Row="0"
                     Visibility="Collapsed"
@@ -65,6 +65,31 @@
                             <TextBlock x:Name="InlineVersionText"
                                        FontWeight="Bold"
                                        FontSize="14"/>
+                        </Button>
+
+                        <!-- Chapter cycle: prev / next within current book -->
+                        <Button x:Name="InlinePrevChapterBtn"
+                                Width="22" Height="22"
+                                Margin="4,0,0,0"
+                                Padding="0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Click="InlinePrevChapterBtn_Click"
+                                ToolTip="Previous chapter">
+                            <iconPacks:PackIconMaterial x:Name="InlinePrevChapterIcon"
+                                                        Kind="ChevronLeft"
+                                                        Width="14" Height="14"/>
+                        </Button>
+                        <Button x:Name="InlineNextChapterBtn"
+                                Width="22" Height="22"
+                                Padding="0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Click="InlineNextChapterBtn_Click"
+                                ToolTip="Next chapter">
+                            <iconPacks:PackIconMaterial x:Name="InlineNextChapterIcon"
+                                                        Kind="ChevronRight"
+                                                        Width="14" Height="14"/>
                         </Button>
                     </StackPanel>
 
@@ -141,7 +166,7 @@
                                                         Width="14" Height="14"/>
                         </Button>
 
-                        <!-- Scroll sync — multi only (matches Kotlin's if(MV)) -->
+                        <!-- Scroll sync — multi only -->
                         <Button x:Name="InlineScrollSyncBtn" Width="22" Height="22"
                                 Visibility="Collapsed"
                                 Background="Transparent" BorderThickness="0"

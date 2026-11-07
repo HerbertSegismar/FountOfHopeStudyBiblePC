@@ -42,6 +42,7 @@ namespace FountOfHopeStudyBiblePC.Controls
         private readonly Action _onColorLensClick;
         private readonly Action<Screen> _onScreenChange;
         private readonly bool _scrollSyncEnabled;
+        private readonly Action<PassageSelection>? _onPassageChange;
 
         private int? _highlightedVerse;
         private readonly Dictionary<int, int> _crossRefCounts = [];
@@ -85,7 +86,8 @@ namespace FountOfHopeStudyBiblePC.Controls
             Action onColorLensClick,
             Action<Screen> onScreenChange,
             bool scrollSyncEnabled,
-            Color markerColor)
+            Color markerColor,
+            Action<PassageSelection>? onPassageChange = null)
         {
             InitializeComponent();
 
@@ -111,8 +113,8 @@ namespace FountOfHopeStudyBiblePC.Controls
             _onScreenChange = onScreenChange;
             _scrollSyncEnabled = scrollSyncEnabled;
             _markerColor = markerColor;
+            _onPassageChange = onPassageChange;
 
-            // ── Ported from ReaderAppBar: build the two inline popups in code ──
             BuildInlinePopups();
 
             _viewModel.PropertyChanged += (_, e) => OnViewModelPropertyChanged(e);
@@ -120,7 +122,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             Unloaded += OnUnloaded;
         }
 
-        // ── Orientation (mirrors Kotlin's LocalConfiguration.orientation) ──
         private bool IsLandscape
         {
             get
@@ -252,10 +253,6 @@ namespace FountOfHopeStudyBiblePC.Controls
         private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
             => UpdateInlineHeader();
 
-        // ═══════════════════════════════════════════════════════════════════
-        //  Background / header / verse rendering — unchanged from before
-        // ═══════════════════════════════════════════════════════════════════
-
         private void ApplyBackground()
         {
             var bgIndex = _viewModel.BgImageIndex;
@@ -352,11 +349,21 @@ namespace FountOfHopeStudyBiblePC.Controls
                 ? PackIconMaterialKind.LinkVariant
                 : PackIconMaterialKind.LinkVariantOff;
             InlineScrollSyncIcon.Foreground = fg;
-
-            // Kind on these two is owned by the popup lifecycle — only
-            // repaint the foreground here so an open popup keeps its Close icon.
             InlineLayoutIcon.Foreground = fg;
             InlineMenuIcon.Foreground = fg;
+
+            // Chapter-cycle chevrons — tint, and ghost when the current book
+            // has only one chapter.
+            InlinePrevChapterIcon.Foreground = fg;
+            InlineNextChapterIcon.Foreground = fg;
+
+            int totalChapters = BibleData.GetBookByCustomNumber(_passage.BookNumber)?.Chapters ?? 1;
+            bool canCycle = totalChapters > 1;
+
+            InlinePrevChapterBtn.IsEnabled = canCycle;
+            InlineNextChapterBtn.IsEnabled = canCycle;
+            InlinePrevChapterBtn.Opacity = canCycle ? 1.0 : 0.35;
+            InlineNextChapterBtn.Opacity = canCycle ? 1.0 : 0.35;
         }
 
         private void LoadCrossRefCounts()
@@ -430,63 +437,6 @@ namespace FountOfHopeStudyBiblePC.Controls
         }
 
         private Color GetThemeColor() => _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor;
-
-        private static (double h, double s, double l) RgbToHsl(Color c)
-        {
-            double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
-            double max = Math.Max(r, Math.Max(g, b));
-            double min = Math.Min(r, Math.Min(g, b));
-            double l = (max + min) / 2.0;
-            double h = 0, s = 0;
-
-            if (max != min)
-            {
-                var d = max - min;
-                s = l > 0.5 ? d / (2.0 - max - min) : d / (max + min);
-
-                if (max == r) h = (g - b) / d + (g < b ? 6 : 0);
-                else if (max == g) h = (b - r) / d + 2;
-                else h = (r - g) / d + 4;
-
-                h /= 6;
-            }
-
-            return (h, s, l);
-        }
-
-        private static Color HslToRgb(double h, double s, double l)
-        {
-            double r, g, b;
-
-            if (s == 0)
-            {
-                r = g = b = l;
-            }
-            else
-            {
-                static double Hue(double p, double q, double t)
-                {
-                    if (t < 0) t += 1;
-                    if (t > 1) t -= 1;
-                    if (t < 1.0 / 6.0) return p + (q - p) * 6 * t;
-                    if (t < 0.5) return q;
-                    if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6;
-                    return p;
-                }
-
-                var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-                var p = 2 * l - q;
-
-                r = Hue(p, q, h + 1.0 / 3.0);
-                g = Hue(p, q, h);
-                b = Hue(p, q, h - 1.0 / 3.0);
-            }
-
-            return Color.FromRgb(
-                (byte)Math.Round(Math.Clamp(r, 0, 1) * 255),
-                (byte)Math.Round(Math.Clamp(g, 0, 1) * 255),
-                (byte)Math.Round(Math.Clamp(b, 0, 1) * 255));
-        }
 
         private TextBlock BuildSubheadingBlock(Subheading sub)
         {
@@ -595,8 +545,6 @@ namespace FountOfHopeStudyBiblePC.Controls
                     .Replace(verse.Text, "<[^>]+>", "").Trim();
                 if (!string.IsNullOrWhiteSpace(stripped))
                 {
-                    App.Log($"BuildVerseBlock FALLBACK: v={verse.VerseNumber} " +
-                            $"using stripped text <{stripped}>");
                     tb.Inlines.Add(new Run(stripped)
                     {
                         Foreground = new SolidColorBrush(themeColors.TextColor),
@@ -605,8 +553,39 @@ namespace FountOfHopeStudyBiblePC.Controls
                 }
             }
 
-            if (isBookmarked) tb.Inlines.Add(new Run(" 🔖"));
-            if (hasNote) tb.Inlines.Add(new Run(" 📝"));
+            if (isBookmarked)
+            {
+                tb.Inlines.Add(new Run(" "));
+                var bookmarkIcon = new PackIconMaterial
+                {
+                    Kind = PackIconMaterialKind.Bookmark,
+                    Width = _viewModel.FontSize * 0.9,
+                    Height = _viewModel.FontSize * 0.9,
+                    Foreground = new SolidColorBrush(theme),
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                tb.Inlines.Add(new InlineUIContainer(bookmarkIcon)
+                {
+                    BaselineAlignment = BaselineAlignment.Center,
+                });
+            }
+
+            if (hasNote)
+            {
+                tb.Inlines.Add(new Run(" "));
+                var noteIcon = new PackIconMaterial
+                {
+                    Kind = PackIconMaterialKind.NoteTextOutline,
+                    Width = _viewModel.FontSize * 0.9,
+                    Height = _viewModel.FontSize * 0.9,
+                    Foreground = new SolidColorBrush(theme),
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                tb.Inlines.Add(new InlineUIContainer(noteIcon)
+                {
+                    BaselineAlignment = BaselineAlignment.Center,
+                });
+            }
 
             if (_viewModel.IsStudyMode && refCount > 0)
             {
@@ -1232,10 +1211,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             timer.Start();
         }
 
-        // ═══════════════════════════════════════════════════════════════════
-        //  Inline header button handlers — same wiring as ReaderAppBar
-        // ═══════════════════════════════════════════════════════════════════
-
         private void InlineBookChapterBtn_Click(object sender, RoutedEventArgs e)
         {
             if (_scrollSyncEnabled || _isPrimary)
@@ -1251,12 +1226,11 @@ namespace FountOfHopeStudyBiblePC.Controls
         }
 
         private void InlineThemeBtn_Click(object sender, RoutedEventArgs e)
-    => _onThemeToggle();
+            => _onThemeToggle();
 
         private void InlineColorBtn_Click(object sender, RoutedEventArgs e)
             => _onColorLensClick();
 
-        // ── Nav row — matches ReaderAppBar's ScreenRequested?.Invoke(new Screen.X()) ──
         private void InlineHomeBtn_Click(object sender, RoutedEventArgs e)
             => _onScreenChange?.Invoke(new Screen.Home());
 
@@ -1275,13 +1249,29 @@ namespace FountOfHopeStudyBiblePC.Controls
         private void InlineScrollSyncBtn_Click(object sender, RoutedEventArgs e)
             => _viewModel.ScrollSync = !_viewModel.ScrollSync;
 
-        // ═══════════════════════════════════════════════════════════════════
-        //  Inline Layout / Menu — full ReaderAppBar popup port
-        // ═══════════════════════════════════════════════════════════════════
+        private void InlinePrevChapterBtn_Click(object sender, RoutedEventArgs e)
+            => NavigateChapter(-1);
+
+        private void InlineNextChapterBtn_Click(object sender, RoutedEventArgs e)
+            => NavigateChapter(+1);
+
+        private void NavigateChapter(int direction)
+        {
+            if (_onPassageChange is null) return;
+
+            int totalChapters = BibleData.GetBookByCustomNumber(_passage.BookNumber)?.Chapters ?? 1;
+            if (totalChapters <= 1) return;    // single-chapter book — no-op
+
+            int current = _passage.Chapter;
+            int target = direction > 0
+                ? (current >= totalChapters ? 1 : current + 1)      // last → first
+                : (current <= 1 ? totalChapters : current - 1);     // first → last
+
+            _onPassageChange(_passage.With(chapter: target, verse: 1));
+        }
 
         private void BuildInlinePopups()
         {
-            // Rotation origins so the Open/Close animation pivots correctly.
             _inlineLayoutRotation = new RotateTransform(0);
             InlineLayoutIcon.RenderTransformOrigin = new Point(0.5, 0.5);
             InlineLayoutIcon.RenderTransform = _inlineLayoutRotation;
@@ -1538,7 +1528,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                                 _viewModel.MultiViewLayout = "vertical";
                                 break;
                         }
-                        if (_inlineLayoutPopup is not null) _inlineLayoutPopup.IsOpen = false;
+                        _inlineLayoutPopup?.IsOpen = false;
                     },
                     foreground: fg,
                     isActive: isActive,
@@ -1598,10 +1588,6 @@ namespace FountOfHopeStudyBiblePC.Controls
             container.Child = stack;
             return container;
         }
-
-        // ═══════════════════════════════════════════════════════════════════
-        //  Reader menu content — verbatim port of ReaderAppBar
-        // ═══════════════════════════════════════════════════════════════════
 
         private FrameworkElement BuildReaderMenuContent
         {
@@ -1697,7 +1683,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                     icon: icon,
                     onClick: () =>
                     {
-                        if (_inlineMenuPopup is not null) _inlineMenuPopup.IsOpen = false;
+                        _inlineMenuPopup?.IsOpen = false;
                         _onScreenChange?.Invoke(target);
                     },
                     foreground: fg,
@@ -1802,7 +1788,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             };
             return AppBarShared.BuildMenuRow("Background Texture", icon, () =>
             {
-                if (_inlineMenuPopup is not null) _inlineMenuPopup.IsOpen = false;
+                _inlineMenuPopup?.IsOpen = false;
                 _viewModel.ShowBgModal = true;
             }, fg, isDarkTheme: _viewModel.DarkTheme);
         }
@@ -1830,8 +1816,7 @@ namespace FountOfHopeStudyBiblePC.Controls
                 else
                     _viewModel.IsDictionaryMode = true;
 
-                if (_inlineMenuPopup is not null)
-                    _inlineMenuPopup.Child = BuildReaderMenuContent;
+                _inlineMenuPopup?.Child = BuildReaderMenuContent;
             }, fg, isDarkTheme: _viewModel.DarkTheme);
         }
 
@@ -1850,7 +1835,7 @@ namespace FountOfHopeStudyBiblePC.Controls
             };
             return AppBarShared.BuildMenuRow(label, swatch, () =>
             {
-                if (_inlineMenuPopup is not null) _inlineMenuPopup.IsOpen = false;
+                _inlineMenuPopup?.IsOpen = false;
                 onClick();
             }, fg, isDarkTheme: _viewModel.DarkTheme);
         }

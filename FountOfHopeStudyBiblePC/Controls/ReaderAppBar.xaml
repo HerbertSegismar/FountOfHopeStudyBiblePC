@@ -19,23 +19,51 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="TitleBookCol"    Width="Auto" MaxWidth="240"/>
                 <ColumnDefinition x:Name="TitleVersionCol" Width="Auto" MaxWidth="100"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <Button x:Name="BookChapterButton" Grid.Column="0"
-            Click="BookChapterButton_Click" Height="25" Margin="0,0,4,0"
-            Background="Transparent" BorderThickness="0" Cursor="Hand">
+                    Click="BookChapterButton_Click" Height="25" Margin="0,0,4,0"
+                    Background="Transparent" BorderThickness="0" Cursor="Hand">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock x:Name="BookText" FontSize="16" FontWeight="Bold"
-                       MaxWidth="180" TextTrimming="CharacterEllipsis"/>
+                               MaxWidth="180" TextTrimming="CharacterEllipsis"/>
                     <TextBlock x:Name="ChapterText" FontSize="16" FontWeight="Bold"/>
                 </StackPanel>
             </Button>
 
             <Button x:Name="VersionButton" Grid.Column="1"
-            Click="VersionButton_Click" Height="25"
-            Background="Transparent" BorderThickness="0" Cursor="Hand">
+                    Click="VersionButton_Click" Height="25"
+                    Background="Transparent" BorderThickness="0" Cursor="Hand">
                 <TextBlock x:Name="VersionText" FontSize="16" FontWeight="Bold"
-                   MaxWidth="80" TextTrimming="CharacterEllipsis"/>
+                           MaxWidth="80" TextTrimming="CharacterEllipsis"/>
+            </Button>
+
+            <!-- Chapter cycle: prev / next within the current book -->
+            <Button x:Name="PrevChapterButton" Grid.Column="2"
+                    Click="PrevChapterButton_Click"
+                    Width="25" Height="25" Margin="4,0,0,0"
+                    Padding="0"
+                    Background="Transparent" BorderThickness="0" Cursor="Hand"
+                    ToolTip="Previous chapter">
+                <iconPacks:PackIconMaterial x:Name="PrevChapterIcon"
+                                            Kind="ChevronLeft"
+                                            Width="16" Height="16"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"/>
+            </Button>
+            <Button x:Name="NextChapterButton" Grid.Column="3"
+                    Click="NextChapterButton_Click"
+                    Width="25" Height="25"
+                    Padding="0"
+                    Background="Transparent" BorderThickness="0" Cursor="Hand"
+                    ToolTip="Next chapter">
+                <iconPacks:PackIconMaterial x:Name="NextChapterIcon"
+                                            Kind="ChevronRight"
+                                            Width="16" Height="16"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"/>
             </Button>
         </Grid>
 

@@ -34,9 +34,11 @@ namespace FountOfHopeStudyBiblePC.Views
         private DatabaseHelper? _primaryDictionaryDbHelper;
         private DatabaseHelper? _secondaryDictionaryDbHelper;
         private DatabaseHelper? _strongDbHelper;
-        private DatabaseHelper? _commentaryDbHelper;           
-        private DatabaseHelper? _secondaryCommentaryDbHelper;  
+        private DatabaseHelper? _commentaryDbHelper;
+        private DatabaseHelper? _secondaryCommentaryDbHelper;
         private readonly DatabaseHelper? _subheadingsDbHelper;
+
+        private IndependentMultiVersionReader? _currentIndependentReader;
 
         private bool _isButtonVisible = true;
         private bool _isPaletteVisible;
@@ -47,13 +49,13 @@ namespace FountOfHopeStudyBiblePC.Views
         private bool _isWordDragActive;
         private bool _wordDragHasMoved;
         private Point _wordDragStartPoint;
-        private TextBlock? _wordDragStartBlock; 
-        private TextBlock? _wordDragEndBlock;   
+        private TextBlock? _wordDragStartBlock;
+        private TextBlock? _wordDragEndBlock;
         private IWordHighlightHost? _wordHighlightHost;
         private readonly Dictionary<TextBlock, Brush?> _dragPreviewOriginals = [];
 
         private ReaderModalState _modalState = new ReaderModalState.None();
-        private readonly List<Verse> _selectedVersesForNote = [];  
+        private readonly List<Verse> _selectedVersesForNote = [];
 
         private Verse? _selectedVerse;
         private PassageSelection? _selectedPassage;
@@ -373,7 +375,7 @@ namespace FountOfHopeStudyBiblePC.Views
                     {
                         _viewModel.IsHighlightMode = true;
                         _viewModel.IsDictionaryMode = false;
-                        ShowPalette();  
+                        ShowPalette();
                     }
 
                     BuildHighlightColorBar();
@@ -384,7 +386,7 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void ActivateWordHighlightMode()
         {
-            if (!_viewModel.IsHighlightMode) return; 
+            if (!_viewModel.IsHighlightMode) return;
             ShowPalette();
         }
 
@@ -495,7 +497,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 if (_wordDragHasMoved)
                 {
                     _wordHighlightHost.CommitWordDrag();
-                    e.Handled = true; 
+                    e.Handled = true;
                 }
                 else
                 {
@@ -687,6 +689,7 @@ namespace FountOfHopeStudyBiblePC.Views
 
             if (!multi)
             {
+                _currentIndependentReader = null;
                 ReaderHost.Content = new SingleVersionReader(
                     primaryCurrent: _primaryCurrent,
                     targetVerse: primaryTarget,
@@ -708,6 +711,7 @@ namespace FountOfHopeStudyBiblePC.Views
             }
             else if (synced)
             {
+                _currentIndependentReader = null;
                 ReaderHost.Content = new SyncedMultiVersionReader(
                     primaryCurrent: _primaryCurrent,
                     targetVerse: primaryTarget,
@@ -732,7 +736,7 @@ namespace FountOfHopeStudyBiblePC.Views
             }
             else
             {
-                ReaderHost.Content = new IndependentMultiVersionReader(
+                var independent = new IndependentMultiVersionReader(
                     primaryCurrent: _primaryCurrent,
                     secondaryCurrent: _secondaryCurrent,
                     targetVerse: primaryTarget,
@@ -756,6 +760,8 @@ namespace FountOfHopeStudyBiblePC.Views
                     refreshKey: 0,
                     onVerseCommentaryClick: OnVerseCommentaryClick,
                     onWordHighlightAction: ActivateWordHighlightMode);
+                _currentIndependentReader = independent;
+                ReaderHost.Content = independent;
             }
 
             _wordHighlightHost = ReaderHost.Content as IWordHighlightHost;
@@ -782,6 +788,11 @@ namespace FountOfHopeStudyBiblePC.Views
             _secondaryCurrent = newPassage;
             _secondaryTargetVerse = newPassage.Verse;
             _viewModel.SecondaryPassage = newPassage;
+
+            // In independent multi-version, update the secondary pane in place
+            // so the primary pane keeps its scroll position. In synced / single
+            // modes, the outer _onPassageChange path is what rebuilds everything.
+            _currentIndependentReader?.SetSecondaryPassage(newPassage);
         }
 
         private void OnPrimaryWordPress(string word)
@@ -1048,7 +1059,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 MessageBox.Show("Verses copied to clipboard.", "Share",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
-            catch {  }
+            catch { }
         }
 
         private async void OpenNotesModal(List<Verse> verses)

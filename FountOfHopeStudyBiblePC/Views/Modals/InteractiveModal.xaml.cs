@@ -47,7 +47,8 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         [GeneratedRegex(@"\d")]
         private static partial Regex ContainsDigitRegex();
 
-        // ─────────────────────────────────────────────────────────────
+        [GeneratedRegex(@"[ \t\r\n\f\v]+")]
+        private static partial Regex WhitespaceRunRegex();
 
         public InteractiveModal(
             AppViewModel viewModel,
@@ -713,11 +714,24 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             bool inOrderedList = false;
             int olCounter = 0;
 
+            bool lastWasWhitespace = true;
+            int rowCellCount = 0;
+
             void Flush()
             {
                 if (buffer.Length == 0) return;
-                var decoded = DecodeEntities(buffer.ToString());
+
+                var raw = WhitespaceRunRegex().Replace(buffer.ToString(), " ");
                 buffer.Clear();
+
+                if (raw.Length > 0 && raw[0] == ' ' && lastWasWhitespace)
+                    raw = raw[1..];
+
+                if (raw.Length == 0) return;
+
+                lastWasWhitespace = raw[^1] == ' ';
+
+                var decoded = DecodeEntities(raw);
                 if (decoded.Length == 0) return;
 
                 var run = new Run(decoded);
@@ -739,6 +753,31 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 }
                 for (int k = 0; k < count; k++)
                     target.Add(new LineBreak());
+                lastWasWhitespace = true;
+            }
+
+            void TrimTrailingLineBreaks()
+            {
+                var last = target.Count > 0 ? target.LastInline : null;
+                while (last is LineBreak)
+                {
+                    target.Remove(last);
+                    last = target.Count > 0 ? target.LastInline : null;
+                }
+
+                if (last is Run r)
+                {
+                    var t = r.Text ?? "";
+                    lastWasWhitespace = t.Length == 0 || char.IsWhiteSpace(t[^1]);
+                }
+                else if (last is null)
+                {
+                    lastWasWhitespace = true;
+                }
+                else
+                {
+                    lastWasWhitespace = false;
+                }
             }
 
             void CloseLink()
@@ -798,6 +837,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
                         case "br":
                             target.Add(new LineBreak());
+                            lastWasWhitespace = true;
                             break;
 
                         case "p":
@@ -865,6 +905,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                                 EnsureTrailingLineBreaks(1);
                                 if (inOrderedList) { olCounter++; target.Add(new Run($"{olCounter}. ")); }
                                 else target.Add(new Run("•  "));
+                                lastWasWhitespace = true;
                             }
                             break;
 
@@ -877,6 +918,32 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                         case "blockquote":
                             if (closing || selfClosing) EnsureTrailingLineBreaks(2);
                             else EnsureTrailingLineBreaks(1);
+                            break;
+
+                        case "table":
+                            if (closing || selfClosing) EnsureTrailingLineBreaks(2);
+                            break;
+
+                        case "tr":
+                            if (closing || selfClosing) EnsureTrailingLineBreaks(1);
+                            else rowCellCount = 0;
+                            break;
+
+                        case "td":
+                        case "th":
+                            if (!(closing || selfClosing))
+                            {
+                                if (rowCellCount > 0)
+                                {
+                                    TrimTrailingLineBreaks();
+                                    if (!lastWasWhitespace)
+                                    {
+                                        target.Add(new Run(" "));
+                                        lastWasWhitespace = true;
+                                    }
+                                }
+                                rowCellCount++;
+                            }
                             break;
                     }
 
