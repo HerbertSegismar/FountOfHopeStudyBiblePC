@@ -951,6 +951,92 @@ namespace FountOfHopeStudyBiblePC.Services
             return result;
         }
 
+        /// <summary>
+        /// Kotlin-equivalent containment search:
+        ///   SELECT topic, definition FROM dictionary
+        ///   WHERE LOWER(topic) LIKE '%' || ? || '%'
+        ///   ORDER BY LENGTH(topic) ASC LIMIT n
+        /// Feeds the customDistance + levenshtein ranking in
+        /// ModalContentHelpers.GetDefinitionOrClosest.
+        /// </summary>
+        public List<(string topic, string definition)> GetDictionaryCandidatesContaining(
+            string word, int limit = 50)
+        {
+            var results = new List<(string, string)>();
+            try
+            {
+                ExecuteReader(
+                    "SELECT topic, definition FROM dictionary " +
+                    "WHERE LOWER(topic) LIKE @p0 " +
+                    "ORDER BY LENGTH(topic) ASC LIMIT @p1",
+                    r =>
+                    {
+                        while (r.Read())
+                        {
+                            var topic = r.IsDBNull(0) ? "" : r.GetString(0);
+                            var def = r.IsDBNull(1) ? "" : r.GetString(1);
+                            results.Add((topic, def));
+                        }
+                    },
+                    "%" + word.ToLowerInvariant() + "%",
+                    limit);
+            }
+            catch { }
+            return results;
+        }
+
+        /// <summary>
+        /// Alphabetical fallback used when nothing contains the word:
+        /// the first topic &gt; word and the first topic &lt; word.
+        /// ModalContentHelpers ranks these by levenshtein and keeps the
+        /// closer of the two. Mirrors the Kotlin second-stage query.
+        /// </summary>
+        public List<(string topic, string definition)> GetDictionaryNeighbours(string word)
+        {
+            var results = new List<(string, string)>();
+            var lowerWord = word.ToLowerInvariant();
+
+            try
+            {
+                ExecuteReader(
+                    "SELECT topic, definition FROM dictionary " +
+                    "WHERE LOWER(topic) > @p0 " +
+                    "ORDER BY LOWER(topic) ASC LIMIT 1",
+                    r =>
+                    {
+                        if (r.Read())
+                        {
+                            var topic = r.IsDBNull(0) ? "" : r.GetString(0);
+                            var def = r.IsDBNull(1) ? "" : r.GetString(1);
+                            results.Add((topic, def));
+                        }
+                    },
+                    lowerWord);
+            }
+            catch { }
+
+            try
+            {
+                ExecuteReader(
+                    "SELECT topic, definition FROM dictionary " +
+                    "WHERE LOWER(topic) < @p0 " +
+                    "ORDER BY LOWER(topic) DESC LIMIT 1",
+                    r =>
+                    {
+                        if (r.Read())
+                        {
+                            var topic = r.IsDBNull(0) ? "" : r.GetString(0);
+                            var def = r.IsDBNull(1) ? "" : r.GetString(1);
+                            results.Add((topic, def));
+                        }
+                    },
+                    lowerWord);
+            }
+            catch { }
+
+            return results;
+        }
+
         public string? GetStrongDefinition(string word)
         {
             string? result = null;

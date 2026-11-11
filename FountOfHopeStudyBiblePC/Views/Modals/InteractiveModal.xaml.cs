@@ -156,14 +156,9 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             var fg = _viewModel.DarkTheme ? Colors.White : Colors.Black;
             BodyText.Foreground = new SolidColorBrush(fg);
 
-            // HeaderButtonsColor is tuned for the dark modal background. On the light
-            // theme it's too pale for a title, so use the same high-contrast color as
-            // the body text to keep the title legible.
             TitleText.Foreground = new SolidColorBrush(
                 _viewModel.DarkTheme ? _viewModel.HeaderButtonsColor : fg);
 
-            // The clickable title word matches the same accent used by every
-            // other hyperlink in the modal (the asterisk's color).
             TitleWordLink.Foreground = new SolidColorBrush(GetThemeColor());
         }
 
@@ -300,11 +295,21 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             var pairs = ModalContentHelpers.GetDefinitionOrClosest(db, word);
             if (pairs != null && pairs.Count > 0)
             {
+                var isExact = pairs.Count == 1 &&
+                              pairs[0].topic.Equals(word, StringComparison.OrdinalIgnoreCase);
+
+                // Title shows the SEARCHED word. When the match isn't exact the
+                // title becomes "Closest match for <searched>", and
+                // BuildDefinitionContent prepends the matched word to the body.
+                var title = pairs.Count == 1
+                    ? (isExact
+                        ? $"Definition of {Capitalize(pairs[0].topic)}"
+                        : $"Closest match for {Capitalize(word)}")
+                    : $"Matches for \"{Capitalize(word)}\"";
+
                 _stack.Add(new ModalPage
                 {
-                    Title = pairs.Count == 1 && pairs[0].topic.Equals(word, StringComparison.OrdinalIgnoreCase)
-                        ? $"Definition of {Capitalize(pairs[0].topic)}"
-                        : $"Matches for \"{Capitalize(word)}\"",
+                    Title = title,
                     Type = "definition",
                     Content = ModalContentHelpers.BuildDefinitionContent(
                         word, pairs, dict == "oxford", dict == "topical"),
@@ -390,6 +395,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     prefix = "Matches for ";
                 else prefix = "Definition of ";
 
+                // Title always shows the word the user searched for.
                 TitleText.Text = prefix;
                 TitleWordLink.Text = Capitalize(page.Word);
                 TitleWordLink.Visibility = Visibility.Visible;
@@ -555,7 +561,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     VerseNumber = vVerse,
                     IsOldTestament = vIsOld,
                 };
- 
+
                 const double StarStrokeScale = 0.15;
 
                 var starStroke = BaseFontSize * StarStrokeScale;
@@ -564,7 +570,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 {
                     Width = BaseFontSize,
                     Height = BaseFontSize,
-                    Background = Brushes.Transparent, 
+                    Background = Brushes.Transparent,
                     Cursor = Cursors.Hand,
                     ToolTip = "Open verse commentary",
                     Child = new System.Windows.Shapes.Path
@@ -639,10 +645,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             if (run == null) return;
 
             if (run.Tag is not VerseAnnotation ann) return;
-
-            var passage = page.Passage;
-            _ = passage?.BookNumber is int b && b > 0 ? b : 1;
-            _ = passage?.Chapter is int c && c > 0 ? c : 1;
 
             switch (ann.Tag)
             {
@@ -1273,7 +1275,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 var isTopical = dict == "topical";
                 title = isTopical ? $"References for {capitalized}"
                       : isExact ? $"Definition of {Capitalize(pairs[0].topic)}"
-                      : pairs.Count == 1 ? $"Closest match for {Capitalize(pairs[0].topic)}"
+                      : pairs.Count == 1 ? $"Closest match for {capitalized}"
                       : $"Matches for \"{capitalized}\"";
                 content = ModalContentHelpers.BuildDefinitionContent(
                     newWord, pairs, dict == "oxford", isTopical);
