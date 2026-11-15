@@ -10,6 +10,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace FountOfHopeStudyBiblePC
 {
@@ -18,10 +19,7 @@ namespace FountOfHopeStudyBiblePC
         private readonly AppViewModel _viewModel;
         private readonly PreferencesService _prefs = new();
         private DatabaseHelper _databaseHelper;
-
         private readonly FullScreenManager _fullScreenManager;
-
-        private Uri? _pendingTemplateUri;
         private Uri? _animatorTemplateUri;
 
         public MainWindow()
@@ -29,232 +27,156 @@ namespace FountOfHopeStudyBiblePC
             InitializeComponent();
             ThemeResources.Install();
 
-            Loaded += (_, _) => App.Log("MainWindow.Loaded - event fired");
-
             _viewModel = new AppViewModel();
             AppViewModelAccessor.Current = _viewModel;
             _fullScreenManager = new FullScreenManager(this);
 
             LoadPreferences();
             HookPreferenceSaving();
-            HookViewModelEvents();
+            ApplyTheme();
 
             _databaseHelper = new DatabaseHelper(_viewModel.CurrentDbName);
 
-            _viewModel.PropertyChanged += (_, e) =>
-            {
-                switch (e.PropertyName)
-                {
-                    case nameof(AppViewModel.CurrentDbName):
-                        RefreshPrimaryDatabase();
-                        break;
-
-                    case nameof(AppViewModel.SecondaryDbName):
-                        break;
-
-                    case nameof(AppViewModel.CurrentVersionAbbr):
-                    case nameof(AppViewModel.SecondaryVersionAbbr):
-                        UpdateAppBar();
-                        break;
-
-                    case nameof(AppViewModel.DarkTheme):
-                    case nameof(AppViewModel.SelectedColor):
-                    case nameof(AppViewModel.IsCustomColor):
-                        ApplyTheme();
-                        break;
-
-                    case nameof(AppViewModel.IsReaderFullScreen):
-                        _fullScreenManager.Apply(_viewModel.IsReaderFullScreen);
-                        break;
-
-                    case nameof(AppViewModel.ShowNavigationModal):
-                        if (_viewModel.ShowNavigationModal)
-                        {
-                            _viewModel.ShowNavigationModal = false;
-                            Dispatcher.BeginInvoke(new Action(OpenNavigationModal),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-
-                    case nameof(AppViewModel.ShowPrimaryVersionDropdown):
-                        if (_viewModel.ShowPrimaryVersionDropdown)
-                        {
-                            _viewModel.ShowPrimaryVersionDropdown = false;
-                            Dispatcher.BeginInvoke(new Action(OpenPrimaryVersionModal),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-
-                    case nameof(AppViewModel.ShowSecondaryVersionDropdown):
-                        if (_viewModel.ShowSecondaryVersionDropdown)
-                        {
-                            _viewModel.ShowSecondaryVersionDropdown = false;
-                            Dispatcher.BeginInvoke(new Action(OpenSecondaryVersionModal),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-
-                    case nameof(AppViewModel.ShowColorThemeDialog):
-                        if (_viewModel.ShowColorThemeDialog)
-                        {
-                            _viewModel.ShowColorThemeDialog = false;
-                            Dispatcher.BeginInvoke(new Action(OpenColorThemeDialog),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-
-                    case nameof(AppViewModel.ShowColorWheelDialog):
-                        if (_viewModel.ShowColorWheelDialog)
-                        {
-                            _viewModel.ShowColorWheelDialog = false;
-                            var initial = _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor;
-                            Dispatcher.BeginInvoke(new Action(() =>
-                                OpenColorWheel(initial, c =>
-                                {
-                                    _viewModel.SelectedColor = c;
-                                    _viewModel.IsCustomColor = true;
-                                    _viewModel.CustomColor = c;
-                                }, title: "Custom Theme Color")),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-
-                    case nameof(AppViewModel.ShowWordMarkerColorWheelDialog):
-                        if (_viewModel.ShowWordMarkerColorWheelDialog)
-                        {
-                            _viewModel.ShowWordMarkerColorWheelDialog = false;
-                            var initial = _viewModel.WordMarkerColor;
-                            Dispatcher.BeginInvoke(new Action(() =>
-                                OpenColorWheel(initial, c => _viewModel.WordMarkerColor = c,
-                                    title: "Word Marker Color")),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-
-                    case nameof(AppViewModel.ShowVerseMarkerColorWheelDialog):
-                        if (_viewModel.ShowVerseMarkerColorWheelDialog)
-                        {
-                            _viewModel.ShowVerseMarkerColorWheelDialog = false;
-                            var initial = _viewModel.VerseMarkerColor;
-                            Dispatcher.BeginInvoke(new Action(() =>
-                                OpenColorWheel(initial, c => _viewModel.VerseMarkerColor = c,
-                                    title: "Verse Marker Color")),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-
-                    case nameof(AppViewModel.ShowJesusWordsColorWheelDialog):
-                        if (_viewModel.ShowJesusWordsColorWheelDialog)
-                        {
-                            _viewModel.ShowJesusWordsColorWheelDialog = false;
-                            var initial = _viewModel.WordsOfJesus;
-                            Dispatcher.BeginInvoke(new Action(() =>
-                                OpenColorWheel(initial, c => _viewModel.WordsOfJesus = c,
-                                    title: "Jesus' Words Color")),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-
-                    case nameof(AppViewModel.ShowLightReaderFontColorWheelDialog):
-                        if (_viewModel.ShowLightReaderFontColorWheelDialog)
-                        {
-                            _viewModel.ShowLightReaderFontColorWheelDialog = false;
-                            var initial = _viewModel.LightThemeReaderFontColor;
-                            Dispatcher.BeginInvoke(new Action(() =>
-                                OpenColorWheel(initial, c => _viewModel.LightThemeReaderFontColor = c,
-                                    title: "Light Reader Font Color")),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-
-                    case nameof(AppViewModel.ShowDarkReaderFontColorWheelDialog):
-                        if (_viewModel.ShowDarkReaderFontColorWheelDialog)
-                        {
-                            _viewModel.ShowDarkReaderFontColorWheelDialog = false;
-                            var initial = _viewModel.DarkThemeReaderFontColor;
-                            Dispatcher.BeginInvoke(new Action(() =>
-                                OpenColorWheel(initial, c => _viewModel.DarkThemeReaderFontColor = c,
-                                    title: "Dark Reader Font Color")),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-
-                    case nameof(AppViewModel.ShowLightOverlayColorWheel):
-                        if (_viewModel.ShowLightOverlayColorWheel)
-                        {
-                            _viewModel.ShowLightOverlayColorWheel = false;
-                            var initial = _viewModel.LightOverlayColor;
-                            Dispatcher.BeginInvoke(new Action(() =>
-                                OpenColorWheel(initial, c => _viewModel.LightOverlayColor = c,
-                                    title: "Light Overlay Color")),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-
-                    case nameof(AppViewModel.ShowDarkOverlayColorWheel):
-                        if (_viewModel.ShowDarkOverlayColorWheel)
-                        {
-                            _viewModel.ShowDarkOverlayColorWheel = false;
-                            var initial = _viewModel.DarkOverlayColor;
-                            Dispatcher.BeginInvoke(new Action(() =>
-                                OpenColorWheel(initial, c => _viewModel.DarkOverlayColor = c,
-                                    title: "Dark Overlay Color")),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-
-                    case nameof(AppViewModel.ShowReaderOverlayColorWheel):
-                        if (_viewModel.ShowReaderOverlayColorWheel)
-                        {
-                            _viewModel.ShowReaderOverlayColorWheel = false;
-                            var isDark = _viewModel.DarkTheme;
-                            var initial = isDark ? _viewModel.DarkOverlayColor : _viewModel.LightOverlayColor;
-                            Dispatcher.BeginInvoke(new Action(() =>
-                                OpenColorWheel(initial, c =>
-                                {
-                                    if (_viewModel.DarkTheme) _viewModel.DarkOverlayColor = c;
-                                    else _viewModel.LightOverlayColor = c;
-                                }, title: "Reader Overlay Color")),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-
-                    case nameof(AppViewModel.ShowHeaderButtonsColorWheel):
-                        if (_viewModel.ShowHeaderButtonsColorWheel)
-                        {
-                            _viewModel.ShowHeaderButtonsColorWheel = false;
-                            var initial = _viewModel.HeaderButtonsColor;
-                            Dispatcher.BeginInvoke(new Action(() =>
-                                OpenColorWheel(initial, c => _viewModel.HeaderButtonsColor = c,
-                                    title: "Header Buttons Color")),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-
-                    case nameof(AppViewModel.ShowHighlightColorEditor):
-                        if (_viewModel.ShowHighlightColorEditor)
-                        {
-                            _viewModel.ShowHighlightColorEditor = false;
-                            var idx = _viewModel.EditingHighlightColorIndex;
-                            var initial = (idx >= 0 && idx < _viewModel.PredefinedHighlightColors.Count)
-                                          ? _viewModel.PredefinedHighlightColors[idx]
-                                          : Colors.White;
-                            Dispatcher.BeginInvoke(new Action(() =>
-                                OpenColorWheel(initial, c =>
-                                {
-                                    _viewModel.UpdateHighlightColor(idx, c);
-                                    _viewModel.EditingHighlightColorIndex = -1;
-                                }, title: "Highlight Color")),
-                                System.Windows.Threading.DispatcherPriority.Background);
-                        }
-                        break;
-                }
-            };
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
             PreviewKeyDown += OnMainWindowPreviewKeyDown;
 
             NavigateToCurrentScreen();
+        }
 
-            HandleIntent(_pendingTemplateUri);
+        private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(AppViewModel.CurrentDbName):
+                    RefreshPrimaryDatabase();
+                    break;
+
+                case nameof(AppViewModel.CurrentVersionAbbr):
+                case nameof(AppViewModel.SecondaryVersionAbbr):
+                    UpdateAppBar();
+                    break;
+
+                case nameof(AppViewModel.DarkTheme):
+                case nameof(AppViewModel.SelectedColor):
+                case nameof(AppViewModel.IsCustomColor):
+                    ApplyTheme();
+                    break;
+
+                case nameof(AppViewModel.IsReaderFullScreen):
+                    _fullScreenManager.Apply(_viewModel.IsReaderFullScreen);
+                    break;
+
+                case nameof(AppViewModel.ShowNavigationModal):
+                    if (!_viewModel.ShowNavigationModal) break;
+                    _viewModel.ShowNavigationModal = false;
+                    Dispatcher.BeginInvoke(new Action(OpenNavigationModal), DispatcherPriority.Background);
+                    break;
+
+                case nameof(AppViewModel.ShowPrimaryVersionDropdown):
+                    if (!_viewModel.ShowPrimaryVersionDropdown) break;
+                    _viewModel.ShowPrimaryVersionDropdown = false;
+                    Dispatcher.BeginInvoke(new Action(OpenPrimaryVersionModal), DispatcherPriority.Background);
+                    break;
+
+                case nameof(AppViewModel.ShowSecondaryVersionDropdown):
+                    if (!_viewModel.ShowSecondaryVersionDropdown) break;
+                    _viewModel.ShowSecondaryVersionDropdown = false;
+                    Dispatcher.BeginInvoke(new Action(OpenSecondaryVersionModal), DispatcherPriority.Background);
+                    break;
+
+                case nameof(AppViewModel.ShowColorThemeDialog):
+                    if (!_viewModel.ShowColorThemeDialog) break;
+                    _viewModel.ShowColorThemeDialog = false;
+                    Dispatcher.BeginInvoke(new Action(OpenColorThemeDialog), DispatcherPriority.Background);
+                    break;
+
+                case nameof(AppViewModel.ShowColorWheelDialog):
+                    if (!_viewModel.ShowColorWheelDialog) break;
+                    _viewModel.ShowColorWheelDialog = false;
+                    QueueColorWheel(
+                        _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor,
+                        c => { _viewModel.SelectedColor = c; _viewModel.IsCustomColor = true; _viewModel.CustomColor = c; });
+                    break;
+
+                case nameof(AppViewModel.ShowWordMarkerColorWheelDialog):
+                    if (!_viewModel.ShowWordMarkerColorWheelDialog) break;
+                    _viewModel.ShowWordMarkerColorWheelDialog = false;
+                    QueueColorWheel(_viewModel.WordMarkerColor, c => _viewModel.WordMarkerColor = c);
+                    break;
+
+                case nameof(AppViewModel.ShowVerseMarkerColorWheelDialog):
+                    if (!_viewModel.ShowVerseMarkerColorWheelDialog) break;
+                    _viewModel.ShowVerseMarkerColorWheelDialog = false;
+                    QueueColorWheel(_viewModel.VerseMarkerColor, c => _viewModel.VerseMarkerColor = c);
+                    break;
+
+                case nameof(AppViewModel.ShowJesusWordsColorWheelDialog):
+                    if (!_viewModel.ShowJesusWordsColorWheelDialog) break;
+                    _viewModel.ShowJesusWordsColorWheelDialog = false;
+                    QueueColorWheel(_viewModel.WordsOfJesus, c => _viewModel.WordsOfJesus = c);
+                    break;
+
+                case nameof(AppViewModel.ShowLightReaderFontColorWheelDialog):
+                    if (!_viewModel.ShowLightReaderFontColorWheelDialog) break;
+                    _viewModel.ShowLightReaderFontColorWheelDialog = false;
+                    QueueColorWheel(_viewModel.LightThemeReaderFontColor, c => _viewModel.LightThemeReaderFontColor = c);
+                    break;
+
+                case nameof(AppViewModel.ShowDarkReaderFontColorWheelDialog):
+                    if (!_viewModel.ShowDarkReaderFontColorWheelDialog) break;
+                    _viewModel.ShowDarkReaderFontColorWheelDialog = false;
+                    QueueColorWheel(_viewModel.DarkThemeReaderFontColor, c => _viewModel.DarkThemeReaderFontColor = c);
+                    break;
+
+                case nameof(AppViewModel.ShowLightOverlayColorWheel):
+                    if (!_viewModel.ShowLightOverlayColorWheel) break;
+                    _viewModel.ShowLightOverlayColorWheel = false;
+                    QueueColorWheel(_viewModel.LightOverlayColor, c => _viewModel.LightOverlayColor = c);
+                    break;
+
+                case nameof(AppViewModel.ShowDarkOverlayColorWheel):
+                    if (!_viewModel.ShowDarkOverlayColorWheel) break;
+                    _viewModel.ShowDarkOverlayColorWheel = false;
+                    QueueColorWheel(_viewModel.DarkOverlayColor, c => _viewModel.DarkOverlayColor = c);
+                    break;
+
+                case nameof(AppViewModel.ShowReaderOverlayColorWheel):
+                    if (!_viewModel.ShowReaderOverlayColorWheel) break;
+                    _viewModel.ShowReaderOverlayColorWheel = false;
+                    var overlay = _viewModel.DarkTheme ? _viewModel.DarkOverlayColor : _viewModel.LightOverlayColor;
+                    QueueColorWheel(overlay, c =>
+                    {
+                        if (_viewModel.DarkTheme) _viewModel.DarkOverlayColor = c;
+                        else _viewModel.LightOverlayColor = c;
+                    });
+                    break;
+
+                case nameof(AppViewModel.ShowHeaderButtonsColorWheel):
+                    if (!_viewModel.ShowHeaderButtonsColorWheel) break;
+                    _viewModel.ShowHeaderButtonsColorWheel = false;
+                    QueueColorWheel(_viewModel.HeaderButtonsColor, c => _viewModel.HeaderButtonsColor = c);
+                    break;
+
+                case nameof(AppViewModel.ShowHighlightColorEditor):
+                    if (!_viewModel.ShowHighlightColorEditor) break;
+                    _viewModel.ShowHighlightColorEditor = false;
+                    var idx = _viewModel.EditingHighlightColorIndex;
+                    var initial = idx >= 0 && idx < _viewModel.PredefinedHighlightColors.Count
+                        ? _viewModel.PredefinedHighlightColors[idx]
+                        : Colors.White;
+                    QueueColorWheel(initial, c =>
+                    {
+                        _viewModel.UpdateHighlightColor(idx, c);
+                        _viewModel.EditingHighlightColorIndex = -1;
+                    });
+                    break;
+            }
+        }
+
+        private void QueueColorWheel(Color initial, Action<Color> onSelected)
+        {
+            Dispatcher.BeginInvoke(new Action(() => OpenColorWheel(initial, onSelected)),
+                DispatcherPriority.Background);
         }
 
         private void OnMainWindowPreviewKeyDown(object sender, KeyEventArgs e)
@@ -273,23 +195,15 @@ namespace FountOfHopeStudyBiblePC
 
         private void RefreshPrimaryDatabase()
         {
-            var name = _viewModel.CurrentDbName;
-
             try
             {
                 _databaseHelper?.Dispose();
-                _databaseHelper = new DatabaseHelper(name);
+                _databaseHelper = new DatabaseHelper(_viewModel.CurrentDbName);
 
-                var onReader = _viewModel.NavigationStack.Count > 0
-                               && _viewModel.NavigationStack[^1] is Screen.Reader;
-                if (onReader)
-                {
+                if (_viewModel.NavigationStack.Count > 0 && _viewModel.NavigationStack[^1] is Screen.Reader)
                     NavigateToCurrentScreen();
-                }
             }
-            catch (Exception)
-            {
-            }
+            catch { }
         }
 
         private void UpdateAppBar()
@@ -306,8 +220,7 @@ namespace FountOfHopeStudyBiblePC
             if (current is Screen.Reader r)
             {
                 var appBar = new ReaderAppBar(_viewModel);
-                var passage = r.Passage ?? _viewModel.PrimaryPassage;
-                appBar.UpdatePassage(passage, _viewModel.CurrentVersionAbbr);
+                appBar.UpdatePassage(r.Passage ?? _viewModel.PrimaryPassage, _viewModel.CurrentVersionAbbr);
                 appBar.SetBackVisible(hasBack);
 
                 appBar.BibleIconClicked += () => _viewModel.ShowNavigationModal = true;
@@ -338,8 +251,7 @@ namespace FountOfHopeStudyBiblePC
         {
             try
             {
-
-                var modal = new NavigationModal(
+                new NavigationModal(
                     viewModel: _viewModel,
                     databaseHelper: _databaseHelper,
                     onPassageSelected: passage =>
@@ -349,97 +261,71 @@ namespace FountOfHopeStudyBiblePC
                         _viewModel.NavigateTo(new Screen.Reader(passage));
                         NavigateToCurrentScreen();
                     },
-                    onDismiss: () => App.Log("MainWindow: NavigationModal dismissed"),
+                    onDismiss: () => { },
                     initialBookNumber: _viewModel.PrimaryPassage.BookNumber,
                     initialChapter: _viewModel.PrimaryPassage.Chapter,
                     initialVerse: _viewModel.PrimaryPassage.Verse)
-                {
-                    Owner = this,
-                };
-
-                modal.Show();
+                { Owner = this }.Show();
             }
-            catch (Exception) { }
+            catch { }
         }
 
         private void OpenPrimaryVersionModal()
         {
             try
             {
-                var modal = new VersionSelectionModal(
+                new VersionSelectionModal(
                     viewModel: _viewModel,
                     currentVersionKey: _viewModel.CurrentDbName,
                     isSecondary: false,
                     onVersionSelected: file =>
                     {
-                        _viewModel.CurrentVersionAbbr =
-                            BibleVersionUtils.VersionMap.GetValueOrDefault(file, "Bible");
+                        _viewModel.CurrentVersionAbbr = BibleVersionUtils.VersionMap.GetValueOrDefault(file, "Bible");
                         _viewModel.CurrentDbName = file;
                     },
-                    onDismiss: () => App.Log("MainWindow: VersionModal dismissed"))
-                {
-                    Owner = this,
-                };
-
-                modal.Show();
+                    onDismiss: () => { })
+                { Owner = this }.Show();
             }
-            catch (Exception)
-            {
-            }
+            catch { }
         }
 
         private void OpenSecondaryVersionModal()
         {
             try
             {
-                var modal = new VersionSelectionModal(
+                new VersionSelectionModal(
                     viewModel: _viewModel,
                     currentVersionKey: _viewModel.SecondaryDbName,
                     isSecondary: true,
                     onVersionSelected: file =>
                     {
-                        _viewModel.SecondaryVersionAbbr =
-                            BibleVersionUtils.VersionMap.GetValueOrDefault(file, "Bible");
+                        _viewModel.SecondaryVersionAbbr = BibleVersionUtils.VersionMap.GetValueOrDefault(file, "Bible");
                         _viewModel.SecondaryDbName = file;
                     },
-                    onDismiss: () => App.Log("MainWindow: SecondaryVersionModal dismissed"))
-                {
-                    Owner = this,
-                };
-
-                modal.Show();
+                    onDismiss: () => { })
+                { Owner = this }.Show();
             }
-            catch (Exception)
-            {
-            }
+            catch { }
         }
 
-        private void OpenColorWheel(Color initial, Action<Color> onSelected, string title = "Color Picker")
+        private void OpenColorWheel(Color initial, Action<Color> onSelected)
         {
             try
             {
-                var dialog = new ColorWheelDialog(
+                new ColorWheelDialog(
                     initialColor: initial,
-                    onColorSelected: c =>
-                    {
-                        onSelected(c);
-                    },
-                    onDismiss: () => App.Log("MainWindow: ColorWheel dismissed"))
-                {
-                    Owner = this,
-                };
-                dialog.Show();
+                    onColorSelected: onSelected,
+                    onDismiss: () => { })
+                { Owner = this }.Show();
             }
-            catch (Exception)
-            {
-            }
+            catch { }
         }
 
         private void OpenColorThemeDialog()
         {
             try
             {
-                var dialog = new Views.Modals.ColorThemeDialog(
+                new Views.Modals.ColorThemeDialog(
                     currentColor: _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor,
                     onColorSelected: c =>
                     {
@@ -447,67 +333,29 @@ namespace FountOfHopeStudyBiblePC
                         _viewModel.IsCustomColor = false;
                         _viewModel.CustomColor = null;
                     },
-                    onCustomColorClick: () =>
-                    {
-                        Dispatcher.BeginInvoke(new Action(() =>
-                        {
-                            OpenColorWheel(
-                                _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor,
-                                c =>
-                                {
-                                    _viewModel.SelectedColor = c;
-                                    _viewModel.IsCustomColor = true;
-                                    _viewModel.CustomColor = c;
-                                },
-                                title: "Custom Theme Color");
-                        }), System.Windows.Threading.DispatcherPriority.Background);
-                    },
-                    onDismiss: () => App.Log("MainWindow: ColorTheme dismissed"))
-                {
-                    Owner = this,
-                };
-                dialog.Show();
+                    onCustomColorClick: () => Dispatcher.BeginInvoke(new Action(() =>
+                        OpenColorWheel(
+                            _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor,
+                            c =>
+                            {
+                                _viewModel.SelectedColor = c;
+                                _viewModel.IsCustomColor = true;
+                                _viewModel.CustomColor = c;
+                            })), DispatcherPriority.Background),
+                    onDismiss: () => { })
+                { Owner = this }.Show();
             }
-            catch (Exception)
-            {
-            }
+            catch { }
         }
 
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
-            if (_viewModel.IsReaderFullScreen)
-                _fullScreenManager.Apply(true);
-        }
-
-        protected override void OnContentRendered(EventArgs e)
-        {
-            base.OnContentRendered(e);
-        }
-
-        protected override void OnActivated(EventArgs e)
-        {
-            base.OnActivated(e);
-        }
-
-        protected override void OnDeactivated(EventArgs e)
-        {
-            base.OnDeactivated(e);
-        }
-
-        protected override void OnStateChanged(EventArgs e)
-        {
-            base.OnStateChanged(e);
-        }
-
-        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
-        {
-            base.OnClosing(e);
+            if (_viewModel.IsReaderFullScreen) _fullScreenManager.Apply(true);
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            App.Log("MainWindow.OnClosed");
             base.OnClosed(e);
             _databaseHelper?.Dispose();
         }
@@ -517,16 +365,11 @@ namespace FountOfHopeStudyBiblePC
         private void HandleIntent(Uri? uri)
         {
             if (uri == null) return;
-            _pendingTemplateUri = uri;
 
-            if (_viewModel.NavigationStack.Count == 0 ||
-                _viewModel.NavigationStack[^1] is not Screen.Animator)
-            {
+            if (_viewModel.NavigationStack.Count == 0 || _viewModel.NavigationStack[^1] is not Screen.Animator)
                 _viewModel.NavigateTo(new Screen.Animator());
-            }
 
-            _animatorTemplateUri = _pendingTemplateUri;
-            _pendingTemplateUri = null;
+            _animatorTemplateUri = uri;
             NavigateToCurrentScreen();
         }
 
@@ -625,91 +468,160 @@ namespace FountOfHopeStudyBiblePC
                 switch (e.PropertyName)
                 {
                     case nameof(AppViewModel.DisabledVersions):
-                        _prefs.Set(PrefKeys.DisabledVersions, string.Join(",", _viewModel.DisabledVersions)); break;
-                    case nameof(AppViewModel.RenderOrbs): _prefs.Set(PrefKeys.RenderOrbs, _viewModel.RenderOrbs); break;
-                    case nameof(AppViewModel.OrbsCount): _prefs.Set(PrefKeys.OrbsCount, _viewModel.OrbsCount); break;
+                        _prefs.Set(PrefKeys.DisabledVersions, string.Join(",", _viewModel.DisabledVersions));
+                        break;
+                    case nameof(AppViewModel.RenderOrbs):
+                        _prefs.Set(PrefKeys.RenderOrbs, _viewModel.RenderOrbs);
+                        break;
+                    case nameof(AppViewModel.OrbsCount):
+                        _prefs.Set(PrefKeys.OrbsCount, _viewModel.OrbsCount);
+                        break;
                     case nameof(AppViewModel.LightThemeReaderFontColor):
-                        _prefs.SetColor(PrefKeys.LightThemeReaderFontColor, _viewModel.LightThemeReaderFontColor); break;
+                        _prefs.SetColor(PrefKeys.LightThemeReaderFontColor, _viewModel.LightThemeReaderFontColor);
+                        break;
                     case nameof(AppViewModel.DarkThemeReaderFontColor):
-                        _prefs.SetColor(PrefKeys.DarkThemeReaderFontColor, _viewModel.DarkThemeReaderFontColor); break;
-                    case nameof(AppViewModel.FontSize): _prefs.Set(PrefKeys.FontSize, _viewModel.FontSize); break;
-                    case nameof(AppViewModel.CustomWidth): _prefs.Set(PrefKeys.CustomWidth, _viewModel.CustomWidth); break;
-                    case nameof(AppViewModel.CustomHeight): _prefs.Set(PrefKeys.CustomHeight, _viewModel.CustomHeight); break;
-                    case nameof(AppViewModel.DarkTheme): _prefs.Set(PrefKeys.DarkTheme, _viewModel.DarkTheme); break;
+                        _prefs.SetColor(PrefKeys.DarkThemeReaderFontColor, _viewModel.DarkThemeReaderFontColor);
+                        break;
+                    case nameof(AppViewModel.FontSize):
+                        _prefs.Set(PrefKeys.FontSize, _viewModel.FontSize);
+                        break;
+                    case nameof(AppViewModel.CustomWidth):
+                        _prefs.Set(PrefKeys.CustomWidth, _viewModel.CustomWidth);
+                        break;
+                    case nameof(AppViewModel.CustomHeight):
+                        _prefs.Set(PrefKeys.CustomHeight, _viewModel.CustomHeight);
+                        break;
+                    case nameof(AppViewModel.DarkTheme):
+                        _prefs.Set(PrefKeys.DarkTheme, _viewModel.DarkTheme);
+                        break;
                     case nameof(AppViewModel.SelectedColor):
-                        _prefs.SetColor(PrefKeys.SelectedColor, _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor); break;
-                    case nameof(AppViewModel.IsCustomColor): _prefs.Set(PrefKeys.IsCustomColor, _viewModel.IsCustomColor); break;
+                        _prefs.SetColor(PrefKeys.SelectedColor, _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor);
+                        break;
+                    case nameof(AppViewModel.IsCustomColor):
+                        _prefs.Set(PrefKeys.IsCustomColor, _viewModel.IsCustomColor);
+                        break;
                     case nameof(AppViewModel.CustomColor):
-                        _prefs.SetColor(PrefKeys.CustomColor, _viewModel.CustomColor ?? ColorHelpers.DefaultPrimaryColor); break;
-                    case nameof(AppViewModel.SelectedFontFamily): _prefs.Set(PrefKeys.FontFamily, _viewModel.SelectedFontFamily); break;
-                    case nameof(AppViewModel.CurrentDbName): _prefs.Set(PrefKeys.PrimaryDb, _viewModel.CurrentDbName); break;
-                    case nameof(AppViewModel.CurrentVersionAbbr): _prefs.Set(PrefKeys.PrimaryAbbr, _viewModel.CurrentVersionAbbr); break;
-                    case nameof(AppViewModel.MultiVersion): _prefs.Set(PrefKeys.MultiVersion, _viewModel.MultiVersion); break;
-                    case nameof(AppViewModel.SecondaryDbName): _prefs.Set(PrefKeys.SecondaryDb, _viewModel.SecondaryDbName); break;
-                    case nameof(AppViewModel.SecondaryVersionAbbr): _prefs.Set(PrefKeys.SecondaryAbbr, _viewModel.SecondaryVersionAbbr); break;
-                    case nameof(AppViewModel.MultiViewLayout): _prefs.Set(PrefKeys.MultiLayout, _viewModel.MultiViewLayout); break;
-                    case nameof(AppViewModel.ScrollSync): _prefs.Set(PrefKeys.ScrollSync, _viewModel.ScrollSync); break;
-                    case nameof(AppViewModel.BgImageIndex): _prefs.Set(PrefKeys.BgIndex, _viewModel.BgImageIndex); break;
-                    case nameof(AppViewModel.OverlayOpacity): _prefs.Set(PrefKeys.OverlayOpacity, _viewModel.OverlayOpacity); break;
-                    case nameof(AppViewModel.LightOverlayColor): _prefs.SetColor(PrefKeys.LightOverlayColor, _viewModel.LightOverlayColor); break;
-                    case nameof(AppViewModel.DarkOverlayColor): _prefs.SetColor(PrefKeys.DarkOverlayColor, _viewModel.DarkOverlayColor); break;
-                    case nameof(AppViewModel.WordMarkerColor): _prefs.SetColor(PrefKeys.MarkerColor, _viewModel.WordMarkerColor); break;
-                    case nameof(AppViewModel.IsStudyMode): _prefs.Set(PrefKeys.IsStudyMode, _viewModel.IsStudyMode); break;
-                    case nameof(AppViewModel.ShowStrongs): _prefs.Set(PrefKeys.ShowStrongs, _viewModel.ShowStrongs); break;
-                    case nameof(AppViewModel.IsDictionaryMode): _prefs.Set(PrefKeys.IsDictionaryMode, _viewModel.IsDictionaryMode); break;
-                    case nameof(AppViewModel.VerseMarkerColor): _prefs.SetColor(PrefKeys.VerseMarkerColor, _viewModel.VerseMarkerColor); break;
-                    case nameof(AppViewModel.LightModalBackgroundColor): _prefs.SetColor(PrefKeys.LightModalBgColor, _viewModel.LightModalBackgroundColor); break;
-                    case nameof(AppViewModel.DarkModalBackgroundColor): _prefs.SetColor(PrefKeys.DarkModalBgColor, _viewModel.DarkModalBackgroundColor); break;
-                    case nameof(AppViewModel.WordsOfJesus): _prefs.SetColor(PrefKeys.WordsOfJesus, _viewModel.WordsOfJesus); break;
-                    case nameof(AppViewModel.HeaderButtonsColor): _prefs.SetColor(PrefKeys.HeaderButtonsColor, _viewModel.HeaderButtonsColor); break;
-                    case nameof(AppViewModel.SelectedPrimaryDictionary): _prefs.Set(PrefKeys.SelectedDictionary, _viewModel.SelectedPrimaryDictionary); break;
-                    case nameof(AppViewModel.SelectedPrimaryDictLanguage): _prefs.Set(PrefKeys.PrimaryDictLanguage, _viewModel.SelectedPrimaryDictLanguage); break;
-                    case nameof(AppViewModel.SelectedSecondaryDictLanguage): _prefs.Set(PrefKeys.SecondaryDictLanguage, _viewModel.SelectedSecondaryDictLanguage); break;
-                    case nameof(AppViewModel.SelectedSecondaryDictionary): _prefs.Set(PrefKeys.SecondaryDictionary, _viewModel.SelectedSecondaryDictionary); break;
-                    case nameof(AppViewModel.SelectedVerseCommentary): _prefs.Set(PrefKeys.SelectedVerseCommentary, _viewModel.SelectedVerseCommentary); break;
-                    case nameof(AppViewModel.SelectedCrossReferenceDatabase): _prefs.Set(PrefKeys.SelectedCrossRefDb, _viewModel.SelectedCrossReferenceDatabase); break;
-                    case nameof(AppViewModel.CustomTextureUri): _prefs.Set(PrefKeys.CustomTexture, _viewModel.CustomTextureUri); break;
+                        _prefs.SetColor(PrefKeys.CustomColor, _viewModel.CustomColor ?? ColorHelpers.DefaultPrimaryColor);
+                        break;
+                    case nameof(AppViewModel.SelectedFontFamily):
+                        _prefs.Set(PrefKeys.FontFamily, _viewModel.SelectedFontFamily);
+                        break;
+                    case nameof(AppViewModel.CurrentDbName):
+                        _prefs.Set(PrefKeys.PrimaryDb, _viewModel.CurrentDbName);
+                        break;
+                    case nameof(AppViewModel.CurrentVersionAbbr):
+                        _prefs.Set(PrefKeys.PrimaryAbbr, _viewModel.CurrentVersionAbbr);
+                        break;
+                    case nameof(AppViewModel.MultiVersion):
+                        _prefs.Set(PrefKeys.MultiVersion, _viewModel.MultiVersion);
+                        break;
+                    case nameof(AppViewModel.SecondaryDbName):
+                        _prefs.Set(PrefKeys.SecondaryDb, _viewModel.SecondaryDbName);
+                        break;
+                    case nameof(AppViewModel.SecondaryVersionAbbr):
+                        _prefs.Set(PrefKeys.SecondaryAbbr, _viewModel.SecondaryVersionAbbr);
+                        break;
+                    case nameof(AppViewModel.MultiViewLayout):
+                        _prefs.Set(PrefKeys.MultiLayout, _viewModel.MultiViewLayout);
+                        break;
+                    case nameof(AppViewModel.ScrollSync):
+                        _prefs.Set(PrefKeys.ScrollSync, _viewModel.ScrollSync);
+                        break;
+                    case nameof(AppViewModel.BgImageIndex):
+                        _prefs.Set(PrefKeys.BgIndex, _viewModel.BgImageIndex);
+                        break;
+                    case nameof(AppViewModel.OverlayOpacity):
+                        _prefs.Set(PrefKeys.OverlayOpacity, _viewModel.OverlayOpacity);
+                        break;
+                    case nameof(AppViewModel.LightOverlayColor):
+                        _prefs.SetColor(PrefKeys.LightOverlayColor, _viewModel.LightOverlayColor);
+                        break;
+                    case nameof(AppViewModel.DarkOverlayColor):
+                        _prefs.SetColor(PrefKeys.DarkOverlayColor, _viewModel.DarkOverlayColor);
+                        break;
+                    case nameof(AppViewModel.WordMarkerColor):
+                        _prefs.SetColor(PrefKeys.MarkerColor, _viewModel.WordMarkerColor);
+                        break;
+                    case nameof(AppViewModel.IsStudyMode):
+                        _prefs.Set(PrefKeys.IsStudyMode, _viewModel.IsStudyMode);
+                        break;
+                    case nameof(AppViewModel.ShowStrongs):
+                        _prefs.Set(PrefKeys.ShowStrongs, _viewModel.ShowStrongs);
+                        break;
+                    case nameof(AppViewModel.IsDictionaryMode):
+                        _prefs.Set(PrefKeys.IsDictionaryMode, _viewModel.IsDictionaryMode);
+                        break;
+                    case nameof(AppViewModel.VerseMarkerColor):
+                        _prefs.SetColor(PrefKeys.VerseMarkerColor, _viewModel.VerseMarkerColor);
+                        break;
+                    case nameof(AppViewModel.LightModalBackgroundColor):
+                        _prefs.SetColor(PrefKeys.LightModalBgColor, _viewModel.LightModalBackgroundColor);
+                        break;
+                    case nameof(AppViewModel.DarkModalBackgroundColor):
+                        _prefs.SetColor(PrefKeys.DarkModalBgColor, _viewModel.DarkModalBackgroundColor);
+                        break;
+                    case nameof(AppViewModel.WordsOfJesus):
+                        _prefs.SetColor(PrefKeys.WordsOfJesus, _viewModel.WordsOfJesus);
+                        break;
+                    case nameof(AppViewModel.HeaderButtonsColor):
+                        _prefs.SetColor(PrefKeys.HeaderButtonsColor, _viewModel.HeaderButtonsColor);
+                        break;
+                    case nameof(AppViewModel.SelectedPrimaryDictionary):
+                        _prefs.Set(PrefKeys.SelectedDictionary, _viewModel.SelectedPrimaryDictionary);
+                        break;
+                    case nameof(AppViewModel.SelectedPrimaryDictLanguage):
+                        _prefs.Set(PrefKeys.PrimaryDictLanguage, _viewModel.SelectedPrimaryDictLanguage);
+                        break;
+                    case nameof(AppViewModel.SelectedSecondaryDictLanguage):
+                        _prefs.Set(PrefKeys.SecondaryDictLanguage, _viewModel.SelectedSecondaryDictLanguage);
+                        break;
+                    case nameof(AppViewModel.SelectedSecondaryDictionary):
+                        _prefs.Set(PrefKeys.SecondaryDictionary, _viewModel.SelectedSecondaryDictionary);
+                        break;
+                    case nameof(AppViewModel.SelectedVerseCommentary):
+                        _prefs.Set(PrefKeys.SelectedVerseCommentary, _viewModel.SelectedVerseCommentary);
+                        break;
+                    case nameof(AppViewModel.SelectedCrossReferenceDatabase):
+                        _prefs.Set(PrefKeys.SelectedCrossRefDb, _viewModel.SelectedCrossReferenceDatabase);
+                        break;
+                    case nameof(AppViewModel.CustomTextureUri):
+                        _prefs.Set(PrefKeys.CustomTexture, _viewModel.CustomTextureUri);
+                        break;
                     case nameof(AppViewModel.IsReaderFullScreen):
                         _prefs.Set(PrefKeys.IsReaderFullScreen, _viewModel.IsReaderFullScreen);
                         break;
-                }
-            };
 
-            _viewModel.PropertyChanged += (_, e) =>
-            {
-                if (e.PropertyName == nameof(AppViewModel.PrimaryPassage) && _viewModel.PrimaryPassage is { } p)
-                {
-                    _prefs.Set(PrefKeys.PrimaryBookNumber, p.BookNumber);
-                    _prefs.Set(PrefKeys.PrimaryBookName, p.BookName);
-                    _prefs.Set(PrefKeys.PrimaryChapter, p.Chapter);
-                    _prefs.Set(PrefKeys.PrimaryVerse, p.Verse ?? 1);
-                }
-                else if (e.PropertyName == nameof(AppViewModel.SecondaryPassage) && _viewModel.SecondaryPassage is { } s)
-                {
-                    _prefs.Set(PrefKeys.SecondaryBookNumber, s.BookNumber);
-                    _prefs.Set(PrefKeys.SecondaryBookName, s.BookName);
-                    _prefs.Set(PrefKeys.SecondaryChapter, s.Chapter);
-                    _prefs.Set(PrefKeys.SecondaryVerse, s.Verse ?? 1);
-                }
-                else if (e.PropertyName == nameof(AppViewModel.PredefinedHighlightColors))
-                {
-                    var joined = string.Join(",",
-                        System.Linq.Enumerable.Select(_viewModel.PredefinedHighlightColors,
-                            c => PreferencesService.ColorToArgb(c).ToString()));
-                    _prefs.Set(PrefKeys.PredefinedHighlightColors, joined);
+                    case nameof(AppViewModel.PrimaryPassage):
+                        if (_viewModel.PrimaryPassage is { } p)
+                        {
+                            _prefs.Set(PrefKeys.PrimaryBookNumber, p.BookNumber);
+                            _prefs.Set(PrefKeys.PrimaryBookName, p.BookName);
+                            _prefs.Set(PrefKeys.PrimaryChapter, p.Chapter);
+                            _prefs.Set(PrefKeys.PrimaryVerse, p.Verse ?? 1);
+                        }
+                        break;
+                    case nameof(AppViewModel.SecondaryPassage):
+                        if (_viewModel.SecondaryPassage is { } sp)
+                        {
+                            _prefs.Set(PrefKeys.SecondaryBookNumber, sp.BookNumber);
+                            _prefs.Set(PrefKeys.SecondaryBookName, sp.BookName);
+                            _prefs.Set(PrefKeys.SecondaryChapter, sp.Chapter);
+                            _prefs.Set(PrefKeys.SecondaryVerse, sp.Verse ?? 1);
+                        }
+                        break;
+                    case nameof(AppViewModel.PredefinedHighlightColors):
+                        _prefs.Set(PrefKeys.PredefinedHighlightColors, string.Join(",",
+                            System.Linq.Enumerable.Select(_viewModel.PredefinedHighlightColors,
+                                c => PreferencesService.ColorToArgb(c).ToString())));
+                        break;
                 }
             };
         }
 
-        private void HookViewModelEvents()
-        {
-            ApplyTheme();
-        }
         private void ApplyTheme()
         {
             var primary = _viewModel.SelectedColor ?? ColorHelpers.DefaultPrimaryColor;
             var secondary = ColorHelpers.DeriveSecondary(primary);
-
             ThemeManager.Apply(primary, secondary, _viewModel.DarkTheme, _viewModel.IsCustomColor);
             ThemeResources.Refresh();
         }
@@ -726,17 +638,15 @@ namespace FountOfHopeStudyBiblePC
                     return;
                 }
 
-                var current = _viewModel.NavigationStack[^1];
-                switch (current)
+                switch (_viewModel.NavigationStack[^1])
                 {
                     case Screen.Home:
                         ShowHome();
                         break;
 
                     case Screen.Reader r:
-                        var passage = r.Passage ?? _viewModel.PrimaryPassage;
                         RootContent.Content = new ReaderScreen(
-                            passage: passage,
+                            passage: r.Passage ?? _viewModel.PrimaryPassage,
                             databaseHelper: _databaseHelper,
                             onPassageChange: OnReaderPassageChanged);
                         break;
@@ -780,8 +690,7 @@ namespace FountOfHopeStudyBiblePC
                             currentVersionKey: _viewModel.CurrentDbName,
                             onVersionChange: newKey =>
                             {
-                                _viewModel.CurrentVersionAbbr =
-                                    BibleVersionUtils.VersionMap.GetValueOrDefault(newKey, "Bible");
+                                _viewModel.CurrentVersionAbbr = BibleVersionUtils.VersionMap.GetValueOrDefault(newKey, "Bible");
                                 _viewModel.CurrentDbName = newKey;
                             });
                         break;
@@ -805,11 +714,7 @@ namespace FountOfHopeStudyBiblePC
                     case Screen.Animator:
                         RootContent.Content = new AnimatorScreen(
                             templateUriToLoad: _animatorTemplateUri,
-                            onTemplateConsumed: () =>
-                            {
-                                _animatorTemplateUri = null;
-                                _pendingTemplateUri = null;
-                            });
+                            onTemplateConsumed: () => _animatorTemplateUri = null);
                         break;
 
                     case Screen.Generations:
@@ -819,7 +724,6 @@ namespace FountOfHopeStudyBiblePC
             }
             catch (Exception ex)
             {
-
                 RootContent.Content = new Border
                 {
                     Background = new SolidColorBrush(Color.FromRgb(0x10, 0x14, 0x18)),
@@ -835,13 +739,6 @@ namespace FountOfHopeStudyBiblePC
             }
         }
 
-        /// <summary>
-        /// Handles a chapter (or passage) change initiated from the reader — whether
-        /// from the in-page InlineHeader chevrons or from the app bar chevrons. It
-        /// replaces the current Screen.Reader entry instead of pushing a new one, so
-        /// Back returns to whatever was before the reader, not to every chapter the
-        /// user cycled through.
-        /// </summary>
         private void OnReaderPassageChanged(PassageSelection newPassage)
         {
             if (_viewModel.NavigationStack.Count == 0) return;
@@ -856,7 +753,7 @@ namespace FountOfHopeStudyBiblePC
 
         private void ShowHome()
         {
-            var home = new HomeScreen(
+            RootContent.Content = new HomeScreen(
                 viewModel: _viewModel,
                 onNavigateToReader: NavigateToReader,
                 onNavigateToScreen: NavigateToScreen,
@@ -867,8 +764,6 @@ namespace FountOfHopeStudyBiblePC
                 onOpenDictionaryClick: () => NavigateToScreen(new Screen.Dictionary()),
                 onOpenAnimatorClick: () => NavigateToScreen(new Screen.Animator()),
                 onOpenGenerationsClick: () => NavigateToScreen(new Screen.Generations()));
-
-            RootContent.Content = home;
         }
 
         private void NavigateToReader(PassageSelection selection)
@@ -881,11 +776,7 @@ namespace FountOfHopeStudyBiblePC
 
         private void NavigateToScreen(Screen screen)
         {
-            var target = screen is Screen.Reader
-                ? new Screen.Reader(_viewModel.PrimaryPassage)
-                : screen;
-
-            _viewModel.NavigateTo(target);
+            _viewModel.NavigateTo(screen is Screen.Reader ? new Screen.Reader(_viewModel.PrimaryPassage) : screen);
             NavigateToCurrentScreen();
         }
 
@@ -904,12 +795,11 @@ namespace FountOfHopeStudyBiblePC
             }
 
             var persistentPath = CopyUriToInternalStorage(dlg.FileName);
-            if (persistentPath != null)
-            {
-                _viewModel.CustomTextureUri = persistentPath;
-                _viewModel.BgImageIndex = 36;
-                _prefs.Set(PrefKeys.CustomTexture, persistentPath);
-            }
+            if (persistentPath == null) return;
+
+            _viewModel.CustomTextureUri = persistentPath;
+            _viewModel.BgImageIndex = 36;
+            _prefs.Set(PrefKeys.CustomTexture, persistentPath);
         }
 
         private static string? CopyUriToInternalStorage(string sourcePath)
@@ -921,9 +811,7 @@ namespace FountOfHopeStudyBiblePC
                     "FountOfHopeStudyBiblePC", "textures");
                 Directory.CreateDirectory(dir);
 
-                var fileName = $"custom_bg_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}.jpg";
-                var destFile = Path.Combine(dir, fileName);
-
+                var destFile = Path.Combine(dir, $"custom_bg_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}.jpg");
                 File.Copy(sourcePath, destFile, overwrite: true);
                 return destFile;
             }

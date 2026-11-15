@@ -13,11 +13,15 @@ namespace FountOfHopeStudyBiblePC.Views
 {
     public partial class SearchScreen : UserControl
     {
+        private const int MaxRenderResults = 500;
+        private const string QueryPrefKey = "search_query";
+
         private readonly Action<PassageSelection> _onPassageSelected;
         private readonly Action<string> _onVersionChange;
         private readonly AppViewModel _viewModel;
         private readonly PreferencesService _prefs = new();
         private readonly VerseTextProcessor _processor = new();
+        private readonly DispatcherTimer _saveQueryTimer;
 
         private DatabaseHelper? _db;
 
@@ -27,12 +31,13 @@ namespace FountOfHopeStudyBiblePC.Views
         private bool _loading;
         private List<SearchVerse> _results = [];
 
-        private const int MaxRenderResults = 500;
-
         private int _renderedCount;
         private TextBlock? _limitNotice;
 
         private SearchColors _colors = null!;
+        private SearchBrushes _brushes = null!;
+        private ThemeColors _themeColors = null!;
+        private readonly Dictionary<Color, SolidColorBrush> _bookColorCache = [];
 
         public SearchScreen(
             DatabaseHelper? databaseHelper,
@@ -42,14 +47,18 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             InitializeComponent();
 
-            _viewModel = AppViewModelAccessor.Current
-                                 ?? new AppViewModel();
+            _viewModel = AppViewModelAccessor.Current ?? new AppViewModel();
             _onPassageSelected = onPassageSelected ?? (_ => { });
             _onVersionChange = onVersionChange ?? (_ => { });
 
-            _ = databaseHelper;
+            _query = _prefs.GetString(QueryPrefKey, "");
 
-            _query = _prefs.GetString("search_query", "");
+            _saveQueryTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+            _saveQueryTimer.Tick += (_, _) =>
+            {
+                _saveQueryTimer.Stop();
+                _prefs.Set(QueryPrefKey, _query);
+            };
 
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
 
@@ -68,12 +77,14 @@ namespace FountOfHopeStudyBiblePC.Views
             UpdateEmptyState();
             UpdateSearchButtonLabel();
 
-            Dispatcher.BeginInvoke(new Action(UpdateSearchButtonLabel),
-               DispatcherPriority.Loaded);
+            Dispatcher.BeginInvoke(new Action(UpdateSearchButtonLabel), DispatcherPriority.Loaded);
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
+            _saveQueryTimer.Stop();
+            _prefs.Set(QueryPrefKey, _query);
+
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             _db?.Dispose();
         }
@@ -98,6 +109,11 @@ namespace FountOfHopeStudyBiblePC.Views
                     RebuildResults();
                     UpdateEmptyState();
                     break;
+
+                case nameof(AppViewModel.WordsOfJesus):
+                    _themeColors = BuildThemeColors();
+                    RebuildResults();
+                    break;
             }
         }
 
@@ -118,7 +134,44 @@ namespace FountOfHopeStudyBiblePC.Views
                 Card: isDark ? Color.FromRgb(0x23, 0x2A, 0x33) : Color.FromRgb(0xEA, 0xE7, 0xE3),
                 Border: isDark ? Color.FromRgb(0x37, 0x41, 0x51) : Color.FromRgb(0xE5, 0xE7, 0xEB));
 
-            ScopeCard.Background = new SolidColorBrush(_colors.Primary);
+            _brushes = new SearchBrushes(
+                Text: Frozen(_colors.Text),
+                Muted: Frozen(_colors.Muted),
+                Card: Frozen(_colors.Card),
+                Primary: Frozen(_colors.Primary),
+                PrimaryBorderSoft: Frozen(Color.FromArgb(0x33, _colors.Primary.R, _colors.Primary.G, _colors.Primary.B)),
+                PrimaryBgSoft: Frozen(Color.FromArgb(0x1A, _colors.Primary.R, _colors.Primary.G, _colors.Primary.B)));
+
+            _themeColors = BuildThemeColors();
+            _bookColorCache.Clear();
+
+            ScopeCard.Background = _brushes.Primary;
+        }
+
+        private ThemeColors BuildThemeColors() => new(
+            TextColor: _colors.Text,
+            VerseNumber: _colors.Primary,
+            Primary: _colors.Primary,
+            TagColor: _colors.Muted,
+            TagBg: _colors.Card,
+            WordsOfJesus: _viewModel.WordsOfJesus,
+            SearchHighlightBg: Color.FromArgb(0x55, _colors.Primary.R, _colors.Primary.G, _colors.Primary.B),
+            HighlightIcon: _colors.Primary,
+            WordHighlightBg: Color.FromArgb(0x33, _colors.Primary.R, _colors.Primary.G, _colors.Primary.B));
+
+        private static SolidColorBrush Frozen(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
+        private SolidColorBrush GetBookBrush(Color c)
+        {
+            if (_bookColorCache.TryGetValue(c, out var b)) return b;
+            b = Frozen(c);
+            _bookColorCache[c] = b;
+            return b;
         }
 
         private void RefreshScopeCard()
@@ -133,6 +186,26 @@ namespace FountOfHopeStudyBiblePC.Views
             VersionChipText.Text = _viewModel.CurrentVersionAbbr;
         }
 
+        private string BuildTermDescription(string prefix)
+        {
+            var inverse = InverseCheck.IsChecked == true;
+            var exact = ExactCheck.IsChecked == true;
+            if (inverse && exact) return $"{prefix}without exact term \"{_query}\"";
+            if (inverse) return $"{prefix}without \"{_query}\"";
+            if (exact) return $"{prefix}with exact term \"{_query}\"";
+            return $"{prefix}for \"{_query}\"";
+        }
+
+        private string BuildModeSuffix()
+        {
+            var inverse = InverseCheck.IsChecked == true;
+            var exact = ExactCheck.IsChecked == true;
+            if (exact && inverse) return " (exact phrase & opposite)";
+            if (exact) return " (exact phrase)";
+            if (inverse) return " (opposite)";
+            return "";
+        }
+
         private void UpdateSearchButtonLabel()
         {
             var scopeConfig = SearchScopes.GetScopeConfig(_scope);
@@ -140,39 +213,20 @@ namespace FountOfHopeStudyBiblePC.Views
             string label;
             if (!_hasSearched || _loading)
             {
-                var modeSuffix =
-                    ExactCheck.IsChecked == true && InverseCheck.IsChecked == true ? " (exact phrase & opposite)" :
-                    ExactCheck.IsChecked == true ? " (exact phrase)" :
-                    InverseCheck.IsChecked == true ? " (opposite)" : "";
-                label = $"Search {scopeConfig.Label}{modeSuffix}";
+                label = $"Search {scopeConfig.Label}{BuildModeSuffix()}";
             }
             else if (_results.Count == 0)
             {
-                var desc =
-                    InverseCheck.IsChecked == true && ExactCheck.IsChecked == true
-                        ? $"without exact term \"{_query}\"" :
-                    InverseCheck.IsChecked == true
-                        ? $"without \"{_query}\"" :
-                    ExactCheck.IsChecked == true
-                        ? $"with exact term \"{_query}\"" :
-                        $"for \"{_query}\"";
-                label = $"No results found {desc} in {scopeConfig.Label}";
+                label = $"No results found {BuildTermDescription("")} in {scopeConfig.Label}";
             }
             else
             {
                 var bookCount = _results.Select(v => v.BookNumber).Distinct().Count();
                 var found = $"Found {_results.Count} result{(_results.Count == 1 ? "" : "s")}";
-                var term = InverseCheck.IsChecked == true && ExactCheck.IsChecked == true
-                    ? $" without exact term \"{_query}\"" :
-                    InverseCheck.IsChecked == true
-                        ? $" without \"{_query}\"" :
-                    ExactCheck.IsChecked == true
-                        ? $" with exact term \"{_query}\"" :
-                        $" for \"{_query}\"";
                 var scopeStr = SearchScopes.IsBookScope(_scope)
                     ? $" in {scopeConfig.Label}"
                     : $" in {bookCount} book{(bookCount == 1 ? "" : "s")}";
-                label = $"{found}{term}{scopeStr}";
+                label = $"{found}{BuildTermDescription(" ")}{scopeStr}";
             }
 
             SetSearchButtonLabel(label);
@@ -188,6 +242,8 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private async void RunSearch()
         {
+            if (_loading) return;
+
             _hasSearched = true;
             _loading = true;
             ShowLoading($"Searching {SearchScopes.GetScopeConfig(_scope).Label}…");
@@ -199,14 +255,14 @@ namespace FountOfHopeStudyBiblePC.Views
                 var exact = ExactCheck.IsChecked == true;
                 var query = _query;
 
-                var results = await System.Threading.Tasks.Task.Run(() =>
+                var raw = await System.Threading.Tasks.Task.Run(() =>
                     _db?.SearchVerses(query, options, inverse, exact) ?? new List<SearchVerse>());
 
-                var enhanced = results.Select(v =>
-                    v with { BookColor = SearchHelpers.GetBookColor(v.BookName ?? "", v) })
+                var results = raw
+                    .Select(v => v with { BookColor = SearchHelpers.GetBookColor(v.BookName ?? "", v) })
                     .ToList();
 
-                _results = enhanced;
+                _results = results;
                 _loading = false;
 
                 HideOverlays();
@@ -215,7 +271,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 UpdateSearchButtonLabel();
                 ResultsScroller.ScrollToTop();
             }
-            catch (Exception)
+            catch
             {
                 _loading = false;
                 _results.Clear();
@@ -267,7 +323,6 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             var end = Math.Min(_renderedCount + MaxRenderResults, _results.Count);
 
-            // Remove the "showing X of Y" notice before appending more cards.
             if (_limitNotice != null)
             {
                 ResultsPanel.Children.Remove(_limitNotice);
@@ -285,7 +340,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 {
                     Text = $"Showing {_renderedCount} of {_results.Count} results — scroll for more",
                     FontSize = 12,
-                    Foreground = new SolidColorBrush(_colors.Muted),
+                    Foreground = _brushes.Muted,
                     HorizontalAlignment = HorizontalAlignment.Center,
                     Margin = new Thickness(0, 12, 0, 0),
                 };
@@ -296,25 +351,13 @@ namespace FountOfHopeStudyBiblePC.Views
         private Border BuildResultCard(SearchVerse verse)
         {
             var bookName = verse.BookName ?? "Unknown";
-            var bookColorStr = verse.BookColor
-                ?? SearchHelpers.GetBookColor(bookName, verse);
-            var bookColor = (Color)ColorConverter.ConvertFromString(bookColorStr);
-
-            var themeColors = new ThemeColors(
-                TextColor: _colors.Text,
-                VerseNumber: _colors.Primary,
-                Primary: _colors.Primary,
-                TagColor: _colors.Muted,
-                TagBg: _colors.Card,
-                WordsOfJesus: _viewModel.WordsOfJesus,
-                SearchHighlightBg: Color.FromArgb(0x55, _colors.Primary.R, _colors.Primary.G, _colors.Primary.B),
-                HighlightIcon: _colors.Primary,
-                WordHighlightBg: Color.FromArgb(0x33, _colors.Primary.R, _colors.Primary.G, _colors.Primary.B));
+            var bookColorStr = verse.BookColor ?? SearchHelpers.GetBookColor(bookName, verse);
+            var bookBrush = GetBookBrush((Color)ColorConverter.ConvertFromString(bookColorStr));
 
             var processed = _processor.ProcessVerse(
                 verseText: verse.Text ?? "",
                 baseFontSize: 14,
-                themeColors: themeColors,
+                themeColors: _themeColors,
                 textColor: _colors.Text,
                 isOldTestament: BibleData.GetBookByCustomNumber(verse.BookNumber)?.Testament == Testament.Old,
                 options: new ProcessingOptions
@@ -331,7 +374,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 FontSize = 14,
                 LineHeight = 20,
                 Margin = new Thickness(0, 4, 0, 0),
-                Foreground = new SolidColorBrush(_colors.Text),
+                Foreground = _brushes.Text,
             };
             foreach (var inline in processed.Body)
                 bodyText.Inlines.Add(inline);
@@ -342,13 +385,13 @@ namespace FountOfHopeStudyBiblePC.Views
                 Text = $"{bookName} {verse.Chapter}:{verse.VerseNumber}",
                 FontSize = 15,
                 FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(bookColor),
+                Foreground = bookBrush,
             });
             stack.Children.Add(bodyText);
 
             var card = new Border
             {
-                Background = new SolidColorBrush(_colors.Card),
+                Background = _brushes.Card,
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(12),
                 Margin = new Thickness(0, 0, 0, 6),
@@ -383,9 +426,7 @@ namespace FountOfHopeStudyBiblePC.Views
             EmptyState.Visibility = Visibility.Visible;
             EmptyState.Children.Clear();
 
-            if (string.IsNullOrWhiteSpace(_query))
-                BuildPopularTermsState();
-            else if (_hasSearched)
+            if (_hasSearched && !string.IsNullOrWhiteSpace(_query))
                 BuildNoResultsState();
             else
                 BuildWelcomeState();
@@ -397,21 +438,7 @@ namespace FountOfHopeStudyBiblePC.Views
             {
                 Text = "Enter a word or phrase\nto find relevant verses",
                 FontSize = 16,
-                Foreground = new SolidColorBrush(_colors.Muted),
-                TextAlignment = TextAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 24),
-            });
-            EmptyState.Children.Add(BuildPopularTermsCard());
-        }
-
-        private void BuildPopularTermsState()
-        {
-            EmptyState.Children.Add(new TextBlock
-            {
-                Text = "Enter a word or phrase\nto find relevant verses",
-                FontSize = 16,
-                Foreground = new SolidColorBrush(_colors.Muted),
+                Foreground = _brushes.Muted,
                 TextAlignment = TextAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 0, 0, 24),
@@ -428,23 +455,19 @@ namespace FountOfHopeStudyBiblePC.Views
                 Text = "Popular Search Terms",
                 FontSize = 14,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(_colors.Primary),
+                Foreground = _brushes.Primary,
                 Margin = new Thickness(0, 0, 0, 10),
                 HorizontalAlignment = HorizontalAlignment.Center,
             });
 
-            var chips = new WrapPanel
-            {
-                HorizontalAlignment = HorizontalAlignment.Center,
-            };
+            var chips = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center };
 
             foreach (var term in SearchHelpers.PopularSearchTerms)
             {
                 var chip = new Border
                 {
-                    Background = new SolidColorBrush(_colors.Card),
-                    BorderBrush = new SolidColorBrush(Color.FromArgb(
-                        0x33, _colors.Primary.R, _colors.Primary.G, _colors.Primary.B)),
+                    Background = _brushes.Card,
+                    BorderBrush = _brushes.PrimaryBorderSoft,
                     BorderThickness = new Thickness(1),
                     CornerRadius = new CornerRadius(14),
                     Padding = new Thickness(12, 6, 12, 6),
@@ -455,7 +478,7 @@ namespace FountOfHopeStudyBiblePC.Views
                     {
                         Text = term,
                         FontSize = 12,
-                        Foreground = new SolidColorBrush(_colors.Primary),
+                        Foreground = _brushes.Primary,
                     }
                 };
                 chip.MouseLeftButtonUp += (_, _) =>
@@ -474,8 +497,7 @@ namespace FountOfHopeStudyBiblePC.Views
 
             return new Border
             {
-                Background = new SolidColorBrush(Color.FromArgb(
-                    0x1A, _colors.Primary.R, _colors.Primary.G, _colors.Primary.B)),
+                Background = _brushes.PrimaryBgSoft,
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(16),
                 Margin = new Thickness(0, 0, 0, 8),
@@ -485,20 +507,11 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void BuildNoResultsState()
         {
-            var inverse = InverseCheck.IsChecked == true;
-            var exact = ExactCheck.IsChecked == true;
-
-            var noResultsText =
-                inverse && exact ? $"No verses without the exact phrase \"{_query}\" found" :
-                inverse ? $"No verses without \"{_query}\" found" :
-                exact ? $"No verses with the exact phrase \"{_query}\" found" :
-                                   $"No results found for \"{_query}\"";
-
             EmptyState.Children.Add(new TextBlock
             {
-                Text = noResultsText,
+                Text = $"No results found {BuildTermDescription("")}",
                 FontSize = 16,
-                Foreground = new SolidColorBrush(_colors.Text),
+                Foreground = _brushes.Text,
                 TextAlignment = TextAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 0, 0, 8),
@@ -508,7 +521,7 @@ namespace FountOfHopeStudyBiblePC.Views
             {
                 Text = "Try different keywords or check spelling",
                 FontSize = 13,
-                Foreground = new SolidColorBrush(_colors.Muted),
+                Foreground = _brushes.Muted,
                 TextAlignment = TextAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 0, 0, 20),
@@ -520,7 +533,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 Text = "Search tips",
                 FontSize = 13,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(_colors.Text),
+                Foreground = _brushes.Text,
                 Margin = new Thickness(0, 0, 0, 8),
                 HorizontalAlignment = HorizontalAlignment.Center,
             });
@@ -535,14 +548,14 @@ namespace FountOfHopeStudyBiblePC.Views
                 {
                     Text = $"•  {tip}",
                     FontSize = 12,
-                    Foreground = new SolidColorBrush(_colors.Muted),
+                    Foreground = _brushes.Muted,
                     Margin = new Thickness(0, 2, 0, 2),
                 });
             }
 
             EmptyState.Children.Add(new Border
             {
-                Background = new SolidColorBrush(_colors.Card),
+                Background = _brushes.Card,
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(16),
                 Child = tips,
@@ -576,8 +589,8 @@ namespace FountOfHopeStudyBiblePC.Views
                 viewModel: _viewModel,
                 currentVersionKey: _viewModel.CurrentDbName,
                 isSecondary: false,
-                onVersionSelected: file => { _onVersionChange(file); },
-                onDismiss: () => App.Log("SearchScreen: version modal dismissed"))
+                onVersionSelected: file => _onVersionChange(file),
+                onDismiss: () => { })
             {
                 Owner = Window.GetWindow(this),
             };
@@ -602,7 +615,8 @@ namespace FountOfHopeStudyBiblePC.Views
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             _query = SearchBox.Text ?? "";
-            _prefs.Set("search_query", _query);
+            _saveQueryTimer.Stop();
+            _saveQueryTimer.Start();
             ClearBtn.Visibility = _query.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             UpdateSearchButtonLabel();
         }
@@ -647,9 +661,11 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void ResultsScroller_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
-            BackToTopBtn.Visibility = ResultsScroller.VerticalOffset > 300
+            var backToTopTarget = ResultsScroller.VerticalOffset > 300
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+            if (BackToTopBtn.Visibility != backToTopTarget)
+                BackToTopBtn.Visibility = backToTopTarget;
 
             if (_loading || _results.Count == 0 || _renderedCount >= _results.Count)
                 return;
@@ -659,5 +675,13 @@ namespace FountOfHopeStudyBiblePC.Views
             if (distanceFromBottom < threshold)
                 RenderNextBatch();
         }
+
+        private sealed record SearchBrushes(
+            SolidColorBrush Text,
+            SolidColorBrush Muted,
+            SolidColorBrush Card,
+            SolidColorBrush Primary,
+            SolidColorBrush PrimaryBorderSoft,
+            SolidColorBrush PrimaryBgSoft);
     }
 }

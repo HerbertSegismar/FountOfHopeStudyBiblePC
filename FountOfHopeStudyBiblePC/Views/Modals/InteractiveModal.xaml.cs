@@ -15,6 +15,12 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 {
     public partial class InteractiveModal : Window
     {
+        private const double VerseBaseFontSize = 14;
+        private const double StarStrokeScale = 0.15;
+
+        private static readonly StreamGeometry AsteriskGeometry =
+            BuildAsteriskGeometry(VerseBaseFontSize, VerseBaseFontSize * StarStrokeScale);
+
         private readonly AppViewModel _viewModel;
         private readonly DatabaseHelper? _bibleDb;
         private readonly Action<PassageSelection> _onNavigateToReader;
@@ -130,18 +136,13 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
             var comDbName = bibleDbName.Replace(".sqlite3", "com.sqlite3");
 
-            var localPath = DatabaseHelper.GetDatabaseFilePath(comDbName);
-            if (File.Exists(localPath))
+            if (File.Exists(DatabaseHelper.GetDatabaseFilePath(comDbName)))
                 return new DatabaseHelper(comDbName);
 
-            var assetCandidates = new[]
-            {
-                Path.Combine(AppContext.BaseDirectory, "Assets", "databases", comDbName),
-                Path.Combine(AppContext.BaseDirectory, "Assets", comDbName),
-            };
-            foreach (var asset in assetCandidates)
-                if (File.Exists(asset))
-                    return new DatabaseHelper(comDbName);
+            var assetsRoot = Path.Combine(AppContext.BaseDirectory, "Assets");
+            if (File.Exists(Path.Combine(assetsRoot, "databases", comDbName)) ||
+                File.Exists(Path.Combine(assetsRoot, comDbName)))
+                return new DatabaseHelper(comDbName);
 
             return null;
         }
@@ -298,9 +299,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 var isExact = pairs.Count == 1 &&
                               pairs[0].topic.Equals(word, StringComparison.OrdinalIgnoreCase);
 
-                // Title shows the SEARCHED word. When the match isn't exact the
-                // title becomes "Closest match for <searched>", and
-                // BuildDefinitionContent prepends the matched word to the body.
                 var title = pairs.Count == 1
                     ? (isExact
                         ? $"Definition of {Capitalize(pairs[0].topic)}"
@@ -395,7 +393,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     prefix = "Matches for ";
                 else prefix = "Definition of ";
 
-                // Title always shows the word the user searched for.
                 TitleText.Text = prefix;
                 TitleWordLink.Text = Capitalize(page.Word);
                 TitleWordLink.Visibility = Visibility.Visible;
@@ -452,7 +449,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             var passage = page.Passage;
             if (passage == null || page.Verses == null) return;
 
-            const double BaseFontSize = 14;
             var theme = GetThemeColor();
             var verseNumberColor = ThemeManager.SecondaryColor;
 
@@ -470,13 +466,19 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 HighlightIcon: _viewModel.HeaderButtonsColor,
                 WordHighlightBg: _viewModel.WordMarkerColor);
 
-            var showChapterHeaders = page.Verses
-                .Select(v => v.Chapter is int c ? c : 0)
-                .Where(c => c > 0)
-                .Distinct()
-                .Count() > 1;
+            var showChapterHeaders = HasMultipleChapters(page.Verses);
+
+            var verseNumberBrush = new SolidColorBrush(verseNumberColor);
+            var themeBrush = new SolidColorBrush(theme);
+            var chapterHeaderBrush = showChapterHeaders
+                ? new SolidColorBrush(themeColors.Primary)
+                : null;
 
             int? lastChapter = null;
+            int verseBook = passage.BookNumber is int pb && pb > 0 ? pb : 1;
+            int passageChapter = passage.Chapter is int pcc && pcc > 0 ? pcc : 1;
+            var passageIsOld = page.IsOldTestament;
+            var showStrongs = _viewModel.ShowStrongs;
 
             foreach (var verse in page.Verses)
             {
@@ -488,64 +490,58 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     {
                         FontWeight = FontWeights.Bold,
                         FontSize = 14,
-                        Foreground = new SolidColorBrush(themeColors.Primary),
+                        Foreground = chapterHeaderBrush,
                     });
                     BodyText.Inlines.Add(new LineBreak());
                     lastChapter = currentChapter;
                 }
 
-                BodyText.Inlines.Add(new Run($" {verse.VerseNumber} ")
+                var vVerse = verse.VerseNumber;
+                BodyText.Inlines.Add(new Run($" {vVerse} ")
                 {
                     FontWeight = FontWeights.Bold,
-                    Foreground = new SolidColorBrush(verseNumberColor),
+                    Foreground = verseNumberBrush,
                 });
 
-                int vBook = passage.BookNumber is int pb && pb > 0 ? pb : 1;
-                int vChapter =
-                    verse.Chapter is int vcc && vcc > 0 ? vcc
-                    : passage.Chapter is int pcc && pcc > 0 ? pcc
-                    : 1;
-                var vVerse = verse.VerseNumber;
-                var vIsOld = page.IsOldTestament;
+                int vChapter = verse.Chapter is int vcc && vcc > 0 ? vcc : passageChapter;
 
                 var processed = processor.ProcessVerse(
                     verseText: verse.Text,
-                    baseFontSize: BaseFontSize,
+                    baseFontSize: VerseBaseFontSize,
                     themeColors: themeColors,
                     textColor: themeColors.TextColor,
-                    isOldTestament: vIsOld,
+                    isOldTestament: passageIsOld,
                     options: new ProcessingOptions
                     {
-                        ShowStrongs = _viewModel.ShowStrongs,
+                        ShowStrongs = showStrongs,
                         EnableWordClick = true,
                         EnableStrongsClick = true,
                         EnableTagClick = true,
                     },
                     onTagPress: marker =>
-                        OpenFootnoteCommentary(marker, vBook, vChapter, vVerse, vIsOld),
-                    onWordPress: w =>
-                        OnWordPressInVerse(w, vIsOld),
-                    onStrongsPress: num =>
-                        OnStrongsPressInVerse(num, vIsOld));
+                        OpenFootnoteCommentary(marker, verseBook, vChapter, vVerse, passageIsOld),
+                    onWordPress: w => OnWordPressInVerse(w, passageIsOld),
+                    onStrongsPress: num => OnStrongsPressInVerse(num, passageIsOld));
 
-                foreach (var inline in processed.Body) BodyText.Inlines.Add(inline);
+                foreach (var inline in processed.Body)
+                    BodyText.Inlines.Add(inline);
 
                 if (_crossRefCounts.TryGetValue(vVerse, out var refCount) && refCount > 0)
                 {
                     BodyText.Inlines.Add(new Run(" "));
                     var refLink = new Hyperlink(new Run($"[{refCount}]"))
                     {
-                        Foreground = new SolidColorBrush(theme),
+                        Foreground = themeBrush,
                         FontWeight = FontWeights.Bold,
                         TextDecorations = [],
                         Cursor = Cursors.Hand,
                         ToolTip = "Open cross-references",
                         Tag = new VerseCommentaryTagInfo
                         {
-                            BookNumber = vBook,
+                            BookNumber = verseBook,
                             Chapter = vChapter,
                             VerseNumber = vVerse,
-                            IsOldTestament = vIsOld,
+                            IsOldTestament = passageIsOld,
                         },
                     };
                     refLink.Click += CrossRefLink_Click;
@@ -554,30 +550,25 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
                 BodyText.Inlines.Add(new Run(" "));
 
-                var starTag = new VerseCommentaryTagInfo
-                {
-                    BookNumber = vBook,
-                    Chapter = vChapter,
-                    VerseNumber = vVerse,
-                    IsOldTestament = vIsOld,
-                };
-
-                const double StarStrokeScale = 0.15;
-
-                var starStroke = BaseFontSize * StarStrokeScale;
-
                 var starBlock = new Border
                 {
-                    Width = BaseFontSize,
-                    Height = BaseFontSize,
+                    Width = VerseBaseFontSize,
+                    Height = VerseBaseFontSize,
                     Background = Brushes.Transparent,
                     Cursor = Cursors.Hand,
                     ToolTip = "Open verse commentary",
+                    Tag = new VerseCommentaryTagInfo
+                    {
+                        BookNumber = verseBook,
+                        Chapter = vChapter,
+                        VerseNumber = vVerse,
+                        IsOldTestament = passageIsOld,
+                    },
                     Child = new System.Windows.Shapes.Path
                     {
-                        Data = BuildAsteriskGeometry(BaseFontSize, starStroke),
-                        Stroke = new SolidColorBrush(theme),
-                        StrokeThickness = starStroke,
+                        Data = AsteriskGeometry,
+                        Stroke = themeBrush,
+                        StrokeThickness = VerseBaseFontSize * StarStrokeScale,
                         StrokeStartLineCap = PenLineCap.Round,
                         StrokeEndLineCap = PenLineCap.Round,
                         HorizontalAlignment = HorizontalAlignment.Center,
@@ -586,11 +577,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     },
                 };
 
-                starBlock.MouseLeftButtonUp += (_, args) =>
-                {
-                    args.Handled = true;
-                    OpenVerseCommentaryForTag(starTag);
-                };
+                starBlock.MouseLeftButtonUp += StarBlock_MouseLeftButtonUp;
 
                 BodyText.Inlines.Add(new InlineUIContainer(starBlock)
                 {
@@ -599,6 +586,25 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
                 BodyText.Inlines.Add(new LineBreak());
             }
+        }
+
+        private static bool HasMultipleChapters(List<Verse> verses)
+        {
+            int first = -1;
+            foreach (var v in verses)
+            {
+                if (v.Chapter is not int c || c <= 0) continue;
+                if (first < 0) first = c;
+                else if (c != first) return true;
+            }
+            return false;
+        }
+
+        private void StarBlock_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            if (sender is Border { Tag: VerseCommentaryTagInfo info })
+                OpenVerseCommentaryForTag(info);
         }
 
         private static StreamGeometry BuildAsteriskGeometry(double boxSize, double strokeThickness)
@@ -681,11 +687,13 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             _crossRefCounts.Clear();
             if (_crossRefDb == null || verses == null) return;
 
-            var chapters = verses
-                .Select(v => v.Chapter is int c ? c : 0)
-                .Where(c => c > 0)
-                .Distinct()
-                .ToList();
+            HashSet<int>? chapters = null;
+            foreach (var v in verses)
+            {
+                if (v.Chapter is int c && c > 0)
+                    (chapters ??= []).Add(c);
+            }
+            if (chapters == null) return;
 
             foreach (var chapter in chapters)
             {
@@ -696,11 +704,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     foreach (var kv in counts)
                         _crossRefCounts[kv.Key] = kv.Value;
                 }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[LoadCrossRefCounts] ch={chapter} failed: {ex.Message}");
-                }
+                catch { }
             }
         }
 
@@ -718,6 +722,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
             bool lastWasWhitespace = true;
             int rowCellCount = 0;
+            SolidColorBrush? linkBrush = null;
 
             void Flush()
             {
@@ -824,9 +829,10 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                                 var m = HrefAttrRegex().Match(attrs);
                                 if (m.Success)
                                 {
+                                    linkBrush ??= new SolidColorBrush(GetThemeColor());
                                     link = new Hyperlink
                                     {
-                                        Foreground = new SolidColorBrush(GetThemeColor()),
+                                        Foreground = linkBrush,
                                         Tag = DecodeEntities(m.Groups[1].Value),
                                         TextDecorations = TextDecorations.Underline,
                                         Cursor = Cursors.Hand,
@@ -985,7 +991,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         private static string DecodeEntities(string text)
         {
-            if (string.IsNullOrEmpty(text)) return text;
+            if (string.IsNullOrEmpty(text) || text.IndexOf('&') < 0) return text;
             text = text
                 .Replace("&lArr;", "←").Replace("&rArr;", "→").Replace("&hArr;", "↔")
                 .Replace("&larr;", "←").Replace("&rarr;", "→").Replace("&harr;", "↔");
@@ -1250,14 +1256,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 return;
 
             var capitalized = Capitalize(newWord);
-            var loading = page with
-            {
-                Title = $"Searching for {capitalized}...",
-                Content = "Loading...",
-                Word = newWord,
-            };
-            _stack[^1] = loading;
-            UpdateView();
 
             var dict = _useSecondaryDictionary
                 ? _viewModel.SelectedSecondaryDictionary
@@ -1345,15 +1343,16 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                             : _viewModel.SelectedPrimaryDictLanguage;
                         var dicts = InteractiveModalUtils.DictionariesByLanguage
                             .GetValueOrDefault(lang, []);
+                        var current = _useSecondaryDictionary
+                            ? _viewModel.SelectedSecondaryDictionary
+                            : _viewModel.SelectedPrimaryDictionary;
                         foreach (var key in dicts)
                         {
                             var item = new MenuItem
                             {
                                 Header = InteractiveModalUtils.DictionaryDisplayNames
                                     .GetValueOrDefault(key, key),
-                                IsChecked = key == (_useSecondaryDictionary
-                                    ? _viewModel.SelectedSecondaryDictionary
-                                    : _viewModel.SelectedPrimaryDictionary),
+                                IsChecked = key == current,
                             };
                             var captured = key;
                             item.Click += (_, _) => SwitchToDictionary(captured);
@@ -1419,7 +1418,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                             ? _viewModel.SelectedSecondaryDictLanguage
                             : _viewModel.SelectedPrimaryDictLanguage;
                         var dicts = InteractiveModalUtils.DictionariesByLanguage
-                            .GetValueOrDefault(lang, new List<string>());
+                            .GetValueOrDefault(lang, []);
                         if (dicts.Count <= 1) return;
 
                         var current = _useSecondaryDictionary
@@ -1531,9 +1530,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         }
 
         private static string Capitalize(string s)
-            => string.IsNullOrEmpty(s)
-                ? s
-                : char.ToUpperInvariant(s[0]) + s.Substring(1);
+            => string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s[1..];
 
         private sealed class VerseCommentaryTagInfo
         {

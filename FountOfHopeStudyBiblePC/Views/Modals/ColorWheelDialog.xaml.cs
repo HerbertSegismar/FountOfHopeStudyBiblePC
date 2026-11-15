@@ -1,5 +1,4 @@
-﻿// Views/Modals/ColorWheelDialog.xaml.cs
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -10,13 +9,10 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 {
     public partial class ColorWheelDialog : Window
     {
-        private readonly Action<Color> _onColorSelected;
-        private readonly Action _onDismiss;
-        private readonly ModalOverlayController _overlay;
-
-        private Color _selectedColor;
-        private bool _suppressHexEvent;
-        private bool _suppressSliderEvent;
+        private static readonly Action NoOp = () => { };
+        private static readonly Action<Color> NoOpColor = _ => { };
+        private static readonly SolidColorBrush PaletteSwatchBorderBrush =
+            Frozen(Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF));
 
         private static readonly Color[] Palette =
         {
@@ -41,13 +37,29 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             Colors.White,
         };
 
+        private static SolidColorBrush Frozen(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
+        private readonly Action<Color> _onColorSelected;
+        private readonly Action _onDismiss;
+        private readonly ModalOverlayController _overlay;
+
+        private SolidColorBrush _currentBrush = Frozen(Colors.Black);
+        private Color _selectedColor;
+        private bool _suppressHexEvent;
+        private bool _suppressSliderEvent;
+
         public ColorWheelDialog(
             Color initialColor,
             Action<Color> onColorSelected,
             Action onDismiss)
         {
-            _onColorSelected = onColorSelected ?? (_ => { });
-            _onDismiss = onDismiss ?? (() => { });
+            _onColorSelected = onColorSelected ?? NoOpColor;
+            _onDismiss = onDismiss ?? NoOp;
             _selectedColor = initialColor;
             _suppressSliderEvent = true;
             _suppressHexEvent = true;
@@ -60,13 +72,12 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             ColorWheel.SelectedColor = initialColor;
 
             BuildPalette();
-            SyncUiFromColor(initialColor);
+            ApplyColor(initialColor, updateWheel: true, updateOpacity: true);
 
             _suppressSliderEvent = false;
             _suppressHexEvent = false;
         }
 
-        // ── Thin XAML stubs → ModalOverlayController ─────────────
         private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
             => _overlay.HandleScrimMouseDown(sender, e);
 
@@ -76,9 +87,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private void Window_KeyDown(object sender, KeyEventArgs e)
             => _overlay.HandleKeyDown(sender, e);
 
-        // ═══════════════════════════════════════════════════════════
-        //  Palette
-        // ═══════════════════════════════════════════════════════════
         private void BuildPalette()
         {
             PalettePanel.Children.Clear();
@@ -90,8 +98,8 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     Height = 28,
                     CornerRadius = new CornerRadius(14),
                     Margin = new Thickness(3),
-                    Background = new SolidColorBrush(color),
-                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)),
+                    Background = Frozen(color),
+                    BorderBrush = PaletteSwatchBorderBrush,
                     BorderThickness = new Thickness(1),
                     Cursor = Cursors.Hand,
                     Tag = color,
@@ -99,23 +107,22 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 swatch.MouseLeftButtonUp += (_, _) =>
                 {
                     if (swatch.Tag is Color c)
-                        SetColor(c, updateWheel: true);
+                        ApplyColor(c, updateWheel: true, updateOpacity: true);
                 };
                 PalettePanel.Children.Add(swatch);
             }
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Sync
-        // ═══════════════════════════════════════════════════════════
-        private void SyncUiFromColor(Color color)
+        private void ApplyColor(Color color, bool updateWheel, bool updateOpacity)
         {
             _selectedColor = color;
 
-            var brush = new SolidColorBrush(color);
-            ColorSwatch.Background = brush;
-            LightPreview.Background = brush;
-            DarkPreview.Background = brush;
+            if (!_currentBrush.IsFrozen || _currentBrush.Color != color)
+                _currentBrush = Frozen(color);
+
+            ColorSwatch.Background = _currentBrush;
+            LightPreview.Background = _currentBrush;
+            DarkPreview.Background = _currentBrush;
 
             _suppressHexEvent = true;
             HexBox.Text = ColorHelpers.ToHexString(color);
@@ -128,43 +135,12 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             _suppressSliderEvent = true;
             BrightnessSlider.Value = val;
             SaturationSlider.Value = sat;
-            OpacitySlider.Value = color.A / 255.0;
+            if (updateOpacity) OpacitySlider.Value = color.A / 255.0;
             _suppressSliderEvent = false;
 
             BrightnessLabel.Text = $"{(int)(val * 100)}%";
             SaturationLabel.Text = $"{(int)(sat * 100)}%";
-            OpacityLabel.Text = $"{(int)(color.A / 255.0 * 100)}%";
-
-            ColorWheel.Brightness = (float)val;
-            ColorWheel.SelectedColor = color;
-        }
-
-        private void SetColor(Color color, bool updateWheel)
-        {
-            _selectedColor = color;
-
-            var brush = new SolidColorBrush(color);
-            ColorSwatch.Background = brush;
-            LightPreview.Background = brush;
-            DarkPreview.Background = brush;
-
-            _suppressHexEvent = true;
-            HexBox.Text = ColorHelpers.ToHexString(color);
-            HexBox.CaretIndex = HexBox.Text.Length;
-            _suppressHexEvent = false;
-            HexError.Visibility = Visibility.Collapsed;
-
-            var (_, sat, val) = ColorHelpers.ToHsv(color);
-
-            _suppressSliderEvent = true;
-            BrightnessSlider.Value = val;
-            SaturationSlider.Value = sat;
-            OpacitySlider.Value = color.A / 255.0;
-            _suppressSliderEvent = false;
-
-            BrightnessLabel.Text = $"{(int)(val * 100)}%";
-            SaturationLabel.Text = $"{(int)(sat * 100)}%";
-            OpacityLabel.Text = $"{(int)(color.A / 255.0 * 100)}%";
+            if (updateOpacity) OpacityLabel.Text = $"{(int)(color.A / 255.0 * 100)}%";
 
             if (updateWheel)
             {
@@ -173,60 +149,35 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Event handlers
-        // ═══════════════════════════════════════════════════════════
         private void ColorWheel_ColorSelected(object? sender, Color color)
         {
             byte alpha = (byte)Math.Round(OpacitySlider.Value * 255);
             var withAlpha = Color.FromArgb(alpha, color.R, color.G, color.B);
-
-            _selectedColor = withAlpha;
-
-            var brush = new SolidColorBrush(withAlpha);
-            ColorSwatch.Background = brush;
-            LightPreview.Background = brush;
-            DarkPreview.Background = brush;
-
-            _suppressHexEvent = true;
-            HexBox.Text = ColorHelpers.ToHexString(withAlpha);
-            HexBox.CaretIndex = HexBox.Text.Length;
-            _suppressHexEvent = false;
-            HexError.Visibility = Visibility.Collapsed;
-
-            var (_, sat, val) = ColorHelpers.ToHsv(withAlpha);
-
-            _suppressSliderEvent = true;
-            BrightnessSlider.Value = val;
-            SaturationSlider.Value = sat;
-            _suppressSliderEvent = false;
-
-            BrightnessLabel.Text = $"{(int)(val * 100)}%";
-            SaturationLabel.Text = $"{(int)(sat * 100)}%";
+            ApplyColor(withAlpha, updateWheel: false, updateOpacity: false);
         }
 
         private void BrightnessSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_suppressSliderEvent) return;
             BrightnessLabel.Text = $"{(int)(e.NewValue * 100)}%";
-            var newColor = ColorHelpers.AdjustBrightness(_selectedColor, (float)e.NewValue);
-            SetColor(newColor, updateWheel: true);
+            ApplyColor(ColorHelpers.AdjustBrightness(_selectedColor, (float)e.NewValue),
+                updateWheel: true, updateOpacity: true);
         }
 
         private void SaturationSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_suppressSliderEvent) return;
             SaturationLabel.Text = $"{(int)(e.NewValue * 100)}%";
-            var newColor = ColorHelpers.AdjustSaturation(_selectedColor, (float)e.NewValue);
-            SetColor(newColor, updateWheel: true);
+            ApplyColor(ColorHelpers.AdjustSaturation(_selectedColor, (float)e.NewValue),
+                updateWheel: true, updateOpacity: true);
         }
 
         private void OpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_suppressSliderEvent) return;
             OpacityLabel.Text = $"{(int)(e.NewValue * 100)}%";
-            var newColor = ColorHelpers.AdjustOpacity(_selectedColor, (float)e.NewValue);
-            SetColor(newColor, updateWheel: false);
+            ApplyColor(ColorHelpers.AdjustOpacity(_selectedColor, (float)e.NewValue),
+                updateWheel: false, updateOpacity: true);
         }
 
         private void HexBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -235,42 +186,21 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
             var sanitized = ColorHelpers.SanitizeHexInput(HexBox.Text ?? "");
 
-            if (ColorHelpers.TryParseHex(sanitized, out var parsed))
-            {
-                HexError.Visibility = Visibility.Collapsed;
-
-                if (sanitized.Length == 7)
-                    parsed = Color.FromArgb((byte)Math.Round(OpacitySlider.Value * 255),
-                                            parsed.R, parsed.G, parsed.B);
-
-                _selectedColor = parsed;
-
-                var brush = new SolidColorBrush(parsed);
-                ColorSwatch.Background = brush;
-                LightPreview.Background = brush;
-                DarkPreview.Background = brush;
-
-                var (_, sat, val) = ColorHelpers.ToHsv(parsed);
-
-                _suppressSliderEvent = true;
-                BrightnessSlider.Value = val;
-                SaturationSlider.Value = sat;
-                OpacitySlider.Value = parsed.A / 255.0;
-                _suppressSliderEvent = false;
-
-                BrightnessLabel.Text = $"{(int)(val * 100)}%";
-                SaturationLabel.Text = $"{(int)(sat * 100)}%";
-                OpacityLabel.Text = $"{(int)(parsed.A / 255.0 * 100)}%";
-
-                ColorWheel.Brightness = (float)val;
-                ColorWheel.SelectedColor = parsed;
-            }
-            else
+            if (!ColorHelpers.TryParseHex(sanitized, out var parsed))
             {
                 HexError.Visibility = sanitized.Length > 1
                     ? Visibility.Visible
                     : Visibility.Collapsed;
+                return;
             }
+
+            HexError.Visibility = Visibility.Collapsed;
+
+            if (sanitized.Length == 7)
+                parsed = Color.FromArgb((byte)Math.Round(OpacitySlider.Value * 255),
+                                        parsed.R, parsed.G, parsed.B);
+
+            ApplyColor(parsed, updateWheel: true, updateOpacity: true);
         }
 
         private void HexBox_LostFocus(object sender, RoutedEventArgs e)
@@ -294,7 +224,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             }
 
             _onColorSelected(_selectedColor);
-            Close();   // confirm action → immediate
+            Close();
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
@@ -302,7 +232,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         protected override void OnClosed(EventArgs e)
         {
-            base.OnClosed(e);   // raises Closed → controller detaches owner handlers
+            base.OnClosed(e);
             _onDismiss();
         }
     }

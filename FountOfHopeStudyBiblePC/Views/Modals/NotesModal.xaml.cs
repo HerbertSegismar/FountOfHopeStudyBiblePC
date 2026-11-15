@@ -1,8 +1,4 @@
-﻿// Views/Modals/NotesModal.xaml.cs
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System.Text;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -15,19 +11,19 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 {
     public partial class NotesModal : Window
     {
-        // ── Dependencies ────────────────────────────────────────────
+        private static readonly Action NoOp = () => { };
+
         private readonly AppViewModel _viewModel;
         private readonly List<Verse> _verses;
-        private readonly PassageSelection? _passage;
         private readonly DatabaseHelper? _db;
         private readonly Action _onSave;
         private readonly ModalOverlayController _overlay;
 
-        // ── Derived values ──────────────────────────────────────────
         private readonly string _book;
         private readonly int _chapter;
         private readonly int _startVerse;
         private readonly int _endVerse;
+        private readonly bool _canPersist;
 
         public NotesModal(
             AppViewModel viewModel,
@@ -36,27 +32,26 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             DatabaseHelper? databaseHelper,
             Action? onSave = null)
         {
-            // ── 1. Assign fields BEFORE InitializeComponent() ───────
             _viewModel = viewModel;
-            _verses = verses ?? new List<Verse>();
-            _passage = passage;
+            _verses = verses ?? [];
             _db = databaseHelper;
-            _onSave = onSave ?? (() => { });
+            _onSave = onSave ?? NoOp;
 
-            _book = _verses.FirstOrDefault()?.BookName
-                          ?? passage?.BookName
-                          ?? "";
-            _chapter = _verses.FirstOrDefault()?.Chapter
-                          ?? passage?.Chapter
-                          ?? 0;
-            _startVerse = _verses.Count > 0
-                          ? _verses.Min(v => v.VerseNumber)
-                          : 0;
-            _endVerse = _verses.Count > 0
-                          ? _verses.Max(v => v.VerseNumber)
-                          : 0;
+            var first = _verses.FirstOrDefault();
+            _book = first?.BookName ?? passage?.BookName ?? "";
+            _chapter = first?.Chapter ?? passage?.Chapter ?? 0;
 
-            // ── 2. Parse XAML ───────────────────────────────────────
+            if (_verses.Count > 0)
+            {
+                _startVerse = _verses.Min(v => v.VerseNumber);
+                _endVerse = _verses.Max(v => v.VerseNumber);
+            }
+
+            _canPersist = _db != null
+                          && !string.IsNullOrWhiteSpace(_book)
+                          && _chapter > 0
+                          && _startVerse > 0;
+
             InitializeComponent();
 
             _overlay = new ModalOverlayController(this)
@@ -65,7 +60,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 RevealOnLoad = true,
             };
 
-            // ── 3. Populate UI ──────────────────────────────────────
             ApplyTheme();
             PopulateHeader();
             PopulatePreview();
@@ -75,7 +69,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             UpdateDeleteButtonVisibility();
         }
 
-        // ── Thin XAML stubs → ModalOverlayController ─────────────
         private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
             => _overlay.HandleScrimMouseDown(sender, e);
 
@@ -85,9 +78,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private void Window_KeyDown(object sender, KeyEventArgs e)
             => _overlay.HandleKeyDown(sender, e);
 
-        // ═══════════════════════════════════════════════════════════
-        //  Setup
-        // ═══════════════════════════════════════════════════════════
         private void ApplyTheme()
         {
             var bg = _viewModel.DarkTheme
@@ -123,17 +113,13 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         private void LoadExistingNote()
         {
-            if (_db == null
-                || string.IsNullOrWhiteSpace(_book)
-                || _chapter <= 0
-                || _startVerse <= 0)
+            if (!_canPersist)
             {
                 NoteTextBox.Text = "";
                 return;
             }
 
-            var existing = _db.GetElement(_book, _chapter, _startVerse, _endVerse);
-            NoteTextBox.Text = existing ?? "";
+            NoteTextBox.Text = _db!.GetElement(_book, _chapter, _startVerse, _endVerse) ?? "";
             NoteTextBox.CaretIndex = NoteTextBox.Text.Length;
         }
 
@@ -144,50 +130,30 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 : Visibility.Visible;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Save / Delete / Cancel
-        // ═══════════════════════════════════════════════════════════
         private void SaveButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_db != null
-                && !string.IsNullOrWhiteSpace(_book)
-                && _chapter > 0
-                && _startVerse > 0)
+            if (_canPersist)
             {
                 var text = NoteTextBox.Text ?? "";
-
                 if (string.IsNullOrWhiteSpace(text))
-                {
-                    _db.DeleteNote(_book, _chapter, _startVerse, _endVerse);
-                    App.Log($"Notes: deleted note for {_book} {_chapter}:{_startVerse}-{_endVerse}");
-                }
+                    _db!.DeleteNote(_book, _chapter, _startVerse, _endVerse);
                 else
-                {
-                    _db.AddOrUpdateNote(_book, _chapter, _startVerse, _endVerse, text);
-                    App.Log($"Notes: saved note for {_book} {_chapter}:{_startVerse}-{_endVerse} " +
-                            $"({text.Length} chars)");
-                }
+                    _db!.AddOrUpdateNote(_book, _chapter, _startVerse, _endVerse, text);
 
                 _onSave();
             }
 
-            // Confirm action → immediate close, no fade.
             Close();
         }
 
         private void DeleteButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_db != null
-                && !string.IsNullOrWhiteSpace(_book)
-                && _chapter > 0
-                && _startVerse > 0)
+            if (_canPersist)
             {
-                _db.DeleteNote(_book, _chapter, _startVerse, _endVerse);
-                App.Log($"Notes: deleted note for {_book} {_chapter}:{_startVerse}-{_endVerse}");
+                _db!.DeleteNote(_book, _chapter, _startVerse, _endVerse);
                 _onSave();
             }
 
-            // Confirm action → immediate close, no fade.
             Close();
         }
 

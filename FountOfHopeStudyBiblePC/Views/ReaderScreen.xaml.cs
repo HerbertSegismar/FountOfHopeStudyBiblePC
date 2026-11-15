@@ -42,8 +42,8 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private bool _isButtonVisible = true;
         private bool _isPaletteVisible;
-        private readonly System.Windows.Threading.DispatcherTimer? _fadeTimer;
-        private readonly System.Windows.Threading.DispatcherTimer? _paletteTimer;
+        private readonly System.Windows.Threading.DispatcherTimer _fadeTimer;
+        private readonly System.Windows.Threading.DispatcherTimer _paletteTimer;
 
         private const double WordDragThresholdPixels = 3.0;
         private bool _isWordDragActive;
@@ -53,9 +53,10 @@ namespace FountOfHopeStudyBiblePC.Views
         private TextBlock? _wordDragEndBlock;
         private IWordHighlightHost? _wordHighlightHost;
         private readonly Dictionary<TextBlock, Brush?> _dragPreviewOriginals = [];
+        private List<TextBlock>? _dragWordCache;
+        private SolidColorBrush? _dragPreviewBrush;
 
         private ReaderModalState _modalState = new ReaderModalState.None();
-        private readonly List<Verse> _selectedVersesForNote = [];
 
         private Verse? _selectedVerse;
         private PassageSelection? _selectedPassage;
@@ -95,26 +96,20 @@ namespace FountOfHopeStudyBiblePC.Views
             ReloadDictionaryHelpers();
             ReloadSecondaryDatabase();
 
-            _fadeTimer = new System.Windows.Threading.DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(5)
-            };
+            _fadeTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             _fadeTimer.Tick += (_, _) =>
             {
                 _isButtonVisible = false;
                 UpdateFabVisibility();
-                _fadeTimer!.Stop();
+                _fadeTimer.Stop();
             };
 
-            _paletteTimer = new System.Windows.Threading.DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(5)
-            };
+            _paletteTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             _paletteTimer.Tick += (_, _) =>
             {
                 _isPaletteVisible = false;
                 UpdatePaletteVisibility();
-                _paletteTimer!.Stop();
+                _paletteTimer.Stop();
             };
 
             ReaderHost.PreviewMouseLeftButtonDown += ReaderHost_PreviewMouseLeftButtonDown;
@@ -152,8 +147,8 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void ReaderScreen_Unloaded(object sender, RoutedEventArgs e)
         {
-            _fadeTimer?.Stop();
-            _paletteTimer?.Stop();
+            _fadeTimer.Stop();
+            _paletteTimer.Stop();
 
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
 
@@ -214,37 +209,17 @@ namespace FountOfHopeStudyBiblePC.Views
                     break;
 
                 case nameof(AppViewModel.IsHighlightMode):
-                    if (_viewModel.IsHighlightMode)
-                        ShowPalette();
-                    else
-                        HidePalette();
+                    if (_viewModel.IsHighlightMode) ShowPalette();
+                    else HidePalette();
                     break;
 
                 case nameof(AppViewModel.IsDictionaryMode):
-                    if (_viewModel.IsDictionaryMode && !_isWordDragActive)
-                        HidePalette();
+                    if (_viewModel.IsDictionaryMode && !_isWordDragActive) HidePalette();
                     break;
 
                 case nameof(AppViewModel.WordMarkerColor):
-                    BuildHighlightColorBar();
-                    break;
-
                 case nameof(AppViewModel.PredefinedHighlightColors):
                     BuildHighlightColorBar();
-                    break;
-
-                case nameof(AppViewModel.DarkTheme):
-                case nameof(AppViewModel.WordsOfJesus):
-                case nameof(AppViewModel.FontSize):
-                case nameof(AppViewModel.LightThemeReaderFontColor):
-                case nameof(AppViewModel.DarkThemeReaderFontColor):
-                case nameof(AppViewModel.VerseMarkerColor):
-                case nameof(AppViewModel.BgImageIndex):
-                case nameof(AppViewModel.OverlayOpacity):
-                case nameof(AppViewModel.LightOverlayColor):
-                case nameof(AppViewModel.DarkOverlayColor):
-                case nameof(AppViewModel.ShowStrongs):
-                case nameof(AppViewModel.IsStudyMode):
                     break;
             }
         }
@@ -253,23 +228,22 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             _crossRefHelper?.Dispose();
             var name = _viewModel.SelectedCrossReferenceDatabase;
-            if (string.IsNullOrWhiteSpace(name)) { _crossRefHelper = null; return; }
-            _crossRefHelper = new DatabaseHelper($"{name}.crossreferences.sqlite3");
+            _crossRefHelper = string.IsNullOrWhiteSpace(name)
+                ? null
+                : new DatabaseHelper($"{name}.crossreferences.sqlite3");
         }
 
         private void ReloadDictionaryHelpers()
         {
             _primaryDictionaryDbHelper?.Dispose();
-            _primaryDictionaryDbHelper =
-                !string.IsNullOrWhiteSpace(_viewModel.SelectedPrimaryDictionary)
-                    ? new DatabaseHelper($"{_viewModel.SelectedPrimaryDictionary}.dictionary.sqlite3")
-                    : null;
+            _primaryDictionaryDbHelper = !string.IsNullOrWhiteSpace(_viewModel.SelectedPrimaryDictionary)
+                ? new DatabaseHelper($"{_viewModel.SelectedPrimaryDictionary}.dictionary.sqlite3")
+                : null;
 
             _secondaryDictionaryDbHelper?.Dispose();
-            _secondaryDictionaryDbHelper =
-                !string.IsNullOrWhiteSpace(_viewModel.SelectedSecondaryDictionary)
-                    ? new DatabaseHelper($"{_viewModel.SelectedSecondaryDictionary}.dictionary.sqlite3")
-                    : null;
+            _secondaryDictionaryDbHelper = !string.IsNullOrWhiteSpace(_viewModel.SelectedSecondaryDictionary)
+                ? new DatabaseHelper($"{_viewModel.SelectedSecondaryDictionary}.dictionary.sqlite3")
+                : null;
 
             _strongDbHelper?.Dispose();
             _strongDbHelper = new DatabaseHelper("secedictionary.sqlite3");
@@ -288,8 +262,7 @@ namespace FountOfHopeStudyBiblePC.Views
 
             var comDbName = bibleDbName.Replace(".sqlite3", "com.sqlite3");
 
-            var localPath = DatabaseHelper.GetDatabaseFilePath(comDbName);
-            if (System.IO.File.Exists(localPath))
+            if (System.IO.File.Exists(DatabaseHelper.GetDatabaseFilePath(comDbName)))
                 return new DatabaseHelper(comDbName);
 
             var assetCandidates = new[]
@@ -307,10 +280,9 @@ namespace FountOfHopeStudyBiblePC.Views
         private void ReloadSecondaryDatabase()
         {
             _secondaryDatabaseHelper?.Dispose();
-            _secondaryDatabaseHelper =
-                _viewModel.MultiVersion && !string.IsNullOrWhiteSpace(_viewModel.SecondaryDbName)
-                    ? new DatabaseHelper(_viewModel.SecondaryDbName)
-                    : null;
+            _secondaryDatabaseHelper = _viewModel.MultiVersion && !string.IsNullOrWhiteSpace(_viewModel.SecondaryDbName)
+                ? new DatabaseHelper(_viewModel.SecondaryDbName)
+                : null;
 
             _secondaryCommentaryDbHelper?.Dispose();
             _secondaryCommentaryDbHelper = CreateCommentaryHelperIfExists(
@@ -319,8 +291,8 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void ScheduleFade()
         {
-            _fadeTimer?.Stop();
-            _fadeTimer?.Start();
+            _fadeTimer.Stop();
+            _fadeTimer.Start();
         }
 
         private void UpdateFabVisibility()
@@ -333,7 +305,6 @@ namespace FountOfHopeStudyBiblePC.Views
         private void FullscreenFab_Click(object sender, RoutedEventArgs e)
         {
             _viewModel.IsReaderFullScreen = !_viewModel.IsReaderFullScreen;
-
             _isButtonVisible = true;
             UpdateFabVisibility();
             ScheduleFade();
@@ -363,7 +334,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 {
                     if (swatch.Tag is not Color c) return;
 
-                    bool wasSameColor = c == _viewModel.WordMarkerColor;
+                    var wasSameColor = c == _viewModel.WordMarkerColor;
                     _viewModel.WordMarkerColor = c;
 
                     if (_viewModel.IsHighlightMode && wasSameColor)
@@ -386,39 +357,32 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void ActivateWordHighlightMode()
         {
-            if (!_viewModel.IsHighlightMode) return;
-            ShowPalette();
+            if (_viewModel.IsHighlightMode) ShowPalette();
         }
 
         public void ShowPalette()
         {
             _isPaletteVisible = true;
             UpdatePaletteVisibility();
-            _paletteTimer?.Stop();
-            _paletteTimer?.Start();
+            _paletteTimer.Stop();
+            _paletteTimer.Start();
         }
 
         public void HidePalette()
         {
             _isPaletteVisible = false;
-            _paletteTimer?.Stop();
+            _paletteTimer.Stop();
             UpdatePaletteVisibility();
         }
 
         private void UpdatePaletteVisibility()
         {
-            HighlightColorBar.Visibility = _isPaletteVisible
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-
-            FullscreenFab.Visibility = _isPaletteVisible
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+            HighlightColorBar.Visibility = _isPaletteVisible ? Visibility.Visible : Visibility.Collapsed;
+            FullscreenFab.Visibility = _isPaletteVisible ? Visibility.Collapsed : Visibility.Visible;
         }
+
         private Point GetHighlightHostPoint(MouseEventArgs e)
-            => _wordHighlightHost is UIElement el
-                ? e.GetPosition(el)
-                : e.GetPosition(ReaderHost);
+            => _wordHighlightHost is UIElement el ? e.GetPosition(el) : e.GetPosition(ReaderHost);
 
         private void ReaderHost_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
@@ -428,8 +392,7 @@ namespace FountOfHopeStudyBiblePC.Views
 
             if (_wordHighlightHost != null)
             {
-                if (!_wordHighlightHost.BeginWordDrag(pos))
-                    return;
+                if (!_wordHighlightHost.BeginWordDrag(pos)) return;
             }
             else
             {
@@ -443,7 +406,7 @@ namespace FountOfHopeStudyBiblePC.Views
             _isWordDragActive = true;
             _wordDragHasMoved = false;
 
-            _fadeTimer?.Stop();
+            _fadeTimer.Stop();
         }
 
         private void ReaderHost_PreviewMouseMove(object sender, MouseEventArgs e)
@@ -533,6 +496,7 @@ namespace FountOfHopeStudyBiblePC.Views
             _wordDragHasMoved = false;
             _wordDragStartBlock = null;
             _wordDragEndBlock = null;
+            _dragWordCache = null;
             ScheduleFade();
         }
 
@@ -571,7 +535,7 @@ namespace FountOfHopeStudyBiblePC.Views
             if (string.IsNullOrWhiteSpace(text)) return false;
 
             var trimmed = text.Trim();
-            bool hasLetter = false;
+            var hasLetter = false;
             foreach (var ch in trimmed)
             {
                 if (char.IsWhiteSpace(ch)) return false;
@@ -599,9 +563,12 @@ namespace FountOfHopeStudyBiblePC.Views
             }
         }
 
-        private (int from, int to)? ComputeRangeIndices(TextBlock start, TextBlock end)
+        private List<TextBlock> GetDragWords()
+            => _dragWordCache ??= EnumerateWordElements().ToList();
+
+        private static (int from, int to)? ComputeRangeIndices(
+            List<TextBlock> words, TextBlock start, TextBlock end)
         {
-            var words = EnumerateWordElements().ToList();
             int a = words.IndexOf(start);
             int b = words.IndexOf(end);
             if (a < 0 || b < 0) return null;
@@ -610,12 +577,11 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void ApplyWordHighlightRange(TextBlock start, TextBlock end)
         {
-            var range = ComputeRangeIndices(start, end);
+            var words = GetDragWords();
+            var range = ComputeRangeIndices(words, start, end);
             if (range == null) return;
 
-            var words = EnumerateWordElements().ToList();
             var brush = new SolidColorBrush(_viewModel.WordMarkerColor);
-
             for (int i = range.Value.from; i <= range.Value.to; i++)
                 words[i].Background = brush;
         }
@@ -623,30 +589,32 @@ namespace FountOfHopeStudyBiblePC.Views
         private void UpdateDragPreview()
         {
             if (_wordDragStartBlock == null || _wordDragEndBlock == null) return;
-            var range = ComputeRangeIndices(_wordDragStartBlock, _wordDragEndBlock);
+
+            var words = GetDragWords();
+            var range = ComputeRangeIndices(words, _wordDragStartBlock, _wordDragEndBlock);
             if (range == null) return;
 
-            var words = EnumerateWordElements().ToList();
             var inRange = new HashSet<TextBlock>(
                 words.Skip(range.Value.from).Take(range.Value.to - range.Value.from + 1));
 
             foreach (var word in _dragPreviewOriginals.Keys.ToList())
             {
-                if (!inRange.Contains(word))
-                {
-                    word.Background = _dragPreviewOriginals[word];
-                    _dragPreviewOriginals.Remove(word);
-                }
+                if (inRange.Contains(word)) continue;
+                word.Background = _dragPreviewOriginals[word];
+                _dragPreviewOriginals.Remove(word);
             }
 
-            var previewBrush = new SolidColorBrush(_viewModel.WordMarkerColor) { Opacity = 0.4 };
+            SolidColorBrush? previewBrush = null;
             foreach (var word in inRange)
             {
-                if (!_dragPreviewOriginals.ContainsKey(word))
-                {
-                    _dragPreviewOriginals[word] = word.Background;
-                    word.Background = previewBrush;
-                }
+                if (_dragPreviewOriginals.ContainsKey(word)) continue;
+
+                previewBrush ??= _dragPreviewBrush is { } cached && cached.Color == _viewModel.WordMarkerColor
+                    ? cached
+                    : (_dragPreviewBrush = new SolidColorBrush(_viewModel.WordMarkerColor) { Opacity = 0.4 });
+
+                _dragPreviewOriginals[word] = word.Background;
+                word.Background = previewBrush;
             }
         }
 
@@ -659,10 +627,9 @@ namespace FountOfHopeStudyBiblePC.Views
 
         public void OpenOptionsMenu()
         {
-            OptionsMenuBorder.Background =
-                new SolidColorBrush(_viewModel.DarkTheme
-                    ? _viewModel.DarkModalBackgroundColor
-                    : _viewModel.LightModalBackgroundColor);
+            OptionsMenuBorder.Background = new SolidColorBrush(_viewModel.DarkTheme
+                ? _viewModel.DarkModalBackgroundColor
+                : _viewModel.LightModalBackgroundColor);
             OverlayOpacitySlider.Value = _viewModel.OverlayOpacity;
             OptionsMenuPopup.IsOpen = true;
         }
@@ -673,8 +640,7 @@ namespace FountOfHopeStudyBiblePC.Views
             _viewModel.ShowBgModal = true;
         }
 
-        private void OverlayOpacitySlider_ValueChanged(object sender,
-            RoutedPropertyChangedEventArgs<double> e)
+        private void OverlayOpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             _viewModel.OverlayOpacity = (float)e.NewValue;
         }
@@ -788,18 +754,13 @@ namespace FountOfHopeStudyBiblePC.Views
             _secondaryCurrent = newPassage;
             _secondaryTargetVerse = newPassage.Verse;
             _viewModel.SecondaryPassage = newPassage;
-
-            // In independent multi-version, update the secondary pane in place
-            // so the primary pane keeps its scroll position. In synced / single
-            // modes, the outer _onPassageChange path is what rebuilds everything.
             _currentIndependentReader?.SetSecondaryPassage(newPassage);
         }
 
         private void OnPrimaryWordPress(string word)
         {
             var trimmed = word.Trim();
-            var definition = _primaryDictionaryDbHelper?.GetWordDefinition(trimmed)
-                             ?? "Definition not found.";
+            var definition = _primaryDictionaryDbHelper?.GetWordDefinition(trimmed) ?? "Definition not found.";
             _modalState = new ReaderModalState.Word(
                 trimmed, definition, _databaseHelper,
                 _viewModel.IsOldTestament, UseSecondaryDictionary: false);
@@ -825,8 +786,7 @@ namespace FountOfHopeStudyBiblePC.Views
             var prefixed = (trimmed.Length > 0 && char.IsLetter(trimmed[0]))
                 ? trimmed
                 : (isOt ? "H" : "G") + trimmed;
-            var definition = _strongDbHelper?.GetStrongDefinition(prefixed)
-                             ?? "Strong's definition not found.";
+            var definition = _strongDbHelper?.GetStrongDefinition(prefixed) ?? "Strong's definition not found.";
             _modalState = new ReaderModalState.Strong(
                 prefixed, definition,
                 isPrimary ? _databaseHelper : _secondaryDatabaseHelper,
@@ -838,8 +798,7 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             var isOt = isPrimary ? _viewModel.IsOldTestament : _viewModel.IsSecondaryOldTestament;
             var db = isPrimary ? _commentaryDbHelper : _secondaryCommentaryDbHelper;
-            var text = db?.GetCommentary(bookNumber, chapter, verse, marker)
-                       ?? "No commentary found.";
+            var text = db?.GetCommentary(bookNumber, chapter, verse, marker) ?? "No commentary found.";
             var bookName = BibleData.GetBookByCustomNumber(bookNumber)?.Name ?? "";
             var title = $"Notes on {bookName} {chapter}:{verse}{marker}";
             _modalState = new ReaderModalState.Commentary(
@@ -861,8 +820,7 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void OnCrossRefClick(int book, int chapter, int verse, bool isPrimary)
         {
-            var refs = _crossRefHelper?.GetCrossReferences(book, chapter, verse)
-                       ?? [];
+            var refs = _crossRefHelper?.GetCrossReferences(book, chapter, verse) ?? [];
             var bookName = BibleData.GetBookByCustomNumber(book)?.Name ?? book.ToString();
             var source = $"References for {bookName} {chapter}:{verse}";
 
@@ -903,7 +861,7 @@ namespace FountOfHopeStudyBiblePC.Views
             var modal = new InteractiveModal(
                 viewModel: _viewModel,
                 bibleDb: _databaseHelper,
-                onNavigateToReader: (p) =>
+                onNavigateToReader: p =>
                 {
                     _viewModel.PrimaryPassage = p;
                     _viewModel.NavigateTo(new Screen.Reader(p));
@@ -948,28 +906,28 @@ namespace FountOfHopeStudyBiblePC.Views
             _ => false
         };
 
-        private static bool GetModalUseSecondaryDict(ReaderModalState s) =>
-            s is ReaderModalState.Word w && w.UseSecondaryDictionary;
+        private static bool GetModalUseSecondaryDict(ReaderModalState s)
+            => s is ReaderModalState.Word w && w.UseSecondaryDictionary;
 
-        private static string GetModalTitle(ReaderModalState s) =>
-            s is ReaderModalState.Commentary c ? c.Title : "";
+        private static string GetModalTitle(ReaderModalState s)
+            => s is ReaderModalState.Commentary c ? c.Title : "";
 
-        private static string GetModalContent(ReaderModalState s) =>
-            s is ReaderModalState.Commentary c ? c.Content
+        private static string GetModalContent(ReaderModalState s)
+            => s is ReaderModalState.Commentary c ? c.Content
             : s is ReaderModalState.CrossRef cr ? cr.Content
             : "";
 
-        private static string GetModalWord(ReaderModalState s) =>
-            s is ReaderModalState.Word w ? w.Term : "";
+        private static string GetModalWord(ReaderModalState s)
+            => s is ReaderModalState.Word w ? w.Term : "";
 
-        private static string GetModalDefinition(ReaderModalState s) =>
-            s is ReaderModalState.Word w ? w.Definition : "";
+        private static string GetModalDefinition(ReaderModalState s)
+            => s is ReaderModalState.Word w ? w.Definition : "";
 
-        private static string GetModalStrongNumber(ReaderModalState s) =>
-            s is ReaderModalState.Strong st ? st.StrongNumber : "";
+        private static string GetModalStrongNumber(ReaderModalState s)
+            => s is ReaderModalState.Strong st ? st.StrongNumber : "";
 
-        private static string GetModalStrongDefinition(ReaderModalState s) =>
-            s is ReaderModalState.Strong st ? st.Definition : "";
+        private static string GetModalStrongDefinition(ReaderModalState s)
+            => s is ReaderModalState.Strong st ? st.Definition : "";
 
         private static int? GetModalBook(ReaderModalState s) => s switch
         {
@@ -994,10 +952,7 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private async void ShowVerseOptionsModal()
         {
-            if (_selectedVerse == null || _selectedPassage == null)
-            {
-                return;
-            }
+            if (_selectedVerse == null || _selectedPassage == null) return;
 
             var cache = _selectedIsPrimary ? _primaryLoadedVerses : _secondaryLoadedVerses;
             var db = _selectedIsPrimary ? _databaseHelper : _secondaryDatabaseHelper;
@@ -1011,8 +966,8 @@ namespace FountOfHopeStudyBiblePC.Views
                 verse: _selectedVerse,
                 chapterVerses: chapterVerses,
                 databaseHelper: db,
-                onAddBookmark: () => App.Log("VerseOptions: bookmark toggled"),
-                onAddHighlight: () => App.Log("VerseOptions: highlight toggled"),
+                onAddBookmark: () => { },
+                onAddHighlight: () => { },
                 onShare: ShareVersesFromModal,
                 onAddNote: OpenNotesModal);
 
@@ -1073,7 +1028,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 verses: verses,
                 passage: _selectedPassage ?? _primaryCurrent,
                 databaseHelper: _databaseHelper,
-                onSave: () => App.Log("Notes: save callback fired"));
+                onSave: () => { });
 
             var owner = Window.GetWindow(this);
             if (owner != null) modal.Owner = owner;

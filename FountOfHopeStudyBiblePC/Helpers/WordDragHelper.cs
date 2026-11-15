@@ -1,29 +1,13 @@
-﻿// Helpers/WordDragHelper.cs
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
 namespace FountOfHopeStudyBiblePC.Helpers
 {
-    /// <summary>
-    /// Shared drag-to-highlight primitives.
-    /// Used by <c>ReaderScreen</c>'s visual-tree fallback and by every reader
-    /// control that implements <c>IWordHighlightHost</c>.
-    /// </summary>
     public static class WordDragHelper
     {
-        /// <summary>Drags shorter than this (in device-independent px) are treated as clicks.</summary>
         public const double ThresholdPixels = 3.0;
 
-        /// <summary>
-        /// Walks up from a hit-test result to the nearest word <see cref="TextBlock"/>.
-        /// Returns <c>null</c> if we hit a non-word TextBlock (verse number,
-        /// container paragraph, whitespace). Setting <c>Tag = "noword"</c> on a
-        /// TextBlock opts it out entirely.
-        /// </summary>
         public static TextBlock? FindWordAt(DependencyObject? source)
         {
             var current = source;
@@ -36,10 +20,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
             return null;
         }
 
-        /// <summary>
-        /// A word element is a TextBlock whose trimmed text is a single,
-        /// non-empty token containing at least one letter.
-        /// </summary>
         public static bool IsWordElement(TextBlock tb)
         {
             if (tb.Tag is string tag && tag == "noword") return false;
@@ -47,44 +27,38 @@ namespace FountOfHopeStudyBiblePC.Helpers
             var text = tb.Text;
             if (string.IsNullOrWhiteSpace(text)) return false;
 
-            var trimmed = text.Trim();
-            bool hasLetter = false;
-            foreach (var ch in trimmed)
+            int start = 0, end = text.Length;
+            while (start < end && char.IsWhiteSpace(text[start])) start++;
+            while (end > start && char.IsWhiteSpace(text[end - 1])) end--;
+            if (start == end) return false;
+
+            var hasLetter = false;
+            for (int i = start; i < end; i++)
             {
-                if (char.IsWhiteSpace(ch)) return false;   // multi-word → container
+                var ch = text[i];
+                if (char.IsWhiteSpace(ch)) return false;
                 if (!hasLetter && char.IsLetter(ch)) hasLetter = true;
             }
             return hasLetter;
         }
 
-        /// <summary>
-        /// Enumerates word TextBlocks in visual (top-to-bottom, left-to-right) order
-        /// below <paramref name="root"/>.
-        /// </summary>
         public static IEnumerable<TextBlock> EnumerateWords(DependencyObject root)
         {
-            foreach (var d in EnumerateVisualOrder(root))
-                if (d is TextBlock tb && IsWordElement(tb))
-                    yield return tb;
-        }
+            var stack = new Stack<DependencyObject>();
+            stack.Push(root);
 
-        private static IEnumerable<DependencyObject> EnumerateVisualOrder(DependencyObject root)
-        {
-            yield return root;
-            int count = VisualTreeHelper.GetChildrenCount(root);
-            for (int i = 0; i < count; i++)
+            while (stack.Count > 0)
             {
-                var child = VisualTreeHelper.GetChild(root, i);
-                foreach (var d in EnumerateVisualOrder(child))
-                    yield return d;
+                var node = stack.Pop();
+                if (node is TextBlock tb && IsWordElement(tb))
+                    yield return tb;
+
+                var childCount = VisualTreeHelper.GetChildrenCount(node);
+                for (int i = childCount - 1; i >= 0; i--)
+                    stack.Push(VisualTreeHelper.GetChild(node, i));
             }
         }
 
-        /// <summary>
-        /// Normalised [from,to] indices into <paramref name="words"/> covering the
-        /// drag from <paramref name="start"/> to <paramref name="end"/>. Order-agnostic.
-        /// Returns <c>null</c> if either block isn't in the list.
-        /// </summary>
         public static (int from, int to)? RangeIndices(
             IList<TextBlock> words, TextBlock start, TextBlock end)
         {
@@ -94,11 +68,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
             return (Math.Min(a, b), Math.Max(a, b));
         }
 
-        /// <summary>
-        /// Repaints the translucent drag preview so only the words currently
-        /// in [from..to] carry a preview brush. Restores words that fall out
-        /// of range back to their original brush.
-        /// </summary>
         public static void UpdatePreview(
             IDictionary<TextBlock, Brush?> originals,
             IList<TextBlock> words,
@@ -106,32 +75,46 @@ namespace FountOfHopeStudyBiblePC.Helpers
             int to,
             Color markerColor)
         {
-            var inRange = new HashSet<TextBlock>();
-            for (int i = from; i <= to; i++) inRange.Add(words[i]);
-
-            // Restore words that left the range.
-            foreach (var word in originals.Keys.ToList())
+            HashSet<TextBlock>? inRange = null;
+            if (from <= to)
             {
-                if (!inRange.Contains(word))
+                inRange = new HashSet<TextBlock>(to - from + 1);
+                for (int i = from; i <= to; i++)
+                    inRange.Add(words[i]);
+            }
+
+            if (originals.Count > 0)
+            {
+                List<TextBlock>? toRemove = null;
+                foreach (var kvp in originals)
                 {
-                    word.Background = originals[word];
-                    originals.Remove(word);
+                    if (inRange == null || !inRange.Contains(kvp.Key))
+                        (toRemove ??= new List<TextBlock>()).Add(kvp.Key);
+                }
+
+                if (toRemove != null)
+                {
+                    foreach (var w in toRemove)
+                    {
+                        w.Background = originals[w];
+                        originals.Remove(w);
+                    }
                 }
             }
 
-            // Add a translucent marker to newly-entered words.
-            var previewBrush = new SolidColorBrush(markerColor) { Opacity = 0.4 };
+            if (inRange == null) return;
+
+            SolidColorBrush? previewBrush = null;
             foreach (var word in inRange)
             {
-                if (!originals.ContainsKey(word))
-                {
-                    originals[word] = word.Background;
-                    word.Background = previewBrush;
-                }
+                if (originals.ContainsKey(word)) continue;
+
+                previewBrush ??= new SolidColorBrush(markerColor) { Opacity = 0.4 };
+                originals[word] = word.Background;
+                word.Background = previewBrush;
             }
         }
 
-        /// <summary>Restores every previewed word back to its original brush.</summary>
         public static void ClearPreview(IDictionary<TextBlock, Brush?> originals)
         {
             foreach (var kvp in originals)
@@ -139,7 +122,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
             originals.Clear();
         }
 
-        /// <summary>Applies the final solid highlight to words [from..to].</summary>
         public static void ApplySolid(
             IList<TextBlock> words,
             int from,

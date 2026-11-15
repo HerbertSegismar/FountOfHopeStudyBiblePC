@@ -1,5 +1,4 @@
-﻿// Views/Modals/BookmarkSortDialog.xaml.cs
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -10,6 +9,16 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 {
     public partial class BookmarkSortDialog : Window
     {
+        private static readonly SolidColorBrush OptionForegroundBrush =
+            Frozen(Color.FromRgb(0xE6, 0xEA, 0xF0));
+
+        private static SolidColorBrush Frozen(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
         public BookmarkSortOrder SelectedOrder { get; private set; }
 
         private readonly ModalOverlayController _overlay;
@@ -26,22 +35,20 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
             SelectedOrder = current;
 
-            foreach (BookmarkSortOrder order in Enum.GetValues(typeof(BookmarkSortOrder)))
+            foreach (var order in Enum.GetValues<BookmarkSortOrder>())
             {
                 var radio = new RadioButton
                 {
                     Content = order.DisplayName(),
                     IsChecked = order == current,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0xE6, 0xEA, 0xF0)),
+                    Foreground = OptionForegroundBrush,
                     Margin = new Thickness(0, 6, 0, 6),
-                    Tag = order,
                 };
-                radio.Checked += (_, _) => SelectedOrder = (BookmarkSortOrder)radio.Tag;
+                radio.Checked += (_, _) => SelectedOrder = order;
                 OptionsPanel.Children.Add(radio);
             }
         }
 
-        // ── Thin XAML stubs → ModalOverlayController ─────────────
         private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
             => _overlay.HandleScrimMouseDown(sender, e);
 
@@ -51,12 +58,9 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private void Window_KeyDown(object sender, KeyEventArgs e)
             => _overlay.HandleKeyDown(sender, e);
 
-        // ═══════════════════════════════════════════════════════════
-        //  Confirm
-        // ═══════════════════════════════════════════════════════════
         private void DoneButton_Click(object sender, RoutedEventArgs e)
         {
-            DialogResult = true;   // requires ShowDialog() — see caller note below
+            DialogResult = true;
             Close();
         }
     }

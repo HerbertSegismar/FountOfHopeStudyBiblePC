@@ -4,7 +4,6 @@ using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
 using FountOfHopeStudyBiblePC.ViewModels;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -12,11 +11,77 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 namespace FountOfHopeStudyBiblePC.Views
 {
     public partial class HomeScreen : UserControl
     {
+        private static readonly Action NoOp = () => { };
+        private static readonly Action<PassageSelection> NoOpPassage = _ => { };
+        private static readonly Action<Screen> NoOpScreen = _ => { };
+
+        private static readonly IReadOnlyList<PopularDevotional> AllDevotionals =
+        [
+            new("Psalm 23", "The Lord is my shepherd...", "Psalms", 23, 1),
+            new("The Lord's Prayer", "Our Father in heaven...", "Matthew", 6, 9),
+            new("The Love Chapter", "Love is patient, love is kind...", "1 Corinthians", 13, 1),
+            new("John 3:16", "For God so loved the world...", "John", 3, 16),
+            new("The Beatitudes", "Blessed are the poor in spirit...", "Matthew", 5, 3),
+            new("The Good Samaritan", "A man was going down from Jerusalem...", "Luke", 10, 30),
+            new("The Prodigal Son", "There was a man who had two sons...", "Luke", 15, 11),
+            new("The Sermon on the Mount", "Seeing the crowds, he went up on the mountain...", "Matthew", 5, 1),
+            new("The Great Commandment", "You shall love the Lord your God...", "Matthew", 22, 37),
+            new("The Golden Rule", "So whatever you wish that others would do to you...", "Matthew", 7, 12),
+            new("I Can Do All Things", "I can do all things through him who strengthens me...", "Philippians", 4, 13),
+            new("God's Plans for You", "For I know the plans I have for you...", "Jeremiah", 29, 11),
+            new("Trust in the Lord", "Trust in the Lord with all your heart...", "Proverbs", 3, 5),
+            new("All Things Work Together for Good", "And we know that for those who love God all things work together for good...", "Romans", 8, 28),
+            new("Wait for the Lord", "But they who wait for the Lord shall renew their strength...", "Isaiah", 40, 31),
+            new("Saved by Grace", "For by grace you have been saved through faith...", "Ephesians", 2, 8),
+            new("Lamp to My Feet", "Your word is a lamp to my feet...", "Psalms", 119, 105),
+            new("Be Strong and Courageous", "Have I not commanded you? Be strong and courageous...", "Joshua", 1, 9),
+            new("Come to Me", "Come to me, all who labor and are heavy laden...", "Matthew", 11, 28),
+            new("Rejoice Always", "Rejoice always, pray without ceasing...", "1 Thessalonians", 5, 16),
+            new("The Alpha & Omega", "Behold, He comes with clouds...", "Revelation", 1, 7),
+            new("The Armor of God", "Put on the whole armor of God...", "Ephesians", 6, 11),
+            new("The Fruit of the Spirit", "But the fruit of the Spirit is love, joy, peace...", "Galatians", 5, 22),
+            new("The Great Commission", "Go therefore and make disciples of all nations...", "Matthew", 28, 19),
+            new("The New Commandment", "A new commandment I give to you, that you love one another...", "John", 13, 34),
+            new("The Resurrection", "But in fact Christ has been raised from the dead...", "1 Corinthians", 15, 20),
+            new("The Shema", "Hear, O Israel: The Lord our God, the Lord is one...", "Deuteronomy", 6, 4),
+            new("The Ten Commandments", "And God spoke all these words, saying...", "Exodus", 20, 1),
+            new("The Birth of Jesus", "And she gave birth to her firstborn son...", "Luke", 2, 7),
+            new("The Crucifixion", "And when they had crucified him...", "Matthew", 27, 35),
+            new("The Ascension", "And when he had said these things...", "Acts", 1, 9),
+            new("The Holy Spirit Comes", "And suddenly there came from heaven a sound...", "Acts", 2, 2),
+            new("The New Heaven and Earth", "Then I saw a new heaven and a new earth...", "Revelation", 21, 1),
+            new("Faith Hall of Fame", "Now faith is the assurance of things hoped for...", "Hebrews", 11, 1),
+            new("Nothing Can Separate Us", "For I am sure that neither death nor life...", "Romans", 8, 38),
+            new("The Word Became Flesh", "In the beginning was the Word...", "John", 1, 1),
+            new("The Parable of the Sower", "A sower went out to sow...", "Matthew", 13, 3),
+            new("The Feeding of the 5,000", "Then Jesus took the loaves...", "John", 6, 11),
+            new("The Good Shepherd", "I am the good shepherd...", "John", 10, 11),
+            new("The Way and the Truth", "Jesus said to him, 'I am the way...'", "John", 14, 6),
+            new("The Vine and Branches", "I am the vine; you are the branches...", "John", 15, 5),
+            new("The Light of the World", "Again Jesus spoke to them, saying...", "John", 8, 12),
+            new("The Resurrection and Life", "Jesus said to her, 'I am the resurrection...'", "John", 11, 25),
+            new("The Transfiguration", "And he was transfigured before them...", "Matthew", 17, 2),
+            new("The Widow's Offering", "And he called his disciples to him...", "Mark", 12, 43),
+            new("The Suffering Servant", "He was despised and rejected by men, a man of sorrows...", "Isaiah", 53, 3),
+            new("The Crucifixion Psalm", "My God, my God, why have you forsaken me?", "Psalms", 22, 1),
+            new("The First Gospel", "He will crush your head, and you will strike his heel.", "Genesis", 3, 15),
+            new("Prophecy of Bethlehem", "But you, Bethlehem Ephrathah... out of you will come for me one who will be ruler over Israel.", "Micah", 5, 2),
+            new("The Triumphal Entry", "See, your king comes to you, righteous and victorious, lowly and riding on a donkey.", "Zechariah", 9, 9),
+            new("The Virgin Birth", "The virgin will conceive and give birth to a son, and will call him Immanuel.", "Isaiah", 7, 14),
+            new("The Messenger of the Covenant", "The Lord you are seeking will suddenly come to his temple.", "Malachi", 3, 1),
+            new("The Son of Man", "He was given authority, glory and sovereign power; all nations worshiped him.", "Daniel", 7, 14),
+            new("The Righteous Branch", "I will raise up for David a righteous Branch, a King who will reign wisely.", "Jeremiah", 23, 5),
+            new("The Priest Forever", "You are a priest forever, in the order of Melchizedek.", "Psalms", 110, 4),
+            new("The Passover Lamb", "The animals you choose must be year-old males without defect...", "Exodus", 12, 5),
+            new("The Bronze Serpent", "So Moses made a bronze serpent and put it up on a pole...", "Numbers", 21, 9),
+        ];
+
         public AppViewModel ViewModel => _viewModel;
         private readonly AppViewModel _viewModel;
         private readonly Action<PassageSelection> _onNavigateToReader;
@@ -34,13 +99,9 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private List<Verse>? _dailyVerses;
         private bool _isBookmarked;
-
-        private bool _themeHooked;
-
         private bool _applyingTheme;
 
         public ObservableCollection<QuickAction> QuickActions { get; } = [];
-
         public ObservableCollection<PopularDevotional> PopularDevotionals { get; } = [];
 
         public HomeScreen(
@@ -55,44 +116,50 @@ namespace FountOfHopeStudyBiblePC.Views
             Action? onOpenAnimatorClick = null,
             Action? onOpenGenerationsClick = null)
         {
-            var sw = Stopwatch.StartNew();
-
             InitializeComponent();
 
             _viewModel = viewModel;
-            _onNavigateToReader = onNavigateToReader;
-            _onNavigateToScreen = onNavigateToScreen;
+            _onNavigateToReader = onNavigateToReader ?? NoOpPassage;
+            _onNavigateToScreen = onNavigateToScreen ?? NoOpScreen;
             _databaseHelper = databaseHelper;
 
-            _onTakeBibleQuizClick = onTakeBibleQuizClick ?? (() => { });
-            _onLearnHebrewClick = onLearnHebrewClick ?? (() => { });
-            _onLearnGreekClick = onLearnGreekClick ?? (() => { });
-            _onOpenDictionaryClick = onOpenDictionaryClick ?? (() => { });
-            _onOpenAnimatorClick = onOpenAnimatorClick ?? (() => { });
-            _onOpenGenerationsClick = onOpenGenerationsClick ?? (() => { });
+            _onTakeBibleQuizClick = onTakeBibleQuizClick ?? NoOp;
+            _onLearnHebrewClick = onLearnHebrewClick ?? NoOp;
+            _onLearnGreekClick = onLearnGreekClick ?? NoOp;
+            _onOpenDictionaryClick = onOpenDictionaryClick ?? NoOp;
+            _onOpenAnimatorClick = onOpenAnimatorClick ?? NoOp;
+            _onOpenGenerationsClick = onOpenGenerationsClick ?? NoOp;
 
             BuildQuickActions();
-
             LoadPopularDevotionals();
             HookImageSection();
 
             ThemeManager.Changed += OnThemeChanged;
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
-            _themeHooked = true;
 
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
+        }
 
-            Loaded += (_, __) => ApplyTheme();
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            ApplyTheme();
+            SetRandomBackgroundImage();
 
-            sw.Stop();
+            Dispatcher.BeginInvoke(new Action(async () => await RefreshDailyVerseAsync()),
+                DispatcherPriority.Background);
+        }
+
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            ThemeManager.Changed -= OnThemeChanged;
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         }
 
         private void SetRandomBackgroundImage()
         {
             var textures = _viewModel.Textures;
-            if (textures is null || textures.Count == 0)
-                return;
+            if (textures is null || textures.Count == 0) return;
 
             var path = ImageAssets.GetAssetImagePath(textures[_rng.Next(textures.Count)]);
 
@@ -102,25 +169,6 @@ namespace FountOfHopeStudyBiblePC.Views
                 if (img is not null)
                     Dispatcher.Invoke(() => DailyVerseBackgroundBrush.ImageSource = img);
             });
-        }
-
-        private void OnLoaded(object sender, RoutedEventArgs e)
-        {
-            SetRandomBackgroundImage();
-
-            Dispatcher.BeginInvoke(new Action(async () =>
-            {
-                var sw = Stopwatch.StartNew();
-                await RefreshDailyVerseAsync();
-            }), System.Windows.Threading.DispatcherPriority.Background);
-        }
-
-        private void OnUnloaded(object sender, RoutedEventArgs e)
-        {
-            if (!_themeHooked) return;
-            ThemeManager.Changed -= OnThemeChanged;
-            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-            _themeHooked = false;
         }
 
         private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -188,11 +236,7 @@ namespace FountOfHopeStudyBiblePC.Views
         }
 
         private static Brush GetBrush(string key)
-        {
-            if (Application.Current?.Resources[key] is Brush b)
-                return b;
-            return Brushes.Transparent;
-        }
+            => Application.Current?.Resources[key] as Brush ?? Brushes.Transparent;
 
         private static void RefreshItemsControl(
             ItemsControl? control, Brush primaryText, Brush secondaryText, Brush icon)
@@ -201,19 +245,21 @@ namespace FountOfHopeStudyBiblePC.Views
 
             foreach (var container in EnumerateContainers(control))
             {
-                foreach (var tb in FindVisualChildren<TextBlock>(container))
+                foreach (var fe in FindVisualChildren<FrameworkElement>(container))
                 {
-                    if (Equals(tb.Tag, "NoTheme")) continue;
+                    if (Equals(fe.Tag, "NoTheme")) continue;
 
-                    tb.Foreground = tb.FontWeight >= FontWeights.SemiBold
-                        ? primaryText
-                        : secondaryText;
-                }
-
-                foreach (var ctl in FindVisualChildren<Control>(container))
-                {
-                    if (Equals(ctl.Tag, "NoTheme")) continue;
-                    if (ctl.Foreground is SolidColorBrush) ctl.Foreground = icon;
+                    switch (fe)
+                    {
+                        case TextBlock tb:
+                            tb.Foreground = tb.FontWeight >= FontWeights.SemiBold
+                                ? primaryText
+                                : secondaryText;
+                            break;
+                        case Control ctl when ctl.Foreground is SolidColorBrush:
+                            ctl.Foreground = icon;
+                            break;
+                    }
                 }
             }
         }
@@ -226,31 +272,18 @@ namespace FountOfHopeStudyBiblePC.Views
 
                 switch (fe)
                 {
-                    case Control ctl when ctl.Background is SolidColorBrush cbg
-                                      && !IsThemeNeutral(cbg.Color):
-                        ctl.Background = FrozenBrush(
-                            Color.FromArgb(cbg.Color.A, primary.R, primary.G, primary.B));
+                    case Control ctl:
+                        if (ctl.Background is SolidColorBrush cbg && !IsThemeNeutral(cbg.Color))
+                            ctl.Background = FrozenBrush(Color.FromArgb(cbg.Color.A, primary.R, primary.G, primary.B));
+                        if (ctl.BorderBrush is SolidColorBrush cbb && !IsThemeNeutral(cbb.Color))
+                            ctl.BorderBrush = FrozenBrush(Color.FromArgb(cbb.Color.A, primary.R, primary.G, primary.B));
                         break;
 
-                    case Border b when b.Background is SolidColorBrush bbg
-                                    && !IsThemeNeutral(bbg.Color):
-                        b.Background = FrozenBrush(
-                            Color.FromArgb(bbg.Color.A, primary.R, primary.G, primary.B));
-                        break;
-                }
-
-                switch (fe)
-                {
-                    case Control ctl when ctl.BorderBrush is SolidColorBrush cbb
-                                      && !IsThemeNeutral(cbb.Color):
-                        ctl.BorderBrush = FrozenBrush(
-                            Color.FromArgb(cbb.Color.A, primary.R, primary.G, primary.B));
-                        break;
-
-                    case Border b when b.BorderBrush is SolidColorBrush bbb
-                                    && !IsThemeNeutral(bbb.Color):
-                        b.BorderBrush = FrozenBrush(
-                            Color.FromArgb(bbb.Color.A, primary.R, primary.G, primary.B));
+                    case Border b:
+                        if (b.Background is SolidColorBrush bbg && !IsThemeNeutral(bbg.Color))
+                            b.Background = FrozenBrush(Color.FromArgb(bbg.Color.A, primary.R, primary.G, primary.B));
+                        if (b.BorderBrush is SolidColorBrush bbb && !IsThemeNeutral(bbb.Color))
+                            b.BorderBrush = FrozenBrush(Color.FromArgb(bbb.Color.A, primary.R, primary.G, primary.B));
                         break;
                 }
             }
@@ -324,14 +357,11 @@ namespace FountOfHopeStudyBiblePC.Views
             ImageSectionControl.DatabaseHelper = _databaseHelper;
             ImageSectionControl.IsDarkTheme = ThemeManager.DarkTheme;
 
-            ImageSectionControl.PassageSelected += (_, selection) =>
-                _onNavigateToReader(selection);
+            ImageSectionControl.PassageSelected += (_, selection) => _onNavigateToReader(selection);
         }
 
         private void BuildQuickActions()
         {
-            App.Log($"BuildQuickActions: Textures.Count={_viewModel.Textures.Count}");
-
             var totalImages = _viewModel.Textures;
             var uniqueQuickActionImages = totalImages
                 .OrderBy(_ => _rng.Next())
@@ -372,20 +402,16 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private static ImageSource? LoadThumbnail(string? pathOrUri, int decodeWidth = 240)
         {
-            if (string.IsNullOrEmpty(pathOrUri))
-            {
-                return null;
-            }
+            if (string.IsNullOrEmpty(pathOrUri)) return null;
 
             try
             {
                 Uri? uri = null;
 
                 if (pathOrUri.StartsWith("pack://", StringComparison.OrdinalIgnoreCase))
-                {
                     return null;
-                }
-                else if (File.Exists(pathOrUri))
+
+                if (File.Exists(pathOrUri))
                 {
                     uri = new Uri(pathOrUri, UriKind.Absolute);
                 }
@@ -393,15 +419,10 @@ namespace FountOfHopeStudyBiblePC.Views
                 {
                     var candidate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, pathOrUri);
                     if (File.Exists(candidate))
-                    {
                         uri = new Uri(candidate, UriKind.Absolute);
-                    }
                 }
 
-                if (uri == null)
-                {
-                    return null;
-                }
+                if (uri == null) return null;
 
                 var bmp = new BitmapImage();
                 bmp.BeginInit();
@@ -413,7 +434,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 bmp.Freeze();
                 return bmp;
             }
-            catch (Exception)
+            catch
             {
                 return null;
             }
@@ -502,7 +523,6 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             var verse = _dailyVerses?.FirstOrDefault();
             if (verse is null) return;
-
             _onNavigateToReader(BuildSelection(verse));
         }
 
@@ -575,72 +595,7 @@ namespace FountOfHopeStudyBiblePC.Views
         }
 
         private List<PopularDevotional> GetRandomDevotionals()
-        {
-            var allDevotionals = new List<PopularDevotional>
-            {
-                new("Psalm 23", "The Lord is my shepherd...", "Psalms", 23, 1),
-                new("The Lord's Prayer", "Our Father in heaven...", "Matthew", 6, 9),
-                new("The Love Chapter", "Love is patient, love is kind...", "1 Corinthians", 13, 1),
-                new("John 3:16", "For God so loved the world...", "John", 3, 16),
-                new("The Beatitudes", "Blessed are the poor in spirit...", "Matthew", 5, 3),
-                new("The Good Samaritan", "A man was going down from Jerusalem...", "Luke", 10, 30),
-                new("The Prodigal Son", "There was a man who had two sons...", "Luke", 15, 11),
-                new("The Sermon on the Mount", "Seeing the crowds, he went up on the mountain...", "Matthew", 5, 1),
-                new("The Great Commandment", "You shall love the Lord your God...", "Matthew", 22, 37),
-                new("The Golden Rule", "So whatever you wish that others would do to you...", "Matthew", 7, 12),
-                new("I Can Do All Things", "I can do all things through him who strengthens me...", "Philippians", 4, 13),
-                new("God's Plans for You", "For I know the plans I have for you...", "Jeremiah", 29, 11),
-                new("Trust in the Lord", "Trust in the Lord with all your heart...", "Proverbs", 3, 5),
-                new("All Things Work Together for Good", "And we know that for those who love God all things work together for good...", "Romans", 8, 28),
-                new("Wait for the Lord", "But they who wait for the Lord shall renew their strength...", "Isaiah", 40, 31),
-                new("Saved by Grace", "For by grace you have been saved through faith...", "Ephesians", 2, 8),
-                new("Lamp to My Feet", "Your word is a lamp to my feet...", "Psalms", 119, 105),
-                new("Be Strong and Courageous", "Have I not commanded you? Be strong and courageous...", "Joshua", 1, 9),
-                new("Come to Me", "Come to me, all who labor and are heavy laden...", "Matthew", 11, 28),
-                new("Rejoice Always", "Rejoice always, pray without ceasing...", "1 Thessalonians", 5, 16),
-                new("The Alpha & Omega", "Behold, He comes with clouds...", "Revelation", 1, 7),
-                new("The Armor of God", "Put on the whole armor of God...", "Ephesians", 6, 11),
-                new("The Fruit of the Spirit", "But the fruit of the Spirit is love, joy, peace...", "Galatians", 5, 22),
-                new("The Great Commission", "Go therefore and make disciples of all nations...", "Matthew", 28, 19),
-                new("The New Commandment", "A new commandment I give to you, that you love one another...", "John", 13, 34),
-                new("The Resurrection", "But in fact Christ has been raised from the dead...", "1 Corinthians", 15, 20),
-                new("The Shema", "Hear, O Israel: The Lord our God, the Lord is one...", "Deuteronomy", 6, 4),
-                new("The Ten Commandments", "And God spoke all these words, saying...", "Exodus", 20, 1),
-                new("The Birth of Jesus", "And she gave birth to her firstborn son...", "Luke", 2, 7),
-                new("The Crucifixion", "And when they had crucified him...", "Matthew", 27, 35),
-                new("The Ascension", "And when he had said these things...", "Acts", 1, 9),
-                new("The Holy Spirit Comes", "And suddenly there came from heaven a sound...", "Acts", 2, 2),
-                new("The New Heaven and Earth", "Then I saw a new heaven and a new earth...", "Revelation", 21, 1),
-                new("Faith Hall of Fame", "Now faith is the assurance of things hoped for...", "Hebrews", 11, 1),
-                new("Nothing Can Separate Us", "For I am sure that neither death nor life...", "Romans", 8, 38),
-                new("The Word Became Flesh", "In the beginning was the Word...", "John", 1, 1),
-                new("The Parable of the Sower", "A sower went out to sow...", "Matthew", 13, 3),
-                new("The Feeding of the 5,000", "Then Jesus took the loaves...", "John", 6, 11),
-                new("The Good Shepherd", "I am the good shepherd...", "John", 10, 11),
-                new("The Way and the Truth", "Jesus said to him, 'I am the way...'", "John", 14, 6),
-                new("The Vine and Branches", "I am the vine; you are the branches...", "John", 15, 5),
-                new("The Light of the World", "Again Jesus spoke to them, saying...", "John", 8, 12),
-                new("The Resurrection and Life", "Jesus said to her, 'I am the resurrection...'", "John", 11, 25),
-                new("The Transfiguration", "And he was transfigured before them...", "Matthew", 17, 2),
-                new("The Widow's Offering", "And he called his disciples to him...", "Mark", 12, 43),
-                new("The Suffering Servant", "He was despised and rejected by men, a man of sorrows...", "Isaiah", 53, 3),
-                new("The Crucifixion Psalm", "My God, my God, why have you forsaken me?", "Psalms", 22, 1),
-                new("The First Gospel", "He will crush your head, and you will strike his heel.", "Genesis", 3, 15),
-                new("Prophecy of Bethlehem", "But you, Bethlehem Ephrathah... out of you will come for me one who will be ruler over Israel.", "Micah", 5, 2),
-                new("The Triumphal Entry", "See, your king comes to you, righteous and victorious, lowly and riding on a donkey.", "Zechariah", 9, 9),
-                new("The Virgin Birth", "The virgin will conceive and give birth to a son, and will call him Immanuel.", "Isaiah", 7, 14),
-                new("The Messenger of the Covenant", "The Lord you are seeking will suddenly come to his temple.", "Malachi", 3, 1),
-                new("The Son of Man", "He was given authority, glory and sovereign power; all nations worshiped him.", "Daniel", 7, 14),
-                new("The Righteous Branch", "I will raise up for David a righteous Branch, a King who will reign wisely.", "Jeremiah", 23, 5),
-                new("The Priest Forever", "You are a priest forever, in the order of Melchizedek.", "Psalms", 110, 4),
-                new("The Passover Lamb", "The animals you choose must be year-old males without defect...", "Exodus", 12, 5),
-                new("The Bronze Serpent", "So Moses made a bronze serpent and put it up on a pole...", "Numbers", 21, 9)
-            };
-
-            return [.. allDevotionals
-                .OrderBy(_ => _rng.Next())
-                .Take(5)];
-        }
+            => [.. AllDevotionals.OrderBy(_ => _rng.Next()).Take(5)];
 
         private void TakeBibleQuiz_Click(object sender, RoutedEventArgs e) => _onTakeBibleQuizClick();
         private void LearnHebrew_Click(object sender, RoutedEventArgs e) => _onLearnHebrewClick();

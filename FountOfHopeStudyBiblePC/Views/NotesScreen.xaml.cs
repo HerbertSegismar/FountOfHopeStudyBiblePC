@@ -2,6 +2,7 @@
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using FountOfHopeStudyBiblePC.Services;
@@ -11,8 +12,28 @@ namespace FountOfHopeStudyBiblePC.Views
 {
     public partial class NotesScreen : UserControl
     {
+        private static readonly SolidColorBrush SelectedBgBrush = Frozen(Color.FromArgb(0x55, 0x7F, 0xB2, 0xFF));
+        private static readonly SolidColorBrush CardDarkBrush = Frozen(Color.FromRgb(0x23, 0x2A, 0x33));
+        private static readonly SolidColorBrush CardLightBrush = Frozen(Color.FromRgb(0xEA, 0xE7, 0xE3));
+        private static readonly SolidColorBrush TitleBrush = Frozen(Color.FromRgb(0x7F, 0xB2, 0xFF));
+        private static readonly SolidColorBrush BodyDarkBrush = Frozen(Colors.White);
+        private static readonly SolidColorBrush BodyLightBrush = Frozen(Color.FromRgb(0x1A, 0x1A, 0x1A));
+        private static readonly SolidColorBrush BookChipBgBrush = Frozen(Color.FromArgb(0x33, 0x7F, 0xB2, 0xFF));
+        private static readonly SolidColorBrush ChapterChipBgBrush = Frozen(Color.FromArgb(0x33, 0xB1, 0x7D, 0xF5));
+        private static readonly SolidColorBrush ChipFgBrush = Frozen(Colors.White);
+        private static readonly SolidColorBrush DateBrush = Frozen(Color.FromArgb(0x88, 0xAA, 0xB4, 0xC0));
+        private static readonly SolidColorBrush DeleteIconBrush = Frozen(Color.FromRgb(0xEB, 0x4E, 0x4E));
+
+        private static SolidColorBrush Frozen(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
         private readonly Action<PassageSelection> _onNavigateToReader;
         private readonly AppViewModel _viewModel;
+        private readonly DispatcherTimer _undoTimer;
         private DatabaseHelper? _db;
 
         private List<Note> _notes = [];
@@ -24,7 +45,6 @@ namespace FountOfHopeStudyBiblePC.Views
         private string _selectedDbName;
 
         private List<Note>? _lastDeleted;
-        private System.Windows.Threading.DispatcherTimer? _undoTimer;
 
         public NotesScreen(
             Action<PassageSelection> onNavigateToReader,
@@ -37,25 +57,31 @@ namespace FountOfHopeStudyBiblePC.Views
             _viewModel = viewModel;
             _selectedDbName = initialDbName;
 
+            _undoTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
+            _undoTimer.Tick += (_, _) =>
+            {
+                _undoTimer.Stop();
+                UndoBar.Visibility = Visibility.Collapsed;
+                _lastDeleted = null;
+            };
+
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
 
             Loaded += NotesScreen_Loaded;
             Unloaded += NotesScreen_Unloaded;
-
-            App.Log("NotesScreen: constructed");
         }
 
         private void NotesScreen_Loaded(object sender, RoutedEventArgs e)
         {
             _db = new DatabaseHelper(_selectedDbName);
             RefreshNotes();
-            UpdateTopBar();
             UpdateVersionCard();
         }
 
         private void NotesScreen_Unloaded(object sender, RoutedEventArgs e)
         {
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _undoTimer.Stop();
             _db?.Dispose();
         }
 
@@ -113,8 +139,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 n.BookName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
                 n.Chapter.ToString().Contains(q) ||
                 n.StartVerse.ToString().Contains(q) ||
-                n.EndVerse.ToString().Contains(q)
-            )];
+                n.EndVerse.ToString().Contains(q))];
         }
 
         private void UpdateTopBar()
@@ -130,8 +155,9 @@ namespace FountOfHopeStudyBiblePC.Views
             if (_multiSelectMode)
                 SelectionHintText.Text = "Tap a note to select. Tap again to deselect.";
 
-            ShareSelectedBtn.IsEnabled = _selectedNotes.Count > 0;
-            DeleteSelectedBtn.IsEnabled = _selectedNotes.Count > 0;
+            var hasSelection = _selectedNotes.Count > 0;
+            ShareSelectedBtn.IsEnabled = hasSelection;
+            DeleteSelectedBtn.IsEnabled = hasSelection;
         }
 
         private void UpdateVersionCard()
@@ -161,29 +187,25 @@ namespace FountOfHopeStudyBiblePC.Views
             NotesScrollViewer.Visibility = Visibility.Visible;
             EmptyStatePanel.Visibility = Visibility.Collapsed;
 
+            var selectedSet = _selectedNotes.ToHashSet();
             foreach (var note in filtered)
-                NotesListPanel.Children.Add(BuildNoteCard(note));
+                NotesListPanel.Children.Add(BuildNoteCard(note, selectedSet.Contains(note)));
         }
 
-        private Border BuildNoteCard(Note note)
+        private Border BuildNoteCard(Note note, bool isSelected)
         {
-            var isSelected = _selectedNotes.Contains(note);
+            var isDark = _viewModel.DarkTheme;
+
             var rangeStr = note.StartVerse == note.EndVerse
                 ? $"{note.StartVerse}"
                 : $"{note.StartVerse}-{note.EndVerse}";
-
-            var bg = isSelected
-                ? Color.FromArgb(0x55, 0x7F, 0xB2, 0xFF)
-                : (_viewModel.DarkTheme
-                    ? Color.FromRgb(0x23, 0x2A, 0x33)
-                    : Color.FromRgb(0xEA, 0xE7, 0xE3));
 
             var border = new Border
             {
                 CornerRadius = new CornerRadius(14),
                 Padding = new Thickness(16),
                 Margin = new Thickness(0, 0, 0, 10),
-                Background = new SolidColorBrush(bg),
+                Background = isSelected ? SelectedBgBrush : (isDark ? CardDarkBrush : CardLightBrush),
                 Tag = note,
                 Cursor = Cursors.Hand,
             };
@@ -217,7 +239,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 Text = $"{note.BookName} {note.Chapter}:{rangeStr}",
                 FontSize = 14,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x7F, 0xB2, 0xFF)),
+                Foreground = TitleBrush,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Center,
             };
@@ -232,15 +254,12 @@ namespace FountOfHopeStudyBiblePC.Views
                     VerticalAlignment = VerticalAlignment.Center,
                 };
 
-                var editBtn = BuildIconButton("✏", "#FF7FB2FF", "Edit note");
+                var editBtn = BuildIconButton("✏", TitleBrush, "Edit note");
                 editBtn.Click += (_, _) => EditNote(note);
                 actions.Children.Add(editBtn);
 
-                var delBtn = BuildIconButton("🗑", "#FFEB4E4E", "Delete note");
-                delBtn.Click += (_, _) =>
-                {
-                    DeleteSingleNote(note);
-                };
+                var delBtn = BuildIconButton("🗑", DeleteIconBrush, "Delete note");
+                delBtn.Click += (_, _) => DeleteSingleNote(note);
                 actions.Children.Add(delBtn);
 
                 Grid.SetColumn(actions, 2);
@@ -259,9 +278,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 MaxHeight = 72,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 Margin = new Thickness(0, 8, 0, 0),
-                Foreground = new SolidColorBrush(_viewModel.DarkTheme
-                    ? Colors.White
-                    : Color.FromRgb(0x1A, 0x1A, 0x1A)),
+                Foreground = isDark ? BodyDarkBrush : BodyLightBrush,
             };
             Grid.SetRow(body, 1);
             grid.Children.Add(body);
@@ -275,21 +292,18 @@ namespace FountOfHopeStudyBiblePC.Views
 
             footer.Children.Add(BuildChip(
                 note.BookName.Length >= 3 ? note.BookName[..3].ToUpperInvariant() : note.BookName.ToUpperInvariant(),
-                Color.FromArgb(0x33, 0x7F, 0xB2, 0xFF), Colors.White));
-            footer.Children.Add(BuildChip(
-                $"Ch {note.Chapter}",
-                Color.FromArgb(0x33, 0xB1, 0x7D, 0xF5), Colors.White));
+                BookChipBgBrush));
+            footer.Children.Add(BuildChip($"Ch {note.Chapter}", ChapterChipBgBrush));
 
             var dt = DateTimeOffset.FromUnixTimeSeconds(note.Timestamp).LocalDateTime;
-            var dateText = new TextBlock
+            footer.Children.Add(new TextBlock
             {
                 Text = $"{dt:MMM dd, yyyy} at {dt:hh:mm tt}",
                 FontSize = 11,
                 Margin = new Thickness(8, 0, 0, 0),
-                Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xAA, 0xB4, 0xC0)),
+                Foreground = DateBrush,
                 VerticalAlignment = VerticalAlignment.Center,
-            };
-            footer.Children.Add(dateText);
+            });
 
             Grid.SetRow(footer, 2);
             grid.Children.Add(footer);
@@ -299,73 +313,59 @@ namespace FountOfHopeStudyBiblePC.Views
             border.MouseLeftButtonUp += (_, e) =>
             {
                 if (e.OriginalSource is Button) return;
-                if (_multiSelectMode)
-                    ToggleNoteSelection(note);
-                else
-                    NavigateToNote(note);
+                if (_multiSelectMode) ToggleNoteSelection(note);
+                else NavigateToNote(note);
             };
             border.MouseRightButtonUp += (_, e) =>
             {
                 e.Handled = true;
-                if (!_multiSelectMode)
-                {
-                    _multiSelectMode = true;
-                    _selectedNotes.Add(note);
-                    UpdateTopBar();
-                    RebuildNotesList();
-                }
+                if (_multiSelectMode) return;
+                _multiSelectMode = true;
+                _selectedNotes.Add(note);
+                UpdateTopBar();
+                RebuildNotesList();
             };
 
             return border;
         }
 
-        private static Button BuildIconButton(string glyph, string hexColor, string tooltip)
+        private static Button BuildIconButton(string glyph, SolidColorBrush fg, string tooltip) => new()
         {
-            var btn = new Button
+            Width = 30,
+            Height = 30,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            ToolTip = tooltip,
+            Content = new TextBlock
             {
-                Width = 30,
-                Height = 30,
-                Background = Brushes.Transparent,
-                BorderThickness = new Thickness(0),
-                Cursor = Cursors.Hand,
-                ToolTip = tooltip,
-                Content = new TextBlock
-                {
-                    Text = glyph,
-                    FontSize = 14,
-                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hexColor)),
-                }
-            };
-            return btn;
-        }
+                Text = glyph,
+                FontSize = 14,
+                Foreground = fg,
+            }
+        };
 
-        private static Border BuildChip(string text, Color bg, Color fg)
+        private static Border BuildChip(string text, SolidColorBrush bg) => new()
         {
-            return new Border
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(8, 3, 8, 3),
+            Margin = new Thickness(0, 0, 6, 0),
+            Background = bg,
+            Child = new TextBlock
             {
-                CornerRadius = new CornerRadius(10),
-                Padding = new Thickness(8, 3, 8, 3),
-                Margin = new Thickness(0, 0, 6, 0),
-                Background = new SolidColorBrush(bg),
-                Child = new TextBlock
-                {
-                    Text = text,
-                    FontSize = 10,
-                    FontWeight = FontWeights.SemiBold,
-                    Foreground = new SolidColorBrush(fg),
-                },
-            };
-        }
+                Text = text,
+                FontSize = 10,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = ChipFgBrush,
+            },
+        };
 
         private void ToggleNoteSelection(Note note)
         {
-            if (_selectedNotes.Contains(note))
-                _selectedNotes.Remove(note);
-            else
-                _selectedNotes.Add(note);
+            if (_selectedNotes.Contains(note)) _selectedNotes.Remove(note);
+            else _selectedNotes.Add(note);
 
-            if (_selectedNotes.Count == 0)
-                _multiSelectMode = false;
+            if (_selectedNotes.Count == 0) _multiSelectMode = false;
 
             UpdateTopBar();
             RebuildNotesList();
@@ -374,10 +374,7 @@ namespace FountOfHopeStudyBiblePC.Views
         private void NavigateToNote(Note note)
         {
             var book = BibleData.GetBookByName(note.BookName);
-            if (book == null)
-            {
-                return;
-            }
+            if (book == null) return;
 
             _onNavigateToReader(new PassageSelection(
                 book.CustomNumber, note.BookName, note.Chapter, note.StartVerse));
@@ -394,19 +391,16 @@ namespace FountOfHopeStudyBiblePC.Views
                 .Where(v => v.VerseNumber >= note.StartVerse && v.VerseNumber <= note.EndVerse)
                 .ToList();
 
-            var modal = new Modals.NotesModal(
+            new Modals.NotesModal(
                 viewModel: _viewModel,
                 verses: verses,
                 passage: new PassageSelection(book.CustomNumber, note.BookName,
-                                                     note.Chapter, note.StartVerse),
+                                              note.Chapter, note.StartVerse),
                 databaseHelper: _db,
-                onSave: () => RefreshNotes())
+                onSave: RefreshNotes)
             {
                 Owner = Window.GetWindow(this)
-            };
-            modal.Show();
-
-            RefreshNotes();
+            }.Show();
         }
 
         private void DeleteSingleNote(Note note)
@@ -429,18 +423,15 @@ namespace FountOfHopeStudyBiblePC.Views
 
             var count = _selectedNotes.Count;
             var result = MessageBox.Show(
-                count == 1
-                    ? "Delete this note?"
-                    : $"Delete these {count} notes?",
+                count == 1 ? "Delete this note?" : $"Delete these {count} notes?",
                 "Delete Notes", MessageBoxButton.YesNo, MessageBoxImage.Warning);
 
             if (result != MessageBoxResult.Yes) return;
 
-            var toDelete = _selectedNotes.ToList();
-            foreach (var n in toDelete)
+            foreach (var n in _selectedNotes)
                 _db.DeleteNote(n.BookName, n.Chapter, n.StartVerse, n.EndVerse);
 
-            _lastDeleted = toDelete;
+            _lastDeleted = [.. _selectedNotes];
             ShowUndoBar(count);
             _selectedNotes.Clear();
             _multiSelectMode = false;
@@ -481,18 +472,7 @@ namespace FountOfHopeStudyBiblePC.Views
         {
             UndoText.Text = $"{count} note{(count == 1 ? "" : "s")} removed";
             UndoBar.Visibility = Visibility.Visible;
-
-            _undoTimer?.Stop();
-            _undoTimer = new System.Windows.Threading.DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(6)
-            };
-            _undoTimer.Tick += (_, _) =>
-            {
-                _undoTimer!.Stop();
-                UndoBar.Visibility = Visibility.Collapsed;
-                _lastDeleted = null;
-            };
+            _undoTimer.Stop();
             _undoTimer.Start();
         }
 
@@ -504,7 +484,7 @@ namespace FountOfHopeStudyBiblePC.Views
                 _db.AddOrUpdateNote(n.BookName, n.Chapter, n.StartVerse, n.EndVerse, n.NoteText);
 
             _lastDeleted = null;
-            _undoTimer?.Stop();
+            _undoTimer.Stop();
             UndoBar.Visibility = Visibility.Collapsed;
             RefreshNotes();
         }
@@ -541,10 +521,7 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void SortBtn_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new Modals.NoteSortDialog(_sortOrder)
-            {
-                Owner = Window.GetWindow(this)
-            };
+            var dlg = new Modals.NoteSortDialog(_sortOrder) { Owner = Window.GetWindow(this) };
             if (dlg.ShowDialog() == true && dlg.SelectedOrder != _sortOrder)
             {
                 _sortOrder = dlg.SelectedOrder;

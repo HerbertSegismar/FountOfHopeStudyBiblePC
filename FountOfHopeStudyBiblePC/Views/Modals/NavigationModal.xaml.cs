@@ -1,8 +1,4 @@
-﻿// Views/Modals/NavigationModal.xaml.cs
-using System;
-using System.Linq;
-using System.Threading.Tasks;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -15,6 +11,10 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 {
     public partial class NavigationModal : Window
     {
+        private static readonly SolidColorBrush FocusBorderBrush = Frozen(Color.FromRgb(0x7F, 0xB2, 0xFF));
+        private static readonly SolidColorBrush ErrorBorderBrush = Frozen(Color.FromRgb(0xEB, 0x4E, 0x4E));
+        private static readonly ControlTemplate RoundedButtonTemplate = BuildRoundedTemplate();
+
         private readonly AppViewModel _viewModel;
         private readonly DatabaseHelper? _db;
         private readonly Action<PassageSelection> _onPassageSelected;
@@ -26,8 +26,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private string _verseInput = "";
         private string _focusedInput = "chapter";
         private int _maxVerse;
-        private string? _pendingVerseDigit;
-        private bool _initialApplied;
 
         public NavigationModal(
             AppViewModel viewModel,
@@ -52,7 +50,13 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             UpdateUI();
         }
 
-        // ── Thin XAML stubs → ModalOverlayController ─────────────
+        private static SolidColorBrush Frozen(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
         private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
             => _overlay.HandleScrimMouseDown(sender, e);
 
@@ -70,13 +74,10 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         protected override void OnClosed(EventArgs e)
         {
-            base.OnClosed(e);   // raises Closed → controller detaches owner handlers
+            base.OnClosed(e);
             _onDismiss();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Book grid
-        // ═══════════════════════════════════════════════════════════
         private void BuildBookGrids()
         {
             OldTestamentPanel.Children.Clear();
@@ -97,28 +98,27 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 book.Testament,
                 book.Chapters);
 
-            var color = GetBookColor(bookUi, _viewModel.DarkTheme);
-
             var btn = new Button
             {
                 Width = 54,
                 Height = 44,
                 Margin = new Thickness(2),
-                Background = new SolidColorBrush(color),
+                Background = new SolidColorBrush(GetBookColor(bookUi, _viewModel.DarkTheme)),
+                BorderBrush = FocusBorderBrush,
                 BorderThickness = new Thickness(0),
                 Cursor = Cursors.Hand,
                 Tag = bookUi,
                 ToolTip = $"{book.Name} — {book.Chapters} chapters",
-            };
-            btn.Template = BuildRoundedTemplate();
-            btn.Content = new TextBlock
-            {
-                Text = book.Abbreviation,
-                FontSize = 13,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x44, 0x4C, 0x69)),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
+                Template = RoundedButtonTemplate,
+                Content = new TextBlock
+                {
+                    Text = book.Abbreviation,
+                    FontSize = 13,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x44, 0x4C, 0x69)),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
             };
             btn.Click += (_, _) => SelectBook(bookUi);
             return btn;
@@ -141,46 +141,38 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             border.AppendChild(presenter);
             t.VisualTree = border;
 
-            var trigger = new Trigger { Property = IsMouseOverProperty, Value = true };
+            var trigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
             trigger.Setters.Add(new Setter(UIElement.OpacityProperty, 0.8, "B"));
             t.Triggers.Add(trigger);
+            t.Seal();
             return t;
         }
 
-        private static string? GetScopeForBookNumber(int bookNumber)
+        private static string? GetScopeForBookNumber(int n)
         {
-            if (InRange(bookNumber, 10, 50)) return SearchScopes.Law;
-            if (InRange(bookNumber, 60, 190)) return SearchScopes.Historical;
-            if (InRange(bookNumber, 220, 260)) return SearchScopes.Poetic;
-            if (InRange(bookNumber, 290, 340)) return SearchScopes.MajorProphets;
-            if (InRange(bookNumber, 350, 460)) return SearchScopes.MinorProphets;
-            if (InRange(bookNumber, 470, 500)) return SearchScopes.Gospels;
-            if (InRange(bookNumber, 510, 510)) return SearchScopes.HistoricalNt;
-            if (InRange(bookNumber, 520, 640)) return SearchScopes.PaulineLetters;
-            if (InRange(bookNumber, 520, 720)) return SearchScopes.Letters;
-            if (InRange(bookNumber, 730, 730)) return SearchScopes.Vision;
+            if (n >= 10 && n <= 50) return SearchScopes.Law;
+            if (n >= 60 && n <= 190) return SearchScopes.Historical;
+            if (n >= 220 && n <= 260) return SearchScopes.Poetic;
+            if (n >= 290 && n <= 340) return SearchScopes.MajorProphets;
+            if (n >= 350 && n <= 460) return SearchScopes.MinorProphets;
+            if (n >= 470 && n <= 500) return SearchScopes.Gospels;
+            if (n == 510) return SearchScopes.HistoricalNt;
+            if (n >= 520 && n <= 640) return SearchScopes.PaulineLetters;
+            if (n >= 520 && n <= 720) return SearchScopes.Letters;
+            if (n == 730) return SearchScopes.Vision;
             return null;
         }
-
-        private static bool InRange(int v, int a, int b) => v >= a && v <= b;
 
         private static Color GetBookColor(BookUi book, bool isDarkTheme)
         {
             try
             {
-                Color baseColor;
-
                 var scope = GetScopeForBookNumber(book.BookNumber);
-                if (scope != null && SearchScopes.ScopeColors.TryGetValue(scope, out var hex))
-                {
-                    baseColor = (Color)ColorConverter.ConvertFromString(hex);
-                }
-                else
-                {
-                    baseColor = book.Testament == Testament.Old
+                var baseColor = scope != null && SearchScopes.ScopeColors.TryGetValue(scope, out var hex)
+                    ? (Color)ColorConverter.ConvertFromString(hex)
+                    : book.Testament == Testament.Old
                         ? (Color)ColorConverter.ConvertFromString("#DC2626")
                         : (Color)ColorConverter.ConvertFromString("#059669");
-                }
 
                 if (isDarkTheme) return baseColor;
 
@@ -190,10 +182,8 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     (byte)(255 + (baseColor.G - 255) * 0.85),
                     (byte)(255 + (baseColor.B - 255) * 0.85));
             }
-            catch (Exception ex)
+            catch
             {
-                App.Log($"!!! NavigationModal.GetBookColor failed for book " +
-                        $"{book.BookNumber} '{book.LongName}': {ex.Message}");
                 return Colors.Gray;
             }
         }
@@ -205,7 +195,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             _verseInput = "";
             _maxVerse = 0;
             _focusedInput = "chapter";
-            _pendingVerseDigit = null;
 
             if (book.TotalChapters == 1)
             {
@@ -218,39 +207,23 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         private void ApplyInitialSelection(int? bookNumber, int chapter, int? verse)
         {
-            try
-            {
-                App.Log($"NavigationModal: ApplyInitialSelection " +
-                        $"bookNumber={bookNumber}, chapter={chapter}, verse={verse}");
+            if (bookNumber is null) return;
 
-                if (bookNumber is null || _initialApplied) return;
+            var book = BibleData.GetBookByCustomNumber(bookNumber.Value);
+            if (book is null) return;
 
-                var book = BibleData.GetBookByCustomNumber(bookNumber.Value);
-                if (book is null)
-                {
-                    App.Log($"NavigationModal: book {bookNumber} NOT found in BibleData");
-                    return;
-                }
+            _selectedBook = new BookUi(
+                book.CustomNumber,
+                book.Name,
+                book.Abbreviation,
+                book.Testament,
+                book.Chapters);
 
-                _selectedBook = new BookUi(
-                    book.CustomNumber,
-                    book.Name,
-                    book.Abbreviation,
-                    book.Testament,
-                    book.Chapters);
+            _chapterInput = chapter > 0 ? chapter.ToString() : "";
+            _verseInput = verse is > 0 ? verse.Value.ToString() : "";
+            _focusedInput = "chapter";
 
-                _chapterInput = chapter > 0 ? chapter.ToString() : "";
-                _verseInput = verse is > 0 ? verse.Value.ToString() : "";
-                _focusedInput = "chapter";
-                _initialApplied = true;
-
-                LoadMaxVerse();
-                App.Log($"NavigationModal: initial applied, maxVerse={_maxVerse}");
-            }
-            catch (Exception ex)
-            {
-                App.Log($"!!! NavigationModal.ApplyInitialSelection FAILED: {ex}");
-            }
+            LoadMaxVerse();
         }
 
         private void LoadMaxVerse()
@@ -259,15 +232,8 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             if (!int.TryParse(_chapterInput, out var chapter)) { _maxVerse = 0; return; }
             if (chapter < 1 || chapter > _selectedBook.TotalChapters) { _maxVerse = 0; return; }
 
-            try
-            {
-                _maxVerse = _db?.GetVerseCount(_selectedBook.BookNumber, chapter) ?? 0;
-            }
-            catch (Exception ex)
-            {
-                App.Log($"NavigationModal: GetVerseCount failed: {ex.Message}");
-                _maxVerse = 0;
-            }
+            try { _maxVerse = _db?.GetVerseCount(_selectedBook.BookNumber, chapter) ?? 0; }
+            catch { _maxVerse = 0; }
         }
 
         private void NumpadDigit_Click(object sender, RoutedEventArgs e)
@@ -285,7 +251,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 {
                     _chapterInput = newValue;
                     LoadMaxVerse();
-
                     if (num * 10 > maxChapters)
                         _focusedInput = "verse";
                 }
@@ -293,11 +258,10 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                          && int.TryParse(_chapterInput, out var currentNum)
                          && currentNum >= 1 && currentNum <= maxChapters)
                 {
-                    _pendingVerseDigit = digit;
                     _focusedInput = "verse";
                     _verseInput = "";
                     LoadMaxVerse();
-                    ApplyPendingVerseDigit();
+                    ApplyPendingVerseDigit(digit);
                 }
             }
             else
@@ -322,19 +286,16 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             UpdateUI();
         }
 
-        private void ApplyPendingVerseDigit()
+        private void ApplyPendingVerseDigit(string digit)
         {
-            if (_pendingVerseDigit is null || _focusedInput != "verse" || _maxVerse <= 0)
-                return;
+            if (_focusedInput != "verse" || _maxVerse <= 0) return;
 
-            if (int.TryParse(_pendingVerseDigit, out var v) && v >= 1 && v <= _maxVerse)
+            if (int.TryParse(digit, out var v) && v >= 1 && v <= _maxVerse)
             {
-                _verseInput = _pendingVerseDigit;
+                _verseInput = digit;
                 if (v * 10 > _maxVerse)
                     _ = DelayedConfirm();
             }
-
-            _pendingVerseDigit = null;
         }
 
         private async Task DelayedConfirm()
@@ -364,7 +325,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             _verseInput = "";
             _maxVerse = 0;
             _focusedInput = "chapter";
-            _pendingVerseDigit = null;
             UpdateUI();
         }
 
@@ -383,7 +343,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 chapter,
                 verse);
 
-            App.Log($"NavigationModal: picked {_selectedBook.LongName} {chapter}:{verse}");
             _onPassageSelected(passage);
             Close();
         }
@@ -413,74 +372,62 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private bool IsVerseValid()
         {
             if (string.IsNullOrEmpty(_verseInput)) return true;
-            return int.TryParse(_verseInput, out var v)
-                && v >= 1 && v <= _maxVerse;
+            return int.TryParse(_verseInput, out var v) && v >= 1 && v <= _maxVerse;
         }
 
         private bool IsInputValid() => IsChapterValid() && IsVerseValid();
 
         private void UpdateUI()
         {
-            try
+            if (_selectedBook != null)
             {
-                if (_selectedBook != null)
-                {
-                    BookHeaderCard.Visibility = Visibility.Visible;
-                    BookHeaderTitle.Text = _selectedBook.LongName;
-                    BookHeaderSubtitle.Text = _selectedBook.TotalChapters == 1
-                        ? "1 chapter"
-                        : $"{_selectedBook.TotalChapters} chapters";
-                    BookHeaderShort.Text = _selectedBook.ShortName;
-                }
-                else
-                {
-                    BookHeaderCard.Visibility = Visibility.Collapsed;
-                }
-
-                ChapterValue.Text = _chapterInput;
-                ChapterHint.Text = _selectedBook != null
-                    ? $"1-{_selectedBook.TotalChapters}"
-                    : "";
-
-                var chapterError = _chapterInput.Length > 0 && !IsChapterValid();
-                ChapterInputBorder.BorderBrush = new SolidColorBrush(chapterError
-                    ? Color.FromRgb(0xEB, 0x4E, 0x4E)
-                    : _focusedInput == "chapter" && _selectedBook != null
-                        ? Color.FromRgb(0x7F, 0xB2, 0xFF)
-                        : Colors.Transparent);
-
-                VerseValue.Text = _verseInput;
-                VerseHint.Text = _focusedInput == "verse" && _maxVerse > 0
-                    ? $"1-{_maxVerse}"
-                    : "";
-
-                var verseError = _verseInput.Length > 0 && !IsVerseValid() && _maxVerse > 0;
-                VerseInputBorder.BorderBrush = new SolidColorBrush(verseError
-                    ? Color.FromRgb(0xEB, 0x4E, 0x4E)
-                    : _focusedInput == "verse"
-                        ? Color.FromRgb(0x7F, 0xB2, 0xFF)
-                        : Colors.Transparent);
-
-                var valid = IsInputValid();
-                GoToButton.IsEnabled = valid;
-                GoToButton.Opacity = valid ? 1.0 : 0.5;
-
-                if (valid && _selectedBook != null)
-                {
-                    var verseSuffix = string.IsNullOrEmpty(_verseInput) ? "" : $":{_verseInput}";
-                    GoToButton.Content = $"Go to {_selectedBook.LongName} {_chapterInput}{verseSuffix}";
-                }
-                else
-                {
-                    GoToButton.Content = "Go to…";
-                }
-
-                HighlightSelectedBook();
+                BookHeaderCard.Visibility = Visibility.Visible;
+                BookHeaderTitle.Text = _selectedBook.LongName;
+                BookHeaderSubtitle.Text = _selectedBook.TotalChapters == 1
+                    ? "1 chapter"
+                    : $"{_selectedBook.TotalChapters} chapters";
+                BookHeaderShort.Text = _selectedBook.ShortName;
             }
-            catch (Exception ex)
+            else
             {
-                App.Log($"!!! NavigationModal.UpdateUI FAILED: {ex}");
+                BookHeaderCard.Visibility = Visibility.Collapsed;
             }
+
+            ChapterValue.Text = _chapterInput;
+            ChapterHint.Text = _selectedBook != null ? $"1-{_selectedBook.TotalChapters}" : "";
+
+            var chapterError = _chapterInput.Length > 0 && !IsChapterValid();
+            ChapterInputBorder.BorderBrush = chapterError
+                ? ErrorBorderBrush
+                : _focusedInput == "chapter" && _selectedBook != null
+                    ? FocusBorderBrush
+                    : Brushes.Transparent;
+
+            VerseValue.Text = _verseInput;
+            VerseHint.Text = _focusedInput == "verse" && _maxVerse > 0 ? $"1-{_maxVerse}" : "";
+
+            var verseError = _verseInput.Length > 0 && !IsVerseValid() && _maxVerse > 0;
+            VerseInputBorder.BorderBrush = verseError
+                ? ErrorBorderBrush
+                : _focusedInput == "verse"
+                    ? FocusBorderBrush
+                    : Brushes.Transparent;
+
+            var valid = IsInputValid();
+            GoToButton.IsEnabled = valid;
+            GoToButton.Opacity = valid ? 1.0 : 0.5;
+
+            if (valid && _selectedBook != null)
+            {
+                var verseSuffix = string.IsNullOrEmpty(_verseInput) ? "" : $":{_verseInput}";
+                GoToButton.Content = $"Go to {_selectedBook.LongName} {_chapterInput}{verseSuffix}";
+            }
+            else
+            {
+                GoToButton.Content = "Go to…";
+            }
+
+            HighlightSelectedBook();
         }
 
         private void HighlightSelectedBook()
@@ -489,14 +436,10 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             {
                 foreach (var child in panel.Children)
                 {
-                    if (child is not Button btn) continue;
-                    if (btn.Tag is not BookUi b) continue;
+                    if (child is not Button btn || btn.Tag is not BookUi b) continue;
 
-                    var isSelected = _selectedBook != null
-                                     && _selectedBook.BookNumber == b.BookNumber;
-
+                    var isSelected = _selectedBook != null && _selectedBook.BookNumber == b.BookNumber;
                     btn.BorderThickness = new Thickness(isSelected ? 3 : 0);
-                    btn.BorderBrush = new SolidColorBrush(Color.FromRgb(0x7F, 0xB2, 0xFF));
                 }
             }
         }

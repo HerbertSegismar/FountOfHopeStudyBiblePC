@@ -1,5 +1,4 @@
-﻿// Views/Modals/ColorThemeDialog.xaml.cs
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -11,6 +10,23 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 {
     public partial class ColorThemeDialog : Window
     {
+        private static readonly Action NoOp = () => { };
+        private static readonly Action<Color> NoOpColor = _ => { };
+
+        private static readonly SolidColorBrush CardBgBrush =
+            Frozen(Color.FromRgb(0x23, 0x2A, 0x33));
+        private static readonly SolidColorBrush SelectedBorderBrush =
+            Frozen(Color.FromRgb(0x7F, 0xB2, 0xFF));
+        private static readonly SolidColorBrush NameBrush =
+            Frozen(Color.FromRgb(0xE6, 0xEA, 0xF0));
+
+        private static SolidColorBrush Frozen(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
         private readonly Action<Color> _onColorSelected;
         private readonly Action _onCustomColorClick;
         private readonly Action _onDismiss;
@@ -24,9 +40,9 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             Action onDismiss)
         {
             _currentColor = currentColor;
-            _onColorSelected = onColorSelected ?? (_ => { });
-            _onCustomColorClick = onCustomColorClick ?? (() => { });
-            _onDismiss = onDismiss ?? (() => { });
+            _onColorSelected = onColorSelected ?? NoOpColor;
+            _onCustomColorClick = onCustomColorClick ?? NoOp;
+            _onDismiss = onDismiss ?? NoOp;
 
             InitializeComponent();
 
@@ -36,7 +52,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             BuildPresets();
         }
 
-        // ── Thin XAML stubs → ModalOverlayController ─────────────
         private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
             => _overlay.HandleScrimMouseDown(sender, e);
 
@@ -46,19 +61,12 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private void Window_KeyDown(object sender, KeyEventArgs e)
             => _overlay.HandleKeyDown(sender, e);
 
-        // ═══════════════════════════════════════════════════════════
-        //  Wheel preview — mirrors ColorWheelDialog's init order:
-        //  Brightness first, then SelectedColor.
-        // ═══════════════════════════════════════════════════════════
         private void SyncWheelPreview()
         {
             CustomWheelPreview.Brightness = ColorHelpers.GetBrightness(_currentColor);
             CustomWheelPreview.SelectedColor = _currentColor;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Presets
-        // ═══════════════════════════════════════════════════════════
         private void BuildPresets()
         {
             PresetGrid.Children.Clear();
@@ -67,26 +75,12 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             {
                 var isSelected = ColorsEqual(theme.PrimaryColor, _currentColor);
 
-                var card = new Border
-                {
-                    Background = new SolidColorBrush(Color.FromRgb(0x23, 0x2A, 0x33)),
-                    CornerRadius = new CornerRadius(10),
-                    Margin = new Thickness(4),
-                    Padding = new Thickness(8),
-                    Cursor = Cursors.Hand,
-                    BorderBrush = new SolidColorBrush(isSelected
-                        ? Color.FromRgb(0x7F, 0xB2, 0xFF)
-                        : Colors.Transparent),
-                    BorderThickness = new Thickness(isSelected ? 2 : 0),
-                    Tag = theme,
-                };
-
                 var stack = new StackPanel();
                 stack.Children.Add(new Border
                 {
                     Height = 44,
                     CornerRadius = new CornerRadius(8),
-                    Background = new SolidColorBrush(theme.PrimaryColor),
+                    Background = Frozen(theme.PrimaryColor),
                     Margin = new Thickness(0, 0, 0, 6),
                 });
                 stack.Children.Add(new TextBlock
@@ -94,18 +88,30 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     Text = theme.Name,
                     FontSize = 11,
                     FontWeight = FontWeights.Medium,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0xE6, 0xEA, 0xF0)),
+                    Foreground = NameBrush,
                     TextAlignment = TextAlignment.Center,
                     TextTrimming = TextTrimming.CharacterEllipsis,
                 });
 
-                card.Child = stack;
+                var card = new Border
+                {
+                    Background = CardBgBrush,
+                    CornerRadius = new CornerRadius(10),
+                    Margin = new Thickness(4),
+                    Padding = new Thickness(8),
+                    Cursor = Cursors.Hand,
+                    BorderBrush = isSelected ? SelectedBorderBrush : Brushes.Transparent,
+                    BorderThickness = new Thickness(isSelected ? 2 : 0),
+                    Tag = theme,
+                    Child = stack,
+                };
+
                 card.MouseLeftButtonUp += (_, _) =>
                 {
                     if (card.Tag is ColorTheme t)
                     {
                         _onColorSelected(t.PrimaryColor);
-                        Close();   // confirm action → immediate
+                        Close();
                     }
                 };
 
@@ -119,7 +125,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private void CustomCard_Click(object sender, MouseButtonEventArgs e)
         {
             _onCustomColorClick();
-            Close();   
+            Close();
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
@@ -127,7 +133,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         protected override void OnClosed(EventArgs e)
         {
-            base.OnClosed(e); 
+            base.OnClosed(e);
             _onDismiss();
         }
     }

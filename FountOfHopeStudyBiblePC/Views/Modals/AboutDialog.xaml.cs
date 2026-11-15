@@ -1,5 +1,4 @@
-﻿// Views/Modals/AboutDialog.xaml.cs
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Input;
 
 namespace FountOfHopeStudyBiblePC.Views.Modals
@@ -18,7 +17,6 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             };
         }
 
-        // ── Thin XAML stubs → ModalOverlayController ─────────────
         private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
             => _overlay.HandleScrimMouseDown(sender, e);
 

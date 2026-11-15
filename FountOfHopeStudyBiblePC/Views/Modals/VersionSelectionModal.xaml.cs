@@ -1,5 +1,4 @@
-﻿// Views/Modals/VersionSelectionModal.xaml.cs
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -13,6 +12,9 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 {
     public partial class VersionSelectionModal : Window
     {
+        private static readonly Action NoOp = () => { };
+        private static readonly Action<string> NoOpString = _ => { };
+
         private readonly AppViewModel _viewModel;
         private readonly string _currentVersionKey;
         private readonly bool _isSecondary;
@@ -20,6 +22,7 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private readonly Action _onDismiss;
         private readonly ModalOverlayController _overlay;
 
+        private readonly List<VersionEntry> _catalog;
         private string _searchQuery = "";
 
         public VersionSelectionModal(
@@ -32,8 +35,8 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             _viewModel = viewModel;
             _currentVersionKey = currentVersionKey;
             _isSecondary = isSecondary;
-            _onVersionSelected = onVersionSelected ?? (_ => { });
-            _onDismiss = onDismiss ?? (() => { });
+            _onVersionSelected = onVersionSelected ?? NoOpString;
+            _onDismiss = onDismiss ?? NoOp;
 
             InitializeComponent();
 
@@ -43,25 +46,14 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 RevealOnLoad = true,
             };
 
+            _catalog = BuildCatalog();
+
             BuildList();
 
             Loaded += (_, _) => SearchBox.Focus();
         }
 
-        // ── Thin XAML stubs → ModalOverlayController ─────────────
-        private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-            => _overlay.HandleScrimMouseDown(sender, e);
-
-        private void Scrim_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-            => _overlay.HandleScrimMouseUp(sender, e);
-
-        private void Window_KeyDown(object sender, KeyEventArgs e)
-            => _overlay.HandleKeyDown(sender, e);
-
-        // ═══════════════════════════════════════════════════════════
-        //  Build / filter the version list
-        // ═══════════════════════════════════════════════════════════
-        private void BuildList()
+        private List<VersionEntry> BuildCatalog()
         {
             var activeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -71,70 +63,71 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 activeKeys.Add(_viewModel.SecondaryDbName);
 
             var effectiveDisabled = new HashSet<string>(
-                _viewModel.DisabledVersions
-                    .Where(k => !activeKeys.Contains(k)),
+                _viewModel.DisabledVersions.Where(k => !activeKeys.Contains(k)),
                 StringComparer.OrdinalIgnoreCase);
 
             var grouped = BibleVersionUtils.GetFilteredVersionsGroupedByLanguage(effectiveDisabled);
 
-            var groups = new List<VersionGroup>();
+            var catalog = new List<VersionEntry>();
             foreach (var kv in grouped)
             {
                 var language = kv.Key;
-                var versions = kv.Value;
-                var matchedList = new List<VersionEntry>();
-
-                bool languageMatches = !string.IsNullOrWhiteSpace(_searchQuery)
-                    && language.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase);
-
-                foreach (var (dbFile, shortName) in versions)
+                foreach (var (dbFile, shortName) in kv.Value)
                 {
-                    var description = BibleVersionUtils.GetDescriptionForVersion(dbFile);
-
-                    var isMatch =
-                        string.IsNullOrWhiteSpace(_searchQuery)
-                        || languageMatches
-                        || shortName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)
-                        || description.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)
-                        || dbFile.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase);
-
-                    if (isMatch)
-                    {
-                        matchedList.Add(new VersionEntry
-                        {
-                            Language = language,
-                            Key = dbFile,
-                            ShortName = shortName,
-                            Description = description,
-                            IsSelected = string.Equals(dbFile, _currentVersionKey,
-                                                         StringComparison.OrdinalIgnoreCase),
-                        });
-                    }
-                }
-
-                if (matchedList.Count > 0)
-                {
-                    groups.Add(new VersionGroup
+                    catalog.Add(new VersionEntry
                     {
                         Language = language,
-                        Versions = matchedList,
+                        Key = dbFile,
+                        ShortName = shortName,
+                        Description = BibleVersionUtils.GetDescriptionForVersion(dbFile),
+                        IsSelected = string.Equals(dbFile, _currentVersionKey, StringComparison.OrdinalIgnoreCase),
                     });
                 }
             }
+            return catalog;
+        }
+
+        private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+            => _overlay.HandleScrimMouseDown(sender, e);
+
+        private void Scrim_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+            => _overlay.HandleScrimMouseUp(sender, e);
+
+        private void Window_KeyDown(object sender, KeyEventArgs e)
+            => _overlay.HandleKeyDown(sender, e);
+
+        private void BuildList()
+        {
+            IEnumerable<VersionEntry> filtered;
+            if (string.IsNullOrWhiteSpace(_searchQuery))
+            {
+                filtered = _catalog;
+            }
+            else
+            {
+                var q = _searchQuery;
+                filtered = _catalog.Where(v =>
+                    v.Language.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    v.ShortName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    v.Description.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    v.Key.Contains(q, StringComparison.OrdinalIgnoreCase));
+            }
+
+            var groups = filtered
+                .GroupBy(v => v.Language)
+                .Select(g => new VersionGroup { Language = g.Key, Versions = g.ToList() })
+                .ToList();
 
             VersionList.ItemsSource = groups;
 
-            bool anyResults = groups.Count > 0;
+            var anyResults = groups.Count > 0;
             VersionScroller.Visibility = anyResults ? Visibility.Visible : Visibility.Collapsed;
             EmptyState.Visibility = anyResults ? Visibility.Collapsed : Visibility.Visible;
-
             ClearSearchBtn.Visibility = string.IsNullOrEmpty(_searchQuery)
-                ? Visibility.Collapsed : Visibility.Visible;
+                ? Visibility.Collapsed
+                : Visibility.Visible;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Search handlers
-        // ═══════════════════════════════════════════════════════════
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             _searchQuery = SearchBox.Text ?? "";
@@ -149,14 +142,9 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
             SearchBox.Focus();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Version click (confirm action → immediate close)
-        // ═══════════════════════════════════════════════════════════
         private void VersionRow_Click(object sender, MouseButtonEventArgs e)
         {
             if (sender is not Border { Tag: VersionEntry entry }) return;
-
-            App.Log($"VersionSelectionModal: picked {entry.Key} ({entry.ShortName})");
 
             if (_isSecondary)
                 _viewModel.UpdateSecondaryDictionaryForBibleLanguage(entry.Key);
@@ -164,21 +152,15 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 _viewModel.UpdateDictionaryForBibleLanguage(entry.Key);
 
             _onVersionSelected(entry.Key);
-
-            // Confirm action → immediate Close. OnClosed fires _onDismiss once
-            // (the caller treats that as "dropdown closed", same as cancel).
             Close();
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Dismiss
-        // ═══════════════════════════════════════════════════════════
         private void CloseButton_Click(object sender, RoutedEventArgs e)
             => _overlay.DismissWithFade();
 
         protected override void OnClosed(EventArgs e)
         {
-            base.OnClosed(e);   // raises Closed → controller detaches owner handlers
+            base.OnClosed(e);
             _onDismiss();
         }
     }
