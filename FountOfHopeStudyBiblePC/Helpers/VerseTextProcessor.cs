@@ -1,4 +1,5 @@
 ﻿using FountOfHopeStudyBiblePC.Models;
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -11,6 +12,8 @@ namespace FountOfHopeStudyBiblePC.Helpers
     public partial class VerseTextProcessor
     {
         private const int CacheSize = 200;
+
+        private static readonly ConcurrentDictionary<Color, SolidColorBrush> BrushCache = new();
 
         [GeneratedRegex("(\\w+)=\"([^\"]*)\"")]
         private static partial Regex AttributeRegex();
@@ -44,6 +47,9 @@ namespace FountOfHopeStudyBiblePC.Helpers
 
         private readonly LinkedList<string> _cacheOrder = new();
         private readonly Dictionary<string, List<InlineSpec>> _cache = [];
+
+        private string? _highlightKey;
+        private Regex? _highlightRegex;
 
         public ProcessedVerse ProcessVerse(
             string? verseText,
@@ -106,6 +112,14 @@ namespace FountOfHopeStudyBiblePC.Helpers
             _cacheOrder.Clear();
         }
 
+        private static SolidColorBrush GetBrush(Color color)
+            => BrushCache.GetOrAdd(color, static c =>
+            {
+                var b = new SolidColorBrush(c);
+                b.Freeze();
+                return b;
+            });
+
         private static List<Inline> BuildInlines(List<InlineSpec> specs, Action<string>? onTagPress)
         {
             var list = new List<Inline>(specs.Count);
@@ -113,11 +127,11 @@ namespace FountOfHopeStudyBiblePC.Helpers
             {
                 var run = new Run(s.Text)
                 {
-                    Foreground = new SolidColorBrush(s.Foreground),
+                    Foreground = GetBrush(s.Foreground),
                     FontSize = s.FontSize,
                     BaselineAlignment = s.Baseline,
                 };
-                if (s.Background is { } bg) run.Background = new SolidColorBrush(bg);
+                if (s.Background is { } bg) run.Background = GetBrush(bg);
                 if (s.AnnotationKind != null)
                     run.Tag = new VerseAnnotation(s.AnnotationKind, s.AnnotationValue ?? "");
 
@@ -161,7 +175,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
             string? highlight, bool isHighlighted, ProcessingOptions options,
             ThemeColors themeColors, HashSet<string>? wordHighlights,
             bool enableTagClick, bool enableStrongsClick, bool enableWordClick) =>
-            new StringBuilder()
+            new StringBuilder(64)
                 .Append(verseText.GetHashCode())
                 .Append('|').Append(baseFontSize)
                 .Append('|').Append(textColor?.GetHashCode() ?? 0)
@@ -365,29 +379,28 @@ namespace FountOfHopeStudyBiblePC.Helpers
                 return;
             }
 
-            var words = SplitIntoWords(text, options.PreserveWhitespace);
             bool addSpace = false;
-            foreach (var word in words)
+            foreach (var word in EnumerateWords(text, options.PreserveWhitespace))
             {
                 if (addSpace && word.Length > 0 && char.IsLetter(word[0]))
                     outList.Add(Spec(" ", ctx));
 
                 if (IsWord(word))
                 {
+                    var lower = word.ToLowerInvariant();
                     Color? bg = null;
                     if (highlight != null && word.Contains(highlight, StringComparison.OrdinalIgnoreCase))
                         bg = themeColors.SearchHighlightBg;
-                    else if (wordHighlights != null && wordHighlights.Contains(word.ToLowerInvariant()))
+                    else if (wordHighlights != null && wordHighlights.Contains(lower))
                         bg = themeColors.WordHighlightBg;
-                    outList.Add(Spec(word, ctx, bg: bg, kind: "word", val: word.ToLowerInvariant()));
+                    outList.Add(Spec(word, ctx, bg: bg, kind: "word", val: lower));
                 }
                 else
                 {
                     outList.Add(Spec(word, ctx));
                 }
 
-                var trimmed = word.Trim();
-                addSpace = trimmed is "." or "," or ":" or ";" or "?" or "!";
+                addSpace = word.Trim() is "." or "," or ":" or ";" or "?" or "!";
             }
         }
 
@@ -401,9 +414,12 @@ namespace FountOfHopeStudyBiblePC.Helpers
                 return;
             }
 
-            Regex regex;
-            try { regex = new Regex(EscapeRegex(highlight), RegexOptions.IgnoreCase); }
-            catch { return; }
+            var regex = GetHighlightRegex(highlight);
+            if (regex == null)
+            {
+                AppendWithWordHighlights(text, outList, ctx, wordHighlights, themeColors);
+                return;
+            }
 
             int last = 0;
             foreach (Match m in regex.Matches(text))
@@ -417,6 +433,15 @@ namespace FountOfHopeStudyBiblePC.Helpers
                 AppendWithWordHighlights(text[last..], outList, ctx, wordHighlights, themeColors);
         }
 
+        private Regex? GetHighlightRegex(string highlight)
+        {
+            if (highlight == _highlightKey) return _highlightRegex;
+            _highlightKey = highlight;
+            try { _highlightRegex = new Regex(EscapeRegex(highlight), RegexOptions.IgnoreCase); }
+            catch { _highlightRegex = null; }
+            return _highlightRegex;
+        }
+
         private void AppendWithWordHighlights(
             string text, List<InlineSpec> outList, TraversalContext ctx,
             HashSet<string>? wordHighlights, ThemeColors themeColors)
@@ -426,7 +451,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
                 outList.Add(Spec(text, ctx));
                 return;
             }
-            foreach (var word in SplitIntoWords(text, false))
+            foreach (var word in EnumerateWords(text, false))
             {
                 Color? bg = IsWord(word) && wordHighlights.Contains(word.ToLowerInvariant())
                     ? themeColors.WordHighlightBg : null;
@@ -484,11 +509,15 @@ namespace FountOfHopeStudyBiblePC.Helpers
             return (isOldTestament ? "H" : "G") + t;
         }
 
-        private static List<string> SplitIntoWords(string text, bool preserveWhitespace) =>
-            [.. (preserveWhitespace ? WhitespaceBoundaryRegex() : WordBoundaryRegex())
-                .Split(text).Where(s => s.Length > 0)];
+        private static IEnumerable<string> EnumerateWords(string text, bool preserveWhitespace)
+        {
+            var parts = (preserveWhitespace ? WhitespaceBoundaryRegex() : WordBoundaryRegex()).Split(text);
+            foreach (var s in parts)
+                if (s.Length > 0) yield return s;
+        }
 
         private static bool IsWord(string text) => WordRegex().IsMatch(text);
+
         private static string EscapeRegex(string s) => EscapeRegexPattern().Replace(s, m => "\\" + m.Value);
     }
 

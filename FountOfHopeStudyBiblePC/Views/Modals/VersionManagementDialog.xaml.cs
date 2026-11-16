@@ -1,5 +1,4 @@
-﻿// Views/Modals/VersionManagementDialog.xaml.cs
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -16,7 +15,16 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
     {
         private readonly AppViewModel _viewModel;
         private readonly ModalOverlayController _overlay;
+        private readonly List<LanguageGroup> _catalog;
+
         private bool _suppressSelectAll;
+        private bool _rebuildQueued;
+
+        private Brush _cardBg = Brushes.Transparent;
+        private Brush _appPrimary = Brushes.Transparent;
+        private Brush _onSurface = Brushes.White;
+        private Brush _onSurfaceVariant = Brushes.Gray;
+        private Brush _divider = Brushes.Transparent;
 
         public VersionManagementDialog(AppViewModel viewModel)
         {
@@ -30,11 +38,43 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 RevealOnLoad = true,
             };
 
+            _catalog = BuildCatalog();
+
             Loaded += (_, _) => BuildList();
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
 
-        // ── Thin XAML stubs → ModalOverlayController ─────────────
+        private static List<LanguageGroup> BuildCatalog()
+        {
+            var groups = new Dictionary<string, List<VersionEntry>>();
+            foreach (var kv in BibleVersionUtils.VersionMap)
+            {
+                var lang = BibleVersionUtils.GetLanguageForVersion(kv.Key);
+                if (!groups.TryGetValue(lang, out var list))
+                    groups[lang] = list = [];
+                list.Add(new VersionEntry(
+                    kv.Key,
+                    kv.Value,
+                    BibleVersionUtils.GetDescriptionForVersion(kv.Key)));
+            }
+
+            foreach (var list in groups.Values)
+                list.Sort((a, b) => string.CompareOrdinal(a.ShortName, b.ShortName));
+
+            var orderedLanguages = new List<string> { "English", "English Messianic" };
+            orderedLanguages.AddRange(groups.Keys
+                .Where(k => k != "English" && k != "English Messianic")
+                .OrderBy(k => k, StringComparer.Ordinal));
+
+            var catalog = new List<LanguageGroup>(groups.Count);
+            foreach (var lang in orderedLanguages)
+            {
+                if (groups.TryGetValue(lang, out var versions))
+                    catalog.Add(new LanguageGroup(lang, versions));
+            }
+            return catalog;
+        }
+
         private void Scrim_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
             => _overlay.HandleScrimMouseDown(sender, e);
 
@@ -44,88 +84,82 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
         private void Window_KeyDown(object sender, KeyEventArgs e)
             => _overlay.HandleKeyDown(sender, e);
 
-        // ═══════════════════════════════════════════════════════════
-        //  ViewModel subscription (detached in OnClosed)
-        // ═══════════════════════════════════════════════════════════
         private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(AppViewModel.DarkTheme))
-                Dispatcher.BeginInvoke(new Action(BuildList));
+            if (e.PropertyName != nameof(AppViewModel.DarkTheme)) return;
+            if (_rebuildQueued) return;
+            _rebuildQueued = true;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _rebuildQueued = false;
+                BuildList();
+            }));
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  List building
-        // ═══════════════════════════════════════════════════════════
-        private void BuildList()
+        private HashSet<string> GetActiveKeys()
         {
-            VersionsList.Children.Clear();
-
-            var activeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 _viewModel.CurrentDbName
             };
-            if (_viewModel.MultiVersion) activeKeys.Add(_viewModel.SecondaryDbName);
+            if (_viewModel.MultiVersion) set.Add(_viewModel.SecondaryDbName);
+            return set;
+        }
 
-            var nonActive = BibleVersionUtils.VersionMap.Keys
+        private static List<string> GetNonActiveKeys(HashSet<string> activeKeys)
+            => BibleVersionUtils.VersionMap.Keys
                 .Where(k => !activeKeys.Contains(k))
                 .ToList();
 
-            // Update Select All
+        private void CacheBrushes()
+        {
+            _cardBg = (Brush)FindResource("CardBackground");
+            _appPrimary = (Brush)FindResource("AppPrimaryBrush");
+            _onSurface = (Brush)FindResource("OnSurface");
+            _onSurfaceVariant = (Brush)FindResource("OnSurfaceVariant");
+            _divider = (Brush)FindResource("DividerBrush");
+        }
+
+        private void BuildList()
+        {
+            VersionsList.Children.Clear();
+            CacheBrushes();
+
+            var activeKeys = GetActiveKeys();
+            var nonActive = GetNonActiveKeys(activeKeys);
+
             _suppressSelectAll = true;
             SelectAllCheck.IsChecked = nonActive.All(k => !_viewModel.DisabledVersions.Contains(k));
             _suppressSelectAll = false;
 
-            // Group by language
-            var groups = new Dictionary<string, List<(string key, string shortName)>>();
-            foreach (var kv in BibleVersionUtils.VersionMap)
+            foreach (var group in _catalog)
             {
-                var lang = BibleVersionUtils.GetLanguageForVersion(kv.Key);
-                if (!groups.TryGetValue(lang, out var list))
-                    groups[lang] = list = new List<(string, string)>();
-                list.Add((kv.Key, kv.Value));
-            }
-            foreach (var list in groups.Values)
-                list.Sort((a, b) => string.CompareOrdinal(a.shortName, b.shortName));
-
-            var order = new List<string> { "English", "English Messianic" };
-            order.AddRange(groups.Keys
-                .Where(k => k != "English" && k != "English Messianic")
-                .OrderBy(k => k, StringComparer.Ordinal));
-
-            foreach (var lang in order)
-            {
-                if (!groups.ContainsKey(lang)) continue;
-                VersionsList.Children.Add(BuildLanguageHeader(lang));
-
-                foreach (var (key, shortName) in groups[lang])
+                VersionsList.Children.Add(BuildLanguageHeader(group.Language));
+                foreach (var v in group.Versions)
                 {
-                    var isActive = activeKeys.Contains(key);
-                    var enabled = !_viewModel.DisabledVersions.Contains(key) || isActive;
-                    var desc = BibleVersionUtils.GetDescriptionForVersion(key);
-
-                    VersionsList.Children.Add(BuildVersionRow(key, shortName, desc, isActive, enabled));
+                    var isActive = activeKeys.Contains(v.Key);
+                    var enabled = !_viewModel.DisabledVersions.Contains(v.Key) || isActive;
+                    VersionsList.Children.Add(BuildVersionRow(v.Key, v.ShortName, v.Description, isActive, enabled));
                 }
             }
         }
 
-        private FrameworkElement BuildLanguageHeader(string language)
+        private FrameworkElement BuildLanguageHeader(string language) => new Border
         {
-            return new Border
+            Background = _cardBg,
+            Padding = new Thickness(20, 10, 20, 6),
+            Margin = new Thickness(0, 8, 0, 0),
+            Child = new TextBlock
             {
-                Background = (Brush)FindResource("CardBackground"),
-                Padding = new Thickness(20, 10, 20, 6),
-                Margin = new Thickness(0, 8, 0, 0),
-                Child = new TextBlock
-                {
-                    Text = language,
-                    FontSize = 13,
-                    FontWeight = FontWeights.Bold,
-                    Foreground = (Brush)FindResource("AppPrimaryBrush"),
-                }
-            };
-        }
+                Text = language,
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                Foreground = _appPrimary,
+            },
+        };
 
-        private FrameworkElement BuildVersionRow(string key, string shortName, string description, bool isActive, bool enabled)
+        private FrameworkElement BuildVersionRow(
+            string key, string shortName, string description, bool isActive, bool enabled)
         {
             var grid = new Grid { Margin = new Thickness(20, 8, 20, 8) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -137,15 +171,13 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                 Text = shortName,
                 FontSize = 15,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = isActive
-                    ? (Brush)FindResource("OnSurfaceVariant")
-                    : (Brush)FindResource("OnSurface"),
+                Foreground = isActive ? _onSurfaceVariant : _onSurface,
             });
             left.Children.Add(new TextBlock
             {
                 Text = description,
                 FontSize = 11,
-                Foreground = (Brush)FindResource("OnSurfaceVariant"),
+                Foreground = _onSurfaceVariant,
                 TextTrimming = TextTrimming.CharacterEllipsis,
             });
             if (isActive)
@@ -155,111 +187,74 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
                     Text = "Currently active",
                     FontSize = 10,
                     FontWeight = FontWeights.SemiBold,
-                    Foreground = (Brush)FindResource("AppPrimaryBrush"),
+                    Foreground = _appPrimary,
                 });
             }
             Grid.SetColumn(left, 0);
             grid.Children.Add(left);
 
+            var captured = key;
             var cb = new CheckBox
             {
                 IsChecked = isActive || enabled,
                 IsEnabled = !isActive,
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            var captured = key;
-            cb.Checked += (_, _) =>
-            {
-                if (!isActive)
-                {
-                    var set = new HashSet<string>(_viewModel.DisabledVersions);
-                    set.Remove(captured);
-                    _viewModel.DisabledVersions = set;
-                    UpdateSelectAllState();
-                }
-            };
-            cb.Unchecked += (_, _) =>
-            {
-                if (!isActive)
-                {
-                    var set = new HashSet<string>(_viewModel.DisabledVersions);
-                    set.Add(captured);
-                    _viewModel.DisabledVersions = set;
-                    UpdateSelectAllState();
-                }
-            };
+            cb.Checked += (_, _) => { if (!isActive) SetVersionEnabled(captured, true); };
+            cb.Unchecked += (_, _) => { if (!isActive) SetVersionEnabled(captured, false); };
             Grid.SetColumn(cb, 1);
             grid.Children.Add(cb);
 
             return new Border
             {
-                Padding = new Thickness(0),
-                Margin = new Thickness(0),
-                BorderBrush = (Brush)FindResource("DividerBrush"),
+                BorderBrush = _divider,
                 BorderThickness = new Thickness(0, 0, 0, 1),
                 Child = grid,
             };
+        }
+
+        private void SetVersionEnabled(string key, bool enable)
+        {
+            var set = new HashSet<string>(_viewModel.DisabledVersions);
+            if (enable) set.Remove(key);
+            else set.Add(key);
+            _viewModel.DisabledVersions = set;
+            UpdateSelectAllState();
         }
 
         private void SelectAll_Changed(object sender, RoutedEventArgs e)
         {
             if (_suppressSelectAll) return;
 
-            var activeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                _viewModel.CurrentDbName
-            };
-            if (_viewModel.MultiVersion) activeKeys.Add(_viewModel.SecondaryDbName);
-
-            var nonActive = BibleVersionUtils.VersionMap.Keys
-                .Where(k => !activeKeys.Contains(k))
-                .ToList();
+            var nonActive = GetNonActiveKeys(GetActiveKeys());
+            var set = new HashSet<string>(_viewModel.DisabledVersions);
 
             if (SelectAllCheck.IsChecked == true)
-            {
-                var set = new HashSet<string>(_viewModel.DisabledVersions);
                 foreach (var k in nonActive) set.Remove(k);
-                _viewModel.DisabledVersions = set;
-            }
             else
-            {
-                var set = new HashSet<string>(_viewModel.DisabledVersions);
                 foreach (var k in nonActive) set.Add(k);
-                _viewModel.DisabledVersions = set;
-            }
+
+            _viewModel.DisabledVersions = set;
         }
 
         private void UpdateSelectAllState()
         {
-            var activeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                _viewModel.CurrentDbName
-            };
-            if (_viewModel.MultiVersion) activeKeys.Add(_viewModel.SecondaryDbName);
-
-            var nonActive = BibleVersionUtils.VersionMap.Keys
-                .Where(k => !activeKeys.Contains(k))
-                .ToList();
-
+            var nonActive = GetNonActiveKeys(GetActiveKeys());
             _suppressSelectAll = true;
             SelectAllCheck.IsChecked = nonActive.All(k => !_viewModel.DisabledVersions.Contains(k));
             _suppressSelectAll = false;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  Dismiss
-        // ═══════════════════════════════════════════════════════════
         private void Close_Click(object sender, RoutedEventArgs e)
             => _overlay.DismissWithFade();
 
-        // ═══════════════════════════════════════════════════════════
-        //  Cleanup
-        // ═══════════════════════════════════════════════════════════
         protected override void OnClosed(EventArgs e)
         {
-            base.OnClosed(e);   // raises Closed → controller detaches owner handlers
-
+            base.OnClosed(e);
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         }
+
+        private sealed record VersionEntry(string Key, string ShortName, string Description);
+        private sealed record LanguageGroup(string Language, List<VersionEntry> Versions);
     }
 }

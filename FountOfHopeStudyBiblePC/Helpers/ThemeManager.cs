@@ -19,7 +19,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
             {
                 if (_primaryColor == value) return;
                 _primaryColor = value;
-                OnChanged();
+                Changed?.Invoke();
             }
         }
 
@@ -30,7 +30,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
             {
                 if (_secondaryColor == value) return;
                 _secondaryColor = value;
-                OnChanged();
+                Changed?.Invoke();
             }
         }
 
@@ -41,7 +41,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
             {
                 if (_darkTheme == value) return;
                 _darkTheme = value;
-                OnChanged();
+                Changed?.Invoke();
             }
         }
 
@@ -52,20 +52,23 @@ namespace FountOfHopeStudyBiblePC.Helpers
             {
                 if (_isCustomColor == value) return;
                 _isCustomColor = value;
-                OnChanged();
+                Changed?.Invoke();
             }
         }
 
         public static void Apply(Color primary, Color secondary, bool darkTheme, bool isCustomColor)
         {
-            var changed = false;
-            if (_primaryColor != primary) { _primaryColor = primary; changed = true; }
-            if (_secondaryColor != secondary) { _secondaryColor = secondary; changed = true; }
-            if (_darkTheme != darkTheme) { _darkTheme = darkTheme; changed = true; }
-            if (_isCustomColor != isCustomColor) { _isCustomColor = isCustomColor; changed = true; }
-            if (changed) OnChanged();
-        }
+            var changed = _primaryColor != primary
+                       || _secondaryColor != secondary
+                       || _darkTheme != darkTheme
+                       || _isCustomColor != isCustomColor;
 
-        private static void OnChanged() => Changed?.Invoke();
+            _primaryColor = primary;
+            _secondaryColor = secondary;
+            _darkTheme = darkTheme;
+            _isCustomColor = isCustomColor;
+
+            if (changed) Changed?.Invoke();
+        }
     }
 }

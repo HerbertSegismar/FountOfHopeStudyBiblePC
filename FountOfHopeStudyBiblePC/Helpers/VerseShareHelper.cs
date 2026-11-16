@@ -1,5 +1,4 @@
-﻿// Helpers/VerseShareHelper.cs
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Text;
 using System.Windows;
 using FountOfHopeStudyBiblePC.Models;
@@ -10,7 +9,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
     {
         public static string BuildShareText(IEnumerable<Verse> verses)
         {
-            var sb = new StringBuilder();
+            var sb = new StringBuilder(256);
             foreach (var verse in verses)
             {
                 var cleaned = SimpleVerseProcessor.StripXmlTags(verse.Text);
@@ -26,10 +25,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
             return sb.ToString();
         }
 
-        /// <summary>
-        /// WPF has no ACTION_SEND intent; copy to the clipboard and,
-        /// optionally, hand off to the default mail client.
-        /// </summary>
         public static void ShareVerses(Window owner, IEnumerable<Verse> verses)
         {
             var shareText = BuildShareText(verses);
@@ -45,7 +40,6 @@ namespace FountOfHopeStudyBiblePC.Helpers
             }
             catch
             {
-                // Clipboard can be locked by another process — fall back to a dialog.
                 MessageBox.Show(owner, shareText, "Share verses via");
             }
         }

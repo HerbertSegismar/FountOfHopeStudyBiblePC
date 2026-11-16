@@ -21,6 +21,14 @@ namespace FountOfHopeStudyBiblePC.Views
         private static readonly Action<PassageSelection> NoOpPassage = _ => { };
         private static readonly Action<Screen> NoOpScreen = _ => { };
 
+        private static readonly string AssetsRoot =
+            Path.Combine(AppContext.BaseDirectory, "Assets");
+
+        private static readonly string[] AssetSubfolders =
+        {
+            "Images", "images", "textures", "Backgrounds", "backgrounds", "QuickActions", "quickactions",
+        };
+
         private static readonly IReadOnlyList<PopularDevotional> AllDevotionals =
         [
             new("Psalm 23", "The Lord is my shepherd...", "Psalms", 23, 1),
@@ -100,6 +108,7 @@ namespace FountOfHopeStudyBiblePC.Views
         private List<Verse>? _dailyVerses;
         private bool _isBookmarked;
         private bool _applyingTheme;
+        private bool _hooked;
 
         public ObservableCollection<QuickAction> QuickActions { get; } = [];
         public ObservableCollection<PopularDevotional> PopularDevotionals { get; } = [];
@@ -136,6 +145,7 @@ namespace FountOfHopeStudyBiblePC.Views
 
             ThemeManager.Changed += OnThemeChanged;
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            _hooked = true;
 
             Loaded += OnLoaded;
             Unloaded += OnUnloaded;
@@ -152,8 +162,10 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
+            if (!_hooked) return;
             ThemeManager.Changed -= OnThemeChanged;
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _hooked = false;
         }
 
         private void SetRandomBackgroundImage()
@@ -360,6 +372,40 @@ namespace FountOfHopeStudyBiblePC.Views
             ImageSectionControl.PassageSelected += (_, selection) => _onNavigateToReader(selection);
         }
 
+        private void QuickAccessScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (sender is not ScrollViewer sv) return;
+
+            if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0)
+            {
+                sv.ScrollToHorizontalOffset(sv.HorizontalOffset - e.Delta);
+                e.Handled = true;
+                return;
+            }
+
+            var parent = FindParentScrollViewer(sv);
+            if (parent == null) return;
+
+            e.Handled = true;
+            parent.RaiseEvent(new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+            {
+                RoutedEvent = MouseWheelEvent,
+                Source = e.OriginalSource,
+            });
+        }
+
+        private static ScrollViewer? FindParentScrollViewer(DependencyObject child)
+        {
+            var current = VisualTreeHelper.GetParent(child);
+            while (current != null)
+            {
+                if (current is ScrollViewer sv)
+                    return sv;
+                current = VisualTreeHelper.GetParent(current);
+            }
+            return null;
+        }
+
         private void BuildQuickActions()
         {
             var totalImages = _viewModel.Textures;
@@ -402,26 +448,12 @@ namespace FountOfHopeStudyBiblePC.Views
 
         private static ImageSource? LoadThumbnail(string? pathOrUri, int decodeWidth = 240)
         {
-            if (string.IsNullOrEmpty(pathOrUri)) return null;
+            if (string.IsNullOrEmpty(pathOrUri))
+                return null;
 
             try
             {
-                Uri? uri = null;
-
-                if (pathOrUri.StartsWith("pack://", StringComparison.OrdinalIgnoreCase))
-                    return null;
-
-                if (File.Exists(pathOrUri))
-                {
-                    uri = new Uri(pathOrUri, UriKind.Absolute);
-                }
-                else
-                {
-                    var candidate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, pathOrUri);
-                    if (File.Exists(candidate))
-                        uri = new Uri(candidate, UriKind.Absolute);
-                }
-
+                var uri = ResolveUri(pathOrUri);
                 if (uri == null) return null;
 
                 var bmp = new BitmapImage();
@@ -438,6 +470,34 @@ namespace FountOfHopeStudyBiblePC.Views
             {
                 return null;
             }
+        }
+
+        private static Uri? ResolveUri(string pathOrUri)
+        {
+            if (pathOrUri.StartsWith("pack://", StringComparison.OrdinalIgnoreCase) ||
+                pathOrUri.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                pathOrUri.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                return new Uri(pathOrUri, UriKind.Absolute);
+            }
+
+            if (File.Exists(pathOrUri))
+                return new Uri(pathOrUri, UriKind.Absolute);
+
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+
+            var direct = Path.Combine(baseDir, pathOrUri);
+            if (File.Exists(direct))
+                return new Uri(direct, UriKind.Absolute);
+
+            foreach (var sub in AssetSubfolders)
+            {
+                var candidate = Path.Combine(AssetsRoot, sub, pathOrUri);
+                if (File.Exists(candidate))
+                    return new Uri(candidate, UriKind.Absolute);
+            }
+
+            return null;
         }
 
         private void QuickAction_Click(object sender, RoutedEventArgs e)

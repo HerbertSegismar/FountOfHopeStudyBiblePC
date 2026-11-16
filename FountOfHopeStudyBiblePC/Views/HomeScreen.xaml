@@ -8,6 +8,7 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled"
+                  PanningMode="VerticalOnly"
                   Background="{DynamicResource AppBackground}">
         <StackPanel>
 
@@ -158,9 +159,13 @@
                        Foreground="{DynamicResource OnSurface}"/>
 
             <!-- QuickAccessCarousel() -->
-            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+            <ScrollViewer x:Name="QuickAccessScroll"
+                          HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Disabled"
-                          Padding="16,0,16,0">
+                          PanningMode="HorizontalOnly"
+                          CanContentScroll="False"
+                          Padding="16,0,16,0"
+                          PreviewMouseWheel="QuickAccessScroll_PreviewMouseWheel">
                 <ItemsControl x:Name="QuickAccessItems"
                               ItemsSource="{Binding QuickActions, ElementName=HomeRoot}">
                     <ItemsControl.ItemsPanel>
