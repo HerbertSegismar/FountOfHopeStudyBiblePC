@@ -1,21 +1,14 @@
-﻿// Services/DatabaseHelper.cs
-using FountOfHopeStudyBiblePC.Helpers;
+﻿using FountOfHopeStudyBiblePC.Helpers;
 using FountOfHopeStudyBiblePC.Models;
 using Microsoft.Data.Sqlite;
-using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Media;
 
 namespace FountOfHopeStudyBiblePC.Services
 {
-    public class DatabaseHelper : IDisposable
+    public partial class DatabaseHelper : IDisposable
     {
-        // ── Table / column names ────────────────────────────────────────
         private const string VersesTable = "verses";
         private const string ColumnText = "text";
         private const string ColumnBookNumber = "book_number";
@@ -35,10 +28,18 @@ namespace FountOfHopeStudyBiblePC.Services
         public const string ColumnStartPos = "start_pos";
         public const string ColumnEndPos = "end_pos";
 
-        public bool IsEmpty()
-            => _connection == null || _connection.State != System.Data.ConnectionState.Open;
+        private static readonly Dictionary<int, BibleBook> BookByNumber = BuildBookIndex();
+        private static readonly char[] TermSplitters = [' ', '\t', '\n', '\r', '\f', '\v'];
 
-        private readonly Random _random = new();
+        [GeneratedRegex("<script[\\s\\S]*?</script>")]
+        private static partial Regex ScriptTagRegex();
+
+        [GeneratedRegex("</i>(\\w)", RegexOptions.IgnoreCase)]
+        private static partial Regex ItalicWordBreakRegex();
+
+        [GeneratedRegex("</em>(\\w)", RegexOptions.IgnoreCase)]
+        private static partial Regex EmphasisWordBreakRegex();
+
         private SqliteConnection? _connection;
 
         public string DatabaseName { get; }
@@ -50,39 +51,31 @@ namespace FountOfHopeStudyBiblePC.Services
             OpenDatabase();
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Lifecycle
-        // ═══════════════════════════════════════════════════════════════
+        public bool IsEmpty()
+            => _connection == null || _connection.State != System.Data.ConnectionState.Open;
+
+        private static Dictionary<int, BibleBook> BuildBookIndex()
+        {
+            var map = new Dictionary<int, BibleBook>(BibleData.AllBooks.Count);
+            foreach (var b in BibleData.AllBooks)
+                if (!map.ContainsKey(b.CustomNumber))
+                    map[b.CustomNumber] = b;
+            return map;
+        }
+
+        private static BibleBook? GetBookInfo(int bookNumber)
+            => BookByNumber.TryGetValue(bookNumber, out var b) ? b : null;
+
         private void OpenDatabase()
         {
             try
             {
                 var dbFile = GetDatabaseFilePath(DatabaseName);
-                var existedBefore = File.Exists(dbFile);
-
-                if (!existedBefore)
+                if (!File.Exists(dbFile))
                     CopyDatabaseFromAssets(dbFile);
-
-                var fileSize = File.Exists(dbFile) ? new FileInfo(dbFile).Length : 0;
 
                 _connection = new SqliteConnection($"Data Source={dbFile}");
                 _connection.Open();
-
-                // Log what's actually in the DB
-                var tables = new List<string>();
-                try
-                {
-                    using var cmd = _connection.CreateCommand();
-                    cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table'";
-                    using var r = cmd.ExecuteReader();
-                    while (r.Read()) tables.Add(r.GetString(0));
-                }
-                catch { }
-
-                System.Diagnostics.Debug.WriteLine(
-                    $"[DB] Opened '{DatabaseName}' " +
-                    $"existed={existedBefore} size={fileSize}B " +
-                    $"tables=[{string.Join(",", tables)}]");
 
                 CreateBookmarksTable();
                 CreateHighlightsTable();
@@ -90,10 +83,8 @@ namespace FountOfHopeStudyBiblePC.Services
                 CreateWordHighlightsTable();
                 MigrateHighlightsTable();
             }
-            catch (Exception ex)
+            catch
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[DB] OpenDatabase '{DatabaseName}' FAILED: {ex.Message}");
                 _connection?.Dispose();
                 _connection = null;
             }
@@ -124,7 +115,6 @@ namespace FountOfHopeStudyBiblePC.Services
             }
             catch
             {
-                // Ensure a half-opened connection doesn't leak into subsequent calls.
                 try { _connection?.Dispose(); } catch { }
                 _connection = null;
                 return false;
@@ -140,9 +130,6 @@ namespace FountOfHopeStudyBiblePC.Services
 
         public void Close() => Dispose();
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Schema creation
-        // ═══════════════════════════════════════════════════════════════
         private void CreateBookmarksTable() => ExecuteNonQuery($"""
             CREATE TABLE IF NOT EXISTS {BookmarksTable} (
                 {ColumnBookName} TEXT,
@@ -209,9 +196,6 @@ namespace FountOfHopeStudyBiblePC.Services
             )
             """);
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Asset helpers — EXACT Kotlin mapping
-        // ═══════════════════════════════════════════════════════════════
         private static string GetDatabaseDirectory()
         {
             var dir = Path.Combine(
@@ -226,7 +210,7 @@ namespace FountOfHopeStudyBiblePC.Services
 
         private static string GetAssetPath(string databaseName)
         {
-            string subDir = databaseName switch
+            var subDir = databaseName switch
             {
                 var n when n.EndsWith("dictionary.sqlite3") => "dictionaries",
                 var n when n.EndsWith("kjvsubheadings.sqlite3") => "subheadings",
@@ -249,9 +233,6 @@ namespace FountOfHopeStudyBiblePC.Services
             catch { }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Cross references
-        // ═══════════════════════════════════════════════════════════════
         public Dictionary<int, int> GetCrossReferenceCountsForChapter(int book, int? chapter)
         {
             var map = new Dictionary<int, int>();
@@ -296,10 +277,6 @@ namespace FountOfHopeStudyBiblePC.Services
             return refs;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Verse commentary — EXACT Kotlin port.
-        //  SQL: WHERE book_number=? AND chapter_number_from<=? AND (chapter_number_to IS NULL OR chapter_number_to>=?)
-        // ═══════════════════════════════════════════════════════════════
         public List<VerseCommentary> GetCommentariesForVerse(int bookNumber, int chapter, int verse)
         {
             var commentaries = new List<VerseCommentary>();
@@ -337,10 +314,7 @@ namespace FountOfHopeStudyBiblePC.Services
                             {
                                 if (chapter == safeChapterFrom && verse == verseFrom)
                                 {
-                                    var text = r.GetString(textIdx);
-                                    text = Regex.Replace(text, "<script[\\s\\S]*?</script>", "");
-                                    text = Regex.Replace(text, "</i>(\\w)", "</i> $1", RegexOptions.IgnoreCase);
-                                    text = Regex.Replace(text, "</em>(\\w)", "</em> $1", RegexOptions.IgnoreCase);
+                                    var text = CleanCommentaryText(r.GetString(textIdx));
                                     commentaries.Add(new VerseCommentary(text, safeChapterFrom, verseFrom, null, null));
                                 }
                                 continue;
@@ -356,10 +330,7 @@ namespace FountOfHopeStudyBiblePC.Services
 
                             if (lowerMet && upperMet)
                             {
-                                var text = r.GetString(textIdx);
-                                text = Regex.Replace(text, "<script[\\s\\S]*?</script>", "");
-                                text = Regex.Replace(text, "</i>(\\w)", "</i> $1", RegexOptions.IgnoreCase);
-                                text = Regex.Replace(text, "</em>(\\w)", "</em> $1", RegexOptions.IgnoreCase);
+                                var text = CleanCommentaryText(r.GetString(textIdx));
                                 commentaries.Add(new VerseCommentary(text, safeChapterFrom, verseFrom, chapterTo, verseTo));
                             }
                         }
@@ -368,6 +339,14 @@ namespace FountOfHopeStudyBiblePC.Services
             }
             catch { }
             return commentaries;
+        }
+
+        private static string CleanCommentaryText(string text)
+        {
+            text = ScriptTagRegex().Replace(text, "");
+            text = ItalicWordBreakRegex().Replace(text, "</i> $1");
+            text = EmphasisWordBreakRegex().Replace(text, "</em> $1");
+            return text;
         }
 
         public string? GetCommentary(int bookNumber, int chapterNumber, int verseNumber, string marker)
@@ -382,25 +361,15 @@ namespace FountOfHopeStudyBiblePC.Services
                     r =>
                     {
                         if (r.Read())
-                            commentary = Regex.Replace(
-                                r.GetString(r.GetOrdinal("text")),
-                                "<script[\\s\\S]*?</script>", "");
+                            commentary = ScriptTagRegex().Replace(
+                                r.GetString(r.GetOrdinal("text")), "");
                     },
                     bookNumber, chapterNumber, verseNumber, marker);
             }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[GetCommentary] ERROR in '{DatabaseName}' " +
-                    $"b={bookNumber} c={chapterNumber} v={verseNumber} marker='{marker}': " +
-                    $"{ex.Message}");
-            }
+            catch { }
             return commentary;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Verses / subheadings
-        // ═══════════════════════════════════════════════════════════════
         public int GetVerseCount(int bookNumber, int chapter)
         {
             var count = 0;
@@ -476,14 +445,11 @@ namespace FountOfHopeStudyBiblePC.Services
             return subheadings;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Random distractors
-        // ═══════════════════════════════════════════════════════════════
         public List<string> GetRandomDistractors(
             string excludeWord, int count, HashSet<string>? additionalExcludeWords = null)
         {
             additionalExcludeWords ??= new HashSet<string>();
-            var distractors = new List<string>();
+            var distractors = new List<string>(count);
             var backupDistractors = new List<string>();
             var usedVersesText = new HashSet<string>();
             var usedWords = new HashSet<string>();
@@ -491,7 +457,7 @@ namespace FountOfHopeStudyBiblePC.Services
             if (_connection == null) return distractors;
 
             var targetLength = excludeWord.Length;
-            var isLatin = Regex.IsMatch(excludeWord, "^[A-Za-z]+$");
+            var isLatin = IsAllAsciiLetters(excludeWord);
             var answerFirstCharIsUpper = isLatin && char.IsUpper(excludeWord[0]);
             var excludedLower = new HashSet<string>(
                 new[] { excludeWord }.Concat(additionalExcludeWords).Select(w => w.ToLowerInvariant()));
@@ -514,16 +480,12 @@ namespace FountOfHopeStudyBiblePC.Services
                             var clean = SimpleVerseProcessor.StripXmlTags(raw);
                             if (string.IsNullOrEmpty(clean) || !usedVersesText.Add(clean)) continue;
 
-                            var words = clean.Split(' ')
-                                .Select(w => Regex.Replace(w, "[^\\p{L}]", ""))
-                                .Where(w => w.Length == targetLength &&
-                                            !excludedLower.Contains(w.ToLowerInvariant()))
-                                .Distinct().ToList();
-
-                            foreach (var word in words)
+                            foreach (var rawWord in clean.Split(' '))
                             {
-                                if (distractors.Count >= count) break;
+                                var word = StripNonLetters(rawWord);
+                                if (word.Length != targetLength) continue;
                                 var wordLower = word.ToLowerInvariant();
+                                if (excludedLower.Contains(wordLower)) continue;
                                 if (usedWords.Contains(wordLower)) continue;
 
                                 var suffixOk = true;
@@ -545,14 +507,23 @@ namespace FountOfHopeStudyBiblePC.Services
 
                                 if (strictPhase)
                                 {
-                                    if (matchesFirstLast) { distractors.Add(word); usedWords.Add(wordLower); }
-                                    else if (backupWordsSet.Add(wordLower)) backupDistractors.Add(word);
+                                    if (matchesFirstLast)
+                                    {
+                                        distractors.Add(word);
+                                        usedWords.Add(wordLower);
+                                    }
+                                    else if (backupWordsSet.Add(wordLower))
+                                    {
+                                        backupDistractors.Add(word);
+                                    }
                                 }
                                 else
                                 {
                                     distractors.Add(word);
                                     usedWords.Add(wordLower);
                                 }
+
+                                if (distractors.Count >= count) break;
                             }
                         }
                     });
@@ -577,9 +548,30 @@ namespace FountOfHopeStudyBiblePC.Services
             return distractors;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Random verses
-        // ═══════════════════════════════════════════════════════════════
+        private static bool IsAllAsciiLetters(string s)
+        {
+            if (s.Length == 0) return false;
+            foreach (var c in s)
+                if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))) return false;
+            return true;
+        }
+
+        private static string StripNonLetters(string word)
+        {
+            var hasNonLetter = false;
+            foreach (var c in word)
+            {
+                if (!char.IsLetter(c)) { hasNonLetter = true; break; }
+            }
+            if (!hasNonLetter) return word;
+
+            var buf = new char[word.Length];
+            var len = 0;
+            foreach (var c in word)
+                if (char.IsLetter(c)) buf[len++] = c;
+            return new string(buf, 0, len);
+        }
+
         public List<Verse> GetRandomVerses() => GetRandomVersesInternal(0);
 
         private List<Verse> GetRandomVersesInternal(int depth)
@@ -592,13 +584,13 @@ namespace FountOfHopeStudyBiblePC.Services
                 var allBooks = BibleData.AllBooks;
                 if (allBooks.Count == 0) return verses;
 
-                var randomBook = allBooks[_random.Next(allBooks.Count)];
-                var randomChapter = _random.Next(randomBook.Chapters) + 1;
+                var randomBook = allBooks[Random.Shared.Next(allBooks.Count)];
+                var randomChapter = Random.Shared.Next(randomBook.Chapters) + 1;
                 var verseCount = GetVerseCount(randomBook.CustomNumber, randomChapter);
                 if (verseCount == 0) return GetRandomVersesInternal(depth + 1);
 
-                var numberOfVerses = Math.Min(_random.Next(5) + 1, verseCount);
-                var startVerse = _random.Next(verseCount - numberOfVerses + 1) + 1;
+                var numberOfVerses = Math.Min(Random.Shared.Next(5) + 1, verseCount);
+                var startVerse = Random.Shared.Next(verseCount - numberOfVerses + 1) + 1;
 
                 ExecuteReader(
                     $"SELECT {ColumnVerse}, {ColumnText} FROM {VersesTable} " +
@@ -624,9 +616,6 @@ namespace FountOfHopeStudyBiblePC.Services
             return verses;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Search
-        // ═══════════════════════════════════════════════════════════════
         public List<SearchVerse> SearchVerses(
             string query, SearchOptions? options = null,
             bool inverse = false, bool exactPhrase = false)
@@ -638,24 +627,48 @@ namespace FountOfHopeStudyBiblePC.Services
                 var trimmed = query.Trim();
                 if (string.IsNullOrEmpty(trimmed)) return verses;
 
-                var whereParts = new List<string>();
-                var args = new List<object?>();
-                var terms = exactPhrase
-                    ? new[] { query }
-                    : Regex.Split(trimmed, "\\s+").Where(t => t.Length > 0).ToArray();
-
+                var whereParts = new List<string>(4);
+                var args = new List<object?>(4);
                 var op = inverse ? "NOT LIKE" : "LIKE";
-                foreach (var term in terms)
+
+                if (exactPhrase)
                 {
                     whereParts.Add($"text {op} @p{args.Count}");
-                    args.Add($"%{term}%");
+                    args.Add($"%{query}%");
+                }
+                else
+                {
+                    foreach (var term in trimmed.Split(TermSplitters, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        whereParts.Add($"text {op} @p{args.Count}");
+                        args.Add($"%{term}%");
+                    }
                 }
 
-                if (options?.BookRange is { } r)
+                int? minBook, maxBook;
+                if (options?.BookRange is { } explicitRange)
                 {
-                    whereParts.Add($"book_number BETWEEN @p{args.Count} AND @p{args.Count + 1}");
-                    args.Add(r.Item1);
-                    args.Add(r.Item2);
+                    minBook = explicitRange.Item1;
+                    maxBook = explicitRange.Item2;
+                }
+                else
+                {
+                    (minBook, maxBook) = ResolveScopeRange(options?.Scope);
+                }
+
+                if (minBook.HasValue && maxBook.HasValue)
+                {
+                    if (minBook.Value == maxBook.Value)
+                    {
+                        whereParts.Add($"book_number = @p{args.Count}");
+                        args.Add(minBook.Value);
+                    }
+                    else
+                    {
+                        whereParts.Add($"book_number BETWEEN @p{args.Count} AND @p{args.Count + 1}");
+                        args.Add(minBook.Value);
+                        args.Add(maxBook.Value);
+                    }
                 }
 
                 var sql = $"SELECT {ColumnBookNumber}, {ColumnChapter}, {ColumnVerse}, {ColumnText} " +
@@ -673,15 +686,29 @@ namespace FountOfHopeStudyBiblePC.Services
                         var bookName = GetBookInfo(bn)?.Name;
                         verses.Add(new SearchVerse(vn, tx, bn, ch, bookName));
                     }
-                }, args.ToArray());
+                }, [.. args]);
             }
             catch { }
             return verses;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Bookmarks
-        // ═══════════════════════════════════════════════════════════════
+        private static (int? min, int? max) ResolveScopeRange(string? scope)
+        {
+            if (string.IsNullOrEmpty(scope) || scope == SearchScopes.Whole)
+                return (null, null);
+
+            if (SearchScopes.IsBookScope(scope))
+            {
+                var bn = SearchScopes.GetBookNumberFromScope(scope);
+                return bn.HasValue ? (bn.Value, bn.Value) : (null, null);
+            }
+
+            if (SearchScopes.ScopeRanges.TryGetValue(scope, out var range) && range is not null)
+                return (range.Start, range.End);
+
+            return (null, null);
+        }
+
         public void AddBookmark(Verse verse)
         {
             try
@@ -747,9 +774,6 @@ namespace FountOfHopeStudyBiblePC.Services
             return verses;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Highlights
-        // ═══════════════════════════════════════════════════════════════
         public void AddHighlight(Verse verse, int colorArgb)
         {
             try
@@ -778,12 +802,7 @@ namespace FountOfHopeStudyBiblePC.Services
                     verse.BookName ?? "", verse.Chapter ?? 0, verse.VerseNumber);
             }
             catch { }
-            return colorInt.HasValue
-                ? Color.FromArgb((byte)((colorInt.Value >> 24) & 0xFF),
-                                 (byte)((colorInt.Value >> 16) & 0xFF),
-                                 (byte)((colorInt.Value >> 8) & 0xFF),
-                                 (byte)(colorInt.Value & 0xFF))
-                : null;
+            return colorInt.HasValue ? ArgbToColor(colorInt.Value) : null;
         }
 
         public void RemoveHighlight(Verse verse)
@@ -813,9 +832,6 @@ namespace FountOfHopeStudyBiblePC.Services
             return exists;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Notes
-        // ═══════════════════════════════════════════════════════════════
         public void AddOrUpdateNote(string book, int chapter, int startVerse, int endVerse, string element)
         {
             try
@@ -900,15 +916,12 @@ namespace FountOfHopeStudyBiblePC.Services
                     $"AND {ColumnStartVerse} <= @p2 AND {ColumnEndVerse} >= @p2",
                     r => exists = r.Read(),
                     verse.BookName ?? "", verse.Chapter ?? 0,
-                    verse.VerseNumber, verse.VerseNumber);
+                    verse.VerseNumber);
             }
             catch { }
             return exists;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Dictionary / Strong's
-        // ═══════════════════════════════════════════════════════════════
         public string? GetWordDefinition(string word)
         {
             string? definition = null;
@@ -923,11 +936,6 @@ namespace FountOfHopeStudyBiblePC.Services
             return definition;
         }
 
-        /// <summary>
-        /// Prefix lookup used by ModalContentHelpers when exact match fails.
-        /// Returns (topic, definition) for the first row whose topic starts
-        /// with the given prefix, or null if no match.
-        /// </summary>
         public (string topic, string definition)? GetWordDefinitionStartingWith(string prefix)
         {
             (string, string)? result = null;
@@ -951,14 +959,6 @@ namespace FountOfHopeStudyBiblePC.Services
             return result;
         }
 
-        /// <summary>
-        /// Kotlin-equivalent containment search:
-        ///   SELECT topic, definition FROM dictionary
-        ///   WHERE LOWER(topic) LIKE '%' || ? || '%'
-        ///   ORDER BY LENGTH(topic) ASC LIMIT n
-        /// Feeds the customDistance + levenshtein ranking in
-        /// ModalContentHelpers.GetDefinitionOrClosest.
-        /// </summary>
         public List<(string topic, string definition)> GetDictionaryCandidatesContaining(
             string word, int limit = 50)
         {
@@ -985,15 +985,9 @@ namespace FountOfHopeStudyBiblePC.Services
             return results;
         }
 
-        /// <summary>
-        /// Alphabetical fallback used when nothing contains the word:
-        /// the first topic &gt; word and the first topic &lt; word.
-        /// ModalContentHelpers ranks these by levenshtein and keeps the
-        /// closer of the two. Mirrors the Kotlin second-stage query.
-        /// </summary>
         public List<(string topic, string definition)> GetDictionaryNeighbours(string word)
         {
-            var results = new List<(string, string)>();
+            var results = new List<(string, string)>(2);
             var lowerWord = word.ToLowerInvariant();
 
             try
@@ -1051,9 +1045,6 @@ namespace FountOfHopeStudyBiblePC.Services
             return result;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Word-level highlights
-        // ═══════════════════════════════════════════════════════════════
         public void AddWordHighlight(Verse verse, int start, int end, int colorArgb)
         {
             try
@@ -1100,11 +1091,7 @@ namespace FountOfHopeStudyBiblePC.Services
                             var start = r.GetInt32(r.GetOrdinal(ColumnStartPos));
                             var end = r.GetInt32(r.GetOrdinal(ColumnEndPos));
                             var c = r.GetInt32(r.GetOrdinal(ColumnHighlightColor));
-                            highlights.Add(new SelectedWord(verse.VerseNumber, start, end,
-                                Color.FromArgb((byte)((c >> 24) & 0xFF),
-                                               (byte)((c >> 16) & 0xFF),
-                                               (byte)((c >> 8) & 0xFF),
-                                               (byte)(c & 0xFF))));
+                            highlights.Add(new SelectedWord(verse.VerseNumber, start, end, ArgbToColor(c)));
                         }
                     },
                     verse.BookName ?? "", verse.Chapter ?? 0, verse.VerseNumber);
@@ -1113,10 +1100,13 @@ namespace FountOfHopeStudyBiblePC.Services
             return highlights;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Async wrappers (C#-only; not in Kotlin, but consumed by
-        //  BookmarkHelper.cs, HomeScreen.xaml.cs, etc.)
-        // ═══════════════════════════════════════════════════════════════
+        private static Color ArgbToColor(int argb) =>
+            Color.FromArgb(
+                (byte)((argb >> 24) & 0xFF),
+                (byte)((argb >> 16) & 0xFF),
+                (byte)((argb >> 8) & 0xFF),
+                (byte)(argb & 0xFF));
+
         public Task<List<Verse>> GetRandomVersesAsync(int count = 1) => Task.Run(() =>
         {
             var random = GetRandomVerses();
@@ -1133,9 +1123,6 @@ namespace FountOfHopeStudyBiblePC.Services
         public Task RemoveBookmarkAsync(Verse verse)
             => Task.Run(() => RemoveBookmark(verse));
 
-        // ═══════════════════════════════════════════════════════════════
-        //  Low-level helpers
-        // ═══════════════════════════════════════════════════════════════
         private void ExecuteNonQuery(string sql, params object?[] args)
         {
             if (_connection == null) return;
@@ -1151,7 +1138,7 @@ namespace FountOfHopeStudyBiblePC.Services
             var cols = string.Join(", ", values.Keys);
             var pars = string.Join(", ", values.Keys.Select((_, i) => $"@p{i}"));
             ExecuteNonQuery($"INSERT OR IGNORE INTO {table} ({cols}) VALUES ({pars})",
-                values.Values.ToArray());
+                [.. values.Values]);
         }
 
         private void InsertOrReplace(string table, Dictionary<string, object?> values)
@@ -1159,11 +1146,8 @@ namespace FountOfHopeStudyBiblePC.Services
             var cols = string.Join(", ", values.Keys);
             var pars = string.Join(", ", values.Keys.Select((_, i) => $"@p{i}"));
             ExecuteNonQuery($"INSERT OR REPLACE INTO {table} ({cols}) VALUES ({pars})",
-                values.Values.ToArray());
+                [.. values.Values]);
         }
-
-        private static BibleBook? GetBookInfo(int bookNumber)
-            => BibleData.AllBooks.FirstOrDefault(b => b.CustomNumber == bookNumber);
 
         private void ExecuteReader(string sql, Action<SqliteDataReader> readerAction, params object?[] args)
         {
@@ -1177,9 +1161,6 @@ namespace FountOfHopeStudyBiblePC.Services
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    //  BibleVersionInfoRepository
-    // ═══════════════════════════════════════════════════════════════════
     public static class BibleVersionInfoRepository
     {
         public static BibleVersionInfo? GetVersionInfo(string dbName)
@@ -1194,19 +1175,15 @@ namespace FountOfHopeStudyBiblePC.Services
 
                 string? description = null, detailedInfo = null;
 
-                using (var cmd = conn.CreateCommand())
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT name, value FROM info WHERE name IN ('description', 'detailed_info')";
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
                 {
-                    cmd.CommandText = "SELECT value FROM info WHERE name = @p0";
-                    cmd.Parameters.AddWithValue("@p0", "description");
-                    using var r = cmd.ExecuteReader();
-                    if (r.Read()) description = r.GetString(0);
-                }
-                using (var cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = "SELECT value FROM info WHERE name = @p0";
-                    cmd.Parameters.AddWithValue("@p0", "detailed_info");
-                    using var r = cmd.ExecuteReader();
-                    if (r.Read()) detailedInfo = r.GetString(0);
+                    var name = r.GetString(0);
+                    var value = r.GetString(1);
+                    if (name == "description") description = value;
+                    else if (name == "detailed_info") detailedInfo = value;
                 }
                 return new BibleVersionInfo(description, detailedInfo);
             }
@@ -1214,9 +1191,6 @@ namespace FountOfHopeStudyBiblePC.Services
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    //  Reference fetcher
-    // ═══════════════════════════════════════════════════════════════════
     public abstract record ReferenceResult
     {
         public sealed record Single(Verse Verse, string BookName) : ReferenceResult;
@@ -1225,8 +1199,11 @@ namespace FountOfHopeStudyBiblePC.Services
         public sealed record Invalid : ReferenceResult;
     }
 
-    public static class ReferenceFetcher
+    public static partial class ReferenceFetcher
     {
+        [GeneratedRegex(@"^([A-Za-z0-9 ]+?)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$")]
+        private static partial Regex ReferencePattern();
+
         public static List<VerseContent> GetVersesWithSubheadings(
             DatabaseHelper versesHelper, DatabaseHelper subheadingsHelper,
             int bookNumber, int chapter)
@@ -1243,16 +1220,15 @@ namespace FountOfHopeStudyBiblePC.Services
             foreach (var s in subheadings)
             {
                 if (!contentMap.TryGetValue(s.Verse, out var list))
-                    contentMap[s.Verse] = list = new List<VerseContent>();
+                    contentMap[s.Verse] = list = [];
                 list.Insert(0, new VerseContent.SubheadingVal(s));
             }
-            return contentMap.SelectMany(kv => kv.Value).ToList();
+            return [.. contentMap.SelectMany(kv => kv.Value)];
         }
 
         public static ReferenceResult FetchByReference(string reference, DatabaseHelper versesHelper)
         {
-            var pattern = new Regex(@"^([A-Za-z0-9 ]+?)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$");
-            var m = pattern.Match(reference.Trim());
+            var m = ReferencePattern().Match(reference.Trim());
             if (!m.Success) return new ReferenceResult.Invalid();
 
             var bookNameInput = m.Groups[1].Value.Trim();
@@ -1274,13 +1250,15 @@ namespace FountOfHopeStudyBiblePC.Services
             if (endVerse == null)
             {
                 var found = chapterVerses.FirstOrDefault(v => v.VerseNumber == startVerse.Value);
-                return found == null ? new ReferenceResult.Invalid()
+                return found == null
+                    ? new ReferenceResult.Invalid()
                     : new ReferenceResult.Single(Enrich(found), book.Name);
             }
             var range = chapterVerses
                 .Where(v => v.VerseNumber >= startVerse.Value && v.VerseNumber <= endVerse.Value)
                 .Select(Enrich).ToList();
-            return range.Count > 0 ? new ReferenceResult.Range(range, book.Name)
+            return range.Count > 0
+                ? new ReferenceResult.Range(range, book.Name)
                 : new ReferenceResult.Invalid();
         }
 
@@ -1289,22 +1267,36 @@ namespace FountOfHopeStudyBiblePC.Services
             if (string.IsNullOrWhiteSpace(input)) return null;
             var n = input.ToLowerInvariant().Trim();
             var books = BibleData.AllBooks;
-            return books.FirstOrDefault(b => b.Name.ToLowerInvariant() == n)
-                ?? books.FirstOrDefault(b => b.Name.ToLowerInvariant().Contains(n))
-                ?? books.FirstOrDefault(b => b.Name.ToLowerInvariant().StartsWith(n))
-                ?? FindFuzzy(n, books);
+            return books.FirstOrDefault(b => b.Name.Equals(n, StringComparison.InvariantCultureIgnoreCase))
+                ?? books.FirstOrDefault(b => b.Name.Contains(n, StringComparison.InvariantCultureIgnoreCase))
+                ?? books.FirstOrDefault(b => b.Name.StartsWith(n, StringComparison.InvariantCultureIgnoreCase))
+                ?? FindFuzzy(n); 
         }
 
-        private static BibleBook? FindFuzzy(string n, IReadOnlyList<BibleBook> books)
+        private static readonly (BibleBook Book, string LowerName)[] LoweredBibleBooks =
+        [.. BibleData.AllBooks.Select(b => (b, b.Name.ToLowerInvariant()))];
+
+        private const int FuzzyMatchThreshold = 4;
+
+        private static BibleBook? FindFuzzy(string n)
         {
             BibleBook? best = null;
-            var bestScore = int.MaxValue;
-            foreach (var b in books)
+            var bestScore = FuzzyMatchThreshold + 1;
+
+            foreach (var (book, lowerName) in LoweredBibleBooks)
             {
-                var d = EditDistance.CustomDistance(n, b.Name.ToLowerInvariant());
-                if (d < bestScore) { bestScore = d; best = b; }
+                if (Math.Abs(lowerName.Length - n.Length) >= bestScore) continue;
+
+                var d = ModalContentHelpers.LevenshteinDistance(n, lowerName);
+                if (d < bestScore)
+                {
+                    bestScore = d;
+                    best = book;
+                    if (d == 0) break;
+                }
             }
-            return bestScore <= 4 ? best : null;
+
+            return best;
         }
     }
 }

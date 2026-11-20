@@ -1,0 +1,108 @@
+<Window x:Class="FountOfHopeStudyBiblePC.Views.Modals.PromptForWordDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Width="420"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner">
+    <Grid x:Name="Scrim"
+          Background="#80000000"
+          MouseLeftButtonDown="Scrim_MouseLeftButtonDown"
+          MouseLeftButtonUp="Scrim_MouseLeftButtonUp">
+
+        <Border x:Name="RootBorder"
+                CornerRadius="20"
+                Padding="24"
+                Margin="24"
+                HorizontalAlignment="Center"
+                MinWidth="360">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="32"
+                                  ShadowDepth="12"
+                                  Direction="270"
+                                  Color="Black"
+                                  Opacity="0.5"/>
+            </Border.Effect>
+
+            <StackPanel>
+                <TextBlock x:Name="TitleText"
+                           Text="Edit Word"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           Margin="0,0,0,4"/>
+
+                <TextBlock x:Name="SubtitleText"
+                           Text="Look up a different word"
+                           FontSize="12"
+                           Margin="0,0,0,16"/>
+
+                <Border x:Name="WordBoxBorder"
+                        CornerRadius="10"
+                        BorderThickness="1"
+                        Padding="1">
+                    <TextBox x:Name="WordTextBox"
+                             FontSize="15"
+                             Padding="12,10"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             KeyDown="WordTextBox_KeyDown"/>
+                </Border>
+
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Margin="0,20,0,0">
+                    <Button x:Name="CancelButton"
+                            Content="Cancel"
+                            Width="100"
+                            Height="40"
+                            Margin="0,0,8,0"
+                            Cursor="Hand"
+                            Click="Cancel_Click">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="B"
+                                        CornerRadius="10"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}">
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="B" Property="Opacity" Value="0.8"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                    <Button x:Name="UpdateButton"
+                            Content="Update"
+                            Width="100"
+                            Height="40"
+                            Cursor="Hand"
+                            Click="Update_Click">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="B"
+                                        CornerRadius="10"
+                                        Background="{TemplateBinding Background}">
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="B" Property="Opacity" Value="0.85"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -47,15 +47,17 @@ namespace FountOfHopeStudyBiblePC.Helpers
         [GeneratedRegex(@"\r\n|\r|\n")]
         private static partial Regex NewlineRegex();
 
+        private const int StackAllocMaxWidth = 256;
+
         public static string SanitizeHtmlContent(string? html)
         {
             if (string.IsNullOrEmpty(html)) return "";
 
             var sanitized = html;
 
-            var ppEnd = sanitized.IndexOf("</pp>", System.StringComparison.Ordinal);
+            var ppEnd = sanitized.IndexOf("</pp>", StringComparison.Ordinal);
             if (ppEnd != -1)
-                sanitized = sanitized[..(ppEnd + "</pp>".Length)];
+                sanitized = sanitized[..(ppEnd + 5)];
 
             sanitized = ScriptRegex().Replace(sanitized, "");
             sanitized = OnAttrDoubleQuoteRegex().Replace(sanitized, "");
@@ -85,10 +87,9 @@ namespace FountOfHopeStudyBiblePC.Helpers
             var sanitized = SanitizeHtmlContent(rawDef);
             var upperTopic = topic.ToUpperInvariant();
             var capTopic = Capitalize(topic);
-            var possibleStarts = new[] { upperTopic, capTopic };
 
             var cleaned = sanitized;
-            foreach (var start in possibleStarts)
+            foreach (var start in new[] { upperTopic, capTopic })
             {
                 if (cleaned.StartsWith(start, StringComparison.OrdinalIgnoreCase))
                 {
@@ -98,13 +99,14 @@ namespace FountOfHopeStudyBiblePC.Helpers
                 }
             }
 
-            if (cleaned.StartsWith("<", StringComparison.Ordinal))
+            if (cleaned.StartsWith('<'))
             {
                 var m = WrapperTagRegex().Match(cleaned);
                 if (m.Success)
                 {
                     var content = m.Groups[2].Value.Trim();
-                    if (possibleStarts.Any(s => content.Equals(s, StringComparison.OrdinalIgnoreCase)))
+                    if (content.Equals(upperTopic, StringComparison.OrdinalIgnoreCase) ||
+                        content.Equals(capTopic, StringComparison.OrdinalIgnoreCase))
                         cleaned = LeadingPunctRegex()
                             .Replace(cleaned[m.Value.Length..], "").Trim();
                 }
@@ -125,7 +127,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
             if (pairs.Count == 0) return "No definition found.";
 
             var isExact = pairs.Count == 1
-                && pairs[0].topic.Equals(originalWord, System.StringComparison.OrdinalIgnoreCase);
+                && pairs[0].topic.Equals(originalWord, StringComparison.OrdinalIgnoreCase);
 
             if (isOxford && !isTopical)
             {
@@ -144,23 +146,14 @@ namespace FountOfHopeStudyBiblePC.Helpers
             if (isExact)
                 return SanitizeHtmlContent(pairs[0].definition);
 
-            // Single closest match — title says "Closest match for <searched>",
-            // so the body must reveal which word was actually matched.
             if (pairs.Count == 1)
                 return $"<b>{Capitalize(pairs[0].topic)}</b><br>" +
                        CleanDefinition(pairs[0].topic, pairs[0].definition);
 
-            // Multiple fuzzy matches — label each block with its own topic.
             return string.Join("<br><hr><br>", pairs.Select(p =>
                 $"<b>{Capitalize(p.topic)}</b><br>{CleanDefinition(p.topic, p.definition)}"));
         }
 
-        // ──────────────────────────────────────────────────────────────────
-        //  Ported from the Kotlin implementation:
-        //   1. LIKE %word% containment search
-        //   2. customDistance × 1000 + levenshtein ranking, top 5
-        //   3. neighbour fallback for words not contained in any topic
-        // ──────────────────────────────────────────────────────────────────
         public static List<(string topic, string definition)>? GetDefinitionOrClosest(
             DatabaseHelper? db, string word)
         {
@@ -168,63 +161,92 @@ namespace FountOfHopeStudyBiblePC.Helpers
 
             var lowerWord = word.Trim().ToLowerInvariant();
 
-            // 1. Exact key — cheapest and most precise.
-            var exact = db.GetWordDefinition(lowerWord)
-                     ?? db.GetWordDefinition(word);
+            var exact = db.GetWordDefinition(lowerWord);
+            if (exact is null && !word.Equals(lowerWord, StringComparison.Ordinal))
+                exact = db.GetWordDefinition(word);
             if (!string.IsNullOrWhiteSpace(exact))
                 return [(word, exact)];
 
-            // 2. Topics that CONTAIN the search term anywhere.
             var candidates = db.GetDictionaryCandidatesContaining(lowerWord, 50);
             if (candidates.Count > 0)
             {
-                return candidates
-                    .OrderBy(c => CustomDistance(lowerWord, c.topic.ToLowerInvariant()) * 1000
-                                + LevenshteinDistance(lowerWord, c.topic.ToLowerInvariant()))
-                    .Take(5)
-                    .ToList();
+                var scored = new List<(string topic, string definition, long score)>(candidates.Count);
+                foreach (var c in candidates)
+                {
+                    var lowered = c.topic.ToLowerInvariant();
+                    var lev = LevenshteinDistance(lowerWord, lowered);
+                    var cd = CustomDistanceLower(lowerWord, lowered, lev);
+                    scored.Add((c.topic, c.definition, (long)cd * 1000 + lev));
+                }
+                scored.Sort(static (a, b) => a.score.CompareTo(b.score));
+
+                var count = Math.Min(5, scored.Count);
+                var result = new List<(string topic, string definition)>(count);
+                for (int i = 0; i < count; i++)
+                    result.Add((scored[i].topic, scored[i].definition));
+                return result;
             }
 
-            // 3. Nothing contains the word — fall back to alphabetical
-            //    neighbours, ranked by edit distance.
             var neighbours = db.GetDictionaryNeighbours(lowerWord);
             if (neighbours.Count == 0) return null;
+            if (neighbours.Count == 1) return neighbours;
 
-            return neighbours
-                .OrderBy(c => LevenshteinDistance(lowerWord, c.topic.ToLowerInvariant()))
-                .ToList();
+            var lev0 = LevenshteinDistance(lowerWord, neighbours[0].topic.ToLowerInvariant());
+            var lev1 = LevenshteinDistance(lowerWord, neighbours[1].topic.ToLowerInvariant());
+            if (lev1 < lev0) (neighbours[0], neighbours[1]) = (neighbours[1], neighbours[0]);
+            return neighbours;
         }
 
         public static int LevenshteinDistance(string s1, string s2)
         {
-            var len1 = s1.Length;
-            var len2 = s2.Length;
-            var cost = new int[len1 + 1, len2 + 1];
+            if (s1.Length == 0) return s2.Length;
+            if (s2.Length == 0) return s1.Length;
 
-            for (var i = 0; i <= len1; i++) cost[i, 0] = i;
-            for (var j = 0; j <= len2; j++) cost[0, j] = j;
+            if (s1.Length > s2.Length)
+                (s1, s2) = (s2, s1);
 
-            for (var i = 1; i <= len1; i++)
+            int len1 = s1.Length, len2 = s2.Length;
+            int width = len2 + 1;
+
+            Span<int> prev = width <= StackAllocMaxWidth ? stackalloc int[width] : new int[width];
+            Span<int> curr = width <= StackAllocMaxWidth ? stackalloc int[width] : new int[width];
+
+            for (int j = 0; j < width; j++) prev[j] = j;
+
+            for (int i = 1; i <= len1; i++)
             {
-                for (var j = 1; j <= len2; j++)
+                curr[0] = i;
+                char c1 = s1[i - 1];
+                for (int j = 1; j <= len2; j++)
                 {
-                    var match = s1[i - 1] == s2[j - 1] ? 0 : 1;
-                    cost[i, j] = Math.Min(
-                        Math.Min(cost[i - 1, j] + 1, cost[i, j - 1] + 1),
-                        cost[i - 1, j - 1] + match);
+                    int match = c1 == s2[j - 1] ? 0 : 1;
+                    int a = prev[j] + 1;
+                    int b = curr[j - 1] + 1;
+                    int c = prev[j - 1] + match;
+                    int min = a < b ? a : b;
+                    if (c < min) min = c;
+                    curr[j] = min;
                 }
+
+                var temp = prev;
+                prev = curr;
+                curr = temp;
             }
-            return cost[len1, len2];
+
+            return prev[len2];
         }
 
         public static int CustomDistance(string word, string topic)
         {
-            if (topic.Equals(word, StringComparison.OrdinalIgnoreCase)) return 0;
-
             var w = word.ToLowerInvariant();
             var t = topic.ToLowerInvariant();
+            return CustomDistanceLower(w, t, -1);
+        }
 
-            // Whole-word hit inside a multi-word topic ("propitiation offering")
+        private static int CustomDistanceLower(string w, string t, int precomputedLev)
+        {
+            if (t.Equals(w, StringComparison.Ordinal)) return 0;
+
             var words = t.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             if (words.Contains(w)) return 10 + words.Length;
 
@@ -239,7 +261,8 @@ namespace FountOfHopeStudyBiblePC.Helpers
 
             if (t.Contains(w)) return 30 + (t.Length - w.Length);
 
-            return 100 + LevenshteinDistance(w, t);
+            var lev = precomputedLev >= 0 ? precomputedLev : LevenshteinDistance(w, t);
+            return 100 + lev;
         }
 
         private static int CommonPrefixLength(string a, string b)
@@ -319,7 +342,7 @@ namespace FountOfHopeStudyBiblePC.Helpers
                 if (textParts.Length >= 2)
                 {
                     var textVersePart = textParts[^1].Trim()
-                        .Replace("–", "-").Replace("—", "-");
+                        .Replace('–', '-').Replace('—', '-');
                     if (textVersePart.Contains('-'))
                     {
                         var rangeParts = textVersePart.Split('-');

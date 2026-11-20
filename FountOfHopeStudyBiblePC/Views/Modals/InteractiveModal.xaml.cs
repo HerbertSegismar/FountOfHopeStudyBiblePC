@@ -1296,37 +1296,9 @@ namespace FountOfHopeStudyBiblePC.Views.Modals
 
         private string? PromptForWord(string initial)
         {
-            var dlg = new Window
-            {
-                Title = "Edit Word",
-                Width = 320,
-                Height = 160,
-                Owner = this,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                ResizeMode = ResizeMode.NoResize,
-            };
-
-            var panel = new StackPanel { Margin = new Thickness(12) };
-            var tb = new TextBox { Text = initial, Margin = new Thickness(0, 4, 0, 12), FontSize = 14 };
-            var buttons = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right,
-            };
-            var ok = new Button { Content = "Update", Width = 80, Margin = new Thickness(4, 0, 0, 0) };
-            var cancel = new Button { Content = "Cancel", Width = 80 };
-
-            ok.Click += (_, _) => { dlg.DialogResult = true; dlg.Close(); };
-            cancel.Click += (_, _) => { dlg.DialogResult = false; dlg.Close(); };
-
-            buttons.Children.Add(cancel);
-            buttons.Children.Add(ok);
-            panel.Children.Add(new TextBlock { Text = "Enter word:" });
-            panel.Children.Add(tb);
-            panel.Children.Add(buttons);
-            dlg.Content = panel;
-
-            return dlg.ShowDialog() == true ? tb.Text.Trim() : null;
+            var dlg = new PromptForWordDialog(_viewModel, initial) { Owner = this };
+            dlg.ShowDialog();
+            return dlg.Result;
         }
 
         private void DescriptionButton_Click(object sender, RoutedEventArgs e)

@@ -1,41 +1,21 @@
-﻿// Helpers/FullScreenManager.cs
-using System;
-using System.Reflection;
+﻿using System.Reflection;
 using System.Windows;
 
 namespace FountOfHopeStudyBiblePC.Helpers
 {
-    /// <summary>
-    /// Centralised, app-wide fullscreen chrome management.
-    ///
-    /// The window chrome (title bar row, caption buttons, taskbar coverage)
-    /// is applied/restored here so that any screen can request fullscreen
-    /// by toggling the shared ViewModel flag, and the state persists across
-    /// screen navigation (unlike a per-screen implementation, which would
-    /// reset when the screen unloads).
-    ///
-    /// Works identically for a plain <see cref="Window"/> and for a
-    /// MahApps.Metro <c>MetroWindow</c> — the Metro-specific chrome flags
-    /// are touched via reflection so this assembly never needs a hard
-    /// reference to MahApps.Metro.
-    /// </summary>
-    public sealed class FullScreenManager
+    public sealed class FullScreenManager(Window window)
     {
-        private readonly Window _window;
-        private Snapshot? _snapshot;
+        private readonly Window _window = window ?? throw new ArgumentNullException(nameof(window));
+        private readonly PropertyInfo? _showTitleBar = GetProperty(window, "ShowTitleBar");
+        private readonly PropertyInfo? _useNoneWindowStyle = GetProperty(window, "UseNoneWindowStyle");
+        private readonly PropertyInfo? _showCloseButton = GetProperty(window, "ShowCloseButton");
+        private readonly PropertyInfo? _showMinButton = GetProperty(window, "ShowMinButton");
+        private readonly PropertyInfo? _showMaxRestoreButton = GetProperty(window, "ShowMaxRestoreButton");
 
-        public FullScreenManager(Window window)
-        {
-            _window = window ?? throw new ArgumentNullException(nameof(window));
-        }
+        private Snapshot? _snapshot;
 
         public bool IsActive => _snapshot != null;
 
-        /// <summary>
-        /// Idempotent: entering when already in fullscreen or exiting when
-        /// already windowed is a no-op, so it's safe to call from a
-        /// PropertyChanged handler that may fire more than once.
-        /// </summary>
         public void Apply(bool isFullScreen)
         {
             if (isFullScreen && _snapshot == null) Enter();
@@ -44,35 +24,29 @@ namespace FountOfHopeStudyBiblePC.Helpers
 
         public void Toggle() => Apply(!IsActive);
 
-        // ── enter / exit ───────────────────────────────────────────────
         private void Enter()
         {
-            // Snapshot the exact pre-fullscreen state so we can restore it.
             _snapshot = new Snapshot
             {
                 WindowState = _window.WindowState,
                 WindowStyle = _window.WindowStyle,
                 ResizeMode = _window.ResizeMode,
-                MetroShowTitleBar = TryGetBool(_window, "ShowTitleBar"),
-                MetroUseNoneWindowStyle = TryGetBool(_window, "UseNoneWindowStyle"),
-                MetroShowCloseButton = TryGetBool(_window, "ShowCloseButton"),
-                MetroShowMinButton = TryGetBool(_window, "ShowMinButton"),
-                MetroShowMaxRestoreButton = TryGetBool(_window, "ShowMaxRestoreButton"),
+                ShowTitleBar = Get(_showTitleBar, _window),
+                UseNoneWindowStyle = Get(_useNoneWindowStyle, _window),
+                ShowCloseButton = Get(_showCloseButton, _window),
+                ShowMinButton = Get(_showMinButton, _window),
+                ShowMaxRestoreButton = Get(_showMaxRestoreButton, _window),
             };
 
-            // Un-maximize first: changing WindowStyle while maximized leaves
-            // the window clipped/offset on some Windows versions.
             if (_window.WindowState == WindowState.Maximized)
                 _window.WindowState = WindowState.Normal;
 
-            // MahApps.Metro chrome — reflection so we don't require the package.
-            TrySetProperty(_window, "ShowTitleBar", false);
-            TrySetProperty(_window, "UseNoneWindowStyle", true);
-            TrySetProperty(_window, "ShowCloseButton", false);
-            TrySetProperty(_window, "ShowMinButton", false);
-            TrySetProperty(_window, "ShowMaxRestoreButton", false);
+            Set(_showTitleBar, _window, false);
+            Set(_useNoneWindowStyle, _window, true);
+            Set(_showCloseButton, _window, false);
+            Set(_showMinButton, _window, false);
+            Set(_showMaxRestoreButton, _window, false);
 
-            // Standard WPF chrome removal — covers the plain Window case too.
             _window.WindowStyle = WindowStyle.None;
             _window.ResizeMode = ResizeMode.NoResize;
             _window.WindowState = WindowState.Maximized;
@@ -86,20 +60,17 @@ namespace FountOfHopeStudyBiblePC.Helpers
             if (_window.WindowState == WindowState.Maximized)
                 _window.WindowState = WindowState.Normal;
 
-            // Restore Metro flags first — some internally adjust WindowStyle,
-            // so we want our explicit saved values to win.
-            if (saved.MetroUseNoneWindowStyle.HasValue)
-                TrySetProperty(_window, "UseNoneWindowStyle", saved.MetroUseNoneWindowStyle.Value);
-            if (saved.MetroShowTitleBar.HasValue)
-                TrySetProperty(_window, "ShowTitleBar", saved.MetroShowTitleBar.Value);
-            if (saved.MetroShowCloseButton.HasValue)
-                TrySetProperty(_window, "ShowCloseButton", saved.MetroShowCloseButton.Value);
-            if (saved.MetroShowMinButton.HasValue)
-                TrySetProperty(_window, "ShowMinButton", saved.MetroShowMinButton.Value);
-            if (saved.MetroShowMaxRestoreButton.HasValue)
-                TrySetProperty(_window, "ShowMaxRestoreButton", saved.MetroShowMaxRestoreButton.Value);
+            if (saved.UseNoneWindowStyle.HasValue)
+                Set(_useNoneWindowStyle, _window, saved.UseNoneWindowStyle.Value);
+            if (saved.ShowTitleBar.HasValue)
+                Set(_showTitleBar, _window, saved.ShowTitleBar.Value);
+            if (saved.ShowCloseButton.HasValue)
+                Set(_showCloseButton, _window, saved.ShowCloseButton.Value);
+            if (saved.ShowMinButton.HasValue)
+                Set(_showMinButton, _window, saved.ShowMinButton.Value);
+            if (saved.ShowMaxRestoreButton.HasValue)
+                Set(_showMaxRestoreButton, _window, saved.ShowMaxRestoreButton.Value);
 
-            // Base WPF properties.
             _window.WindowStyle = saved.WindowStyle;
             _window.ResizeMode = saved.ResizeMode;
             _window.WindowState = saved.WindowState;
@@ -107,44 +78,42 @@ namespace FountOfHopeStudyBiblePC.Helpers
             _snapshot = null;
         }
 
-        // ── reflection helpers ─────────────────────────────────────────
-        private static bool? TryGetBool(object target, string propertyName)
+        private static PropertyInfo? GetProperty(object target, string name)
         {
             try
             {
-                var prop = target.GetType().GetProperty(propertyName,
-                    BindingFlags.Public | BindingFlags.Instance);
-                if (prop == null || !prop.CanRead) return null;
-                return prop.GetValue(target) as bool?;
+                return target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
             }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool? Get(PropertyInfo? prop, object target)
+        {
+            if (prop is null || !prop.CanRead) return null;
+            try { return prop.GetValue(target) is bool b ? b : (bool?)null; }
             catch { return null; }
         }
 
-        private static void TrySetProperty(object target, string propertyName, object value)
+        private static void Set(PropertyInfo? prop, object target, bool value)
         {
-            try
-            {
-                var prop = target.GetType().GetProperty(propertyName,
-                    BindingFlags.Public | BindingFlags.Instance);
-                if (prop == null || !prop.CanWrite) return;
-                if (!prop.PropertyType.IsInstanceOfType(value) &&
-                    !(prop.PropertyType == typeof(bool) && value is bool)) return;
-                prop.SetValue(target, value);
-            }
-            catch { /* property unsupported on this window type */ }
+            if (prop is null || !prop.CanWrite) return;
+            try { prop.SetValue(target, value); }
+            catch { }
         }
 
-        // ── saved state ────────────────────────────────────────────────
         private sealed class Snapshot
         {
             public WindowState WindowState;
             public WindowStyle WindowStyle;
             public ResizeMode ResizeMode;
-            public bool? MetroShowTitleBar;
-            public bool? MetroUseNoneWindowStyle;
-            public bool? MetroShowCloseButton;
-            public bool? MetroShowMinButton;
-            public bool? MetroShowMaxRestoreButton;
+            public bool? ShowTitleBar;
+            public bool? UseNoneWindowStyle;
+            public bool? ShowCloseButton;
+            public bool? ShowMinButton;
+            public bool? ShowMaxRestoreButton;
         }
     }
 }
